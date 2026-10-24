@@ -247,7 +247,8 @@ local function instance_ok(t1, t2, envs)
         if not ok1 then return false, {err=tostring(v1), env=show_env(e)} end
         if not ok2 then return false, {err=tostring(v2), env=show_env(e)} end
         if v1~=v2 then
-            return false, {env=show_env(e), lv=tostring(v1), rv=tostring(v2)}
+            local function sv(v) return v=="" and "λ" or tostring(v) end
+            return false, {env=show_env(e), lv=sv(v1), rv=sv(v2)}
         end
     end
     return true
