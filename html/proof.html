@@ -281,6 +281,26 @@
                 r.readAsText(f);
             }
         };
+
+        // Tell the embedding LMS our content height so the iframe grows
+        // instead of showing an inner scrollbar.  Canvas listens for
+        // {subject:"lti.frameResize"} postMessages from embedded iframes.
+        (function() {
+            var last = 0;
+            function report() {
+                var h = Math.ceil(
+                    Math.max(document.body.scrollHeight,
+                             document.documentElement.scrollHeight));
+                if (Math.abs(h - last) < 4) return;
+                last = h;
+                parent.postMessage(
+                    {subject: "lti.frameResize", height: h}, "*");
+            }
+            new ResizeObserver(report).observe(document.body);
+            addEventListener("load", report);
+            setInterval(report, 1500);   // wasm renders don't fire DOM events reliably
+            report();
+        })();
     </script>
     <script src="../lib/prepare_util.js" type="module"></script>
     <script type="module">
