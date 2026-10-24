@@ -276,15 +276,17 @@
         .authost {
             display: block;
             width: 100%;
-            max-width: 46rem;
-            height: 26rem;
+            /* the editor scales font+geometry by min(1, w/800, h/600);
+               give it its reference box so nothing is shrunk */
+            max-width: 50rem;
+            height: 38rem;
             border: 1px solid var(--border-color);
             border-radius: 3px;
             background: #fff;
             margin: 0.4rem 0;
             overflow: hidden;
         }
-        .authost.given { height: 22rem; }
+        .authost.given { height: 38rem; }
         /* the shadow :host rule forces min-height:600px (Anubis full
            panel); inside .authost the element must take the host's
            height instead, else it overflows onto the checkbar */
