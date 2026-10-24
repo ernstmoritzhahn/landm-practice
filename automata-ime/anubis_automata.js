@@ -572,6 +572,64 @@
                 focusInput(t.clientX, t.clientY, null);
             }, { passive: true });
 
+            /* Direct mouse feed: Emscripten's SDL translation resolves
+             * "#canvas" through a global selector and derives positions
+             * from whatever element rect it resolves to — in iframes and
+             * shadow DOM that intermittently produced clamped garbage
+             * coordinates and lost clicks.  Feed canvas-local positions
+             * through the pending-input queue instead and starve SDL's
+             * own DOM mouse handlers: our listeners are registered before
+             * _main/SDL_Init, so stopImmediatePropagation blocks SDL's
+             * canvas-bound handlers and prevents the event reaching its
+             * document/window-level ones.  If the wasm build lacks the
+             * export we keep SDL's path untouched. */
+            var sendM = null;
+            function nativeMouse() {
+                return !!(self._mod && self._mod._web_input_mouse);
+            }
+            function sendMouse(x, y, btn, down) {
+                if (!sendM) {
+                    if (!nativeMouse()) return;
+                    try {
+                        sendM = self._mod.cwrap("web_input_mouse", "null",
+                            ["number", "number", "number", "number"]);
+                    } catch (e) { return; }
+                }
+                sendM(x, y, btn, down);
+            }
+            function localXY(e) {
+                var r = canvas.getBoundingClientRect();
+                return [Math.round(e.clientX - r.left),
+                        Math.round(e.clientY - r.top)];
+            }
+            canvas.addEventListener("mousedown", function (e) {
+                if (nativeMouse()) e.stopImmediatePropagation();
+                var p = localXY(e);
+                sendMouse(p[0], p[1], e.button, 1);
+            });
+            canvas.addEventListener("mousemove", function (e) {
+                if (nativeMouse()) e.stopImmediatePropagation();
+                var p = localXY(e);
+                sendMouse(p[0], p[1], -1, 0);
+            });
+            canvas.addEventListener("mouseup", function (e) {
+                if (nativeMouse()) e.stopImmediatePropagation();
+                var p = localXY(e);
+                sendMouse(p[0], p[1], e.button, 0);
+            });
+            canvas.addEventListener("mouseleave", function (e) {
+                sendMouse(-1, -1, -1, 0);
+            });
+            canvas.addEventListener("pointerdown", function (e) {
+                /* retarget move/up to this canvas while dragging past
+                 * the element (or iframe) edge */
+                try { canvas.setPointerCapture(e.pointerId); }
+                catch (_) {}
+            });
+            canvas.addEventListener("contextmenu", function (e) {
+                e.preventDefault();
+            });
+
             /* navigation keys reach the app even when the hidden input
              * is not focused — but only while the key event actually
              * belongs to THIS element: the real target (composedPath[0];
