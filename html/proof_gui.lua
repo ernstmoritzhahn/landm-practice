@@ -23,6 +23,20 @@ local savefile_btn, loadfile_btn = get("savefile"), get("loadfile")
 local loadinput, stateta = get("loadinput"), get("stateta")
 local loadtext_btn = get("loadtext")
 local savedetails_el, savemsg_el = get("savedetails"), get("savemsg")
+local syntaxhint_el = get("syntaxhint")
+
+local PROOF_SYNTAX_HINT =
+    'input: <code>\\lambda</code> → λ ·\n' ..
+    '    concatenation = space or <code>·</code> ·\n' ..
+    '    <code>w^R</code>, <code>w^(k+1)</code>, <code>w^k</code> ·\n' ..
+    '    sum: <code>sum(i,0,n;k^i)</code> · <code>f(n)</code>'
+local REGEXP_SYNTAX_HINT =
+    'input: <code>\\lambda</code> → λ · union = <code>∪</code>' ..
+    ' or <code>|</code> or <code>U</code> ·\n' ..
+    '    concatenation = juxtaposition ·\n' ..
+    '    postfixes: <code>*</code> <code>+</code> <code>^n</code> ·\n' ..
+    '    <code>∅</code> = empty language · braces <code>{ }</code>' ..
+    ' group too'
 
 local state = {
     sheets = nil,          -- tab structure from the worker
@@ -362,9 +376,13 @@ local function render(view)
     if view.desc then
         goal_el:appendChild(text("div", view.desc, "desc"))
     end
+    checkbtn.textContent = "Check proof"
+    if syntaxhint_el then syntaxhint_el.innerHTML = PROOF_SYNTAX_HINT end
     if view.type == "regexp" then
-        if view.hint then
-            goal_el:appendChild(text("div", view.hint, "hint"))
+        checkbtn.textContent = "Check"
+        rulesbox_el.style.display = "none"
+        if syntaxhint_el then
+            syntaxhint_el.innerHTML = REGEXP_SYNTAX_HINT
         end
         proof_el:appendChild(render_regexp_block(view))
         restore_local()
@@ -374,6 +392,8 @@ local function render(view)
         goal_el:appendChild(text("div", view.hint, "hint"))
     end
     -- citable rules, verbatim (so "Thm 2.1.6" is inspectable on-page)
+    rulesbox_el.style.display =
+        (view.cite_docs and #view.cite_docs > 0) and "" or "none"
     if view.cite_docs and #view.cite_docs > 0 then
         rulesbox_el:appendChild(text("div",
             state.free and "You may cite:" or "Rules used in this proof:",

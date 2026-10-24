@@ -423,8 +423,6 @@ function M.view(task)
         return {
             id=task.id, type="regexp",
             title=task.title, desc=task.desc,
-            hint="syntax: letters, juxtaposition, ∪ or |, *, +, "
-              .. "λ (or \\lambda), ∅, ( ), E^n",
         }
     end
     local secs, sec_labels = nil, {}
