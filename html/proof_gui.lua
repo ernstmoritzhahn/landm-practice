@@ -29,9 +29,17 @@ local state = {
     group_i = 1,           -- selected exercise-group tab
     sub_i   = 1,           -- selected subtask tab
     free    = false,       -- variant toggle
+    pinned  = false,       -- ?exercise=<id>: fixed single group, no tab bar
     id = nil, view = nil,
     holes = {}, st = {}, free_blocks = {},
 }
+
+-- ?exercise=<group-id> embeds one exercise per page (Canvas gets one
+-- iframe per Aufgabe); absent -> fall back to a group tab bar.
+local ex_param
+pcall(function()
+    ex_param = (window.location.search or ""):match("exercise=([%w_%.%-]+)")
+end)
 
 -- ---------- dom helpers ----------
 local function el(tag, cls, html)
@@ -517,6 +525,7 @@ local function render_tabs()
     clear(tabs_el); clear(subtabs_el)
     local sh = state.sheets and state.sheets[1]
     if not sh then return end
+    if not state.pinned and #sh.groups > 1 then
     for gi,g in ipairs(sh.groups) do
         local t = text("button", g.title,
             gi==state.group_i and "tab active" or "tab")
@@ -525,6 +534,7 @@ local function render_tabs()
             render_tabs(); select_task()
         end)
         tabs_el:appendChild(t)
+    end
     end
     local g = sh.groups[state.group_i]
     for si,sub in ipairs(g.subtasks) do
@@ -597,6 +607,14 @@ return function(data)
     data = msg
     if data.what == "tasks" then
         state.sheets = data.sheets
+        if ex_param then
+            for gi,g in ipairs(state.sheets[1].groups) do
+                if g.id == ex_param then
+                    state.group_i, state.pinned = gi, true
+                    break
+                end
+            end
+        end
         render_tabs()
         select_task()
     elseif data.what == "view" then

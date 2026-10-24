@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Induction Proofs | University of Twente</title>
+    <title>Induction Proofs</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;1,400&display=swap">
     <style>
         :root {
-            --ut-red: #f1131e;
-            --ut-black: #000000;
-            --ut-dark-grey: #333333;
-            --border-color: #e6e6e6;
+            /* canvas-like palette so the embed doesn't read as foreign */
+            --accent: #0374b5;
+            --accent-dark: #0260a0;
+            --ink: #2d3b45;
+            --muted: #6b7780;
+            --border-color: #c7cdd1;
             --bg-light: #ffffff;
             --ok: #0a7a30;
             --warn: #b26a00;
@@ -17,40 +20,24 @@
         }
 
         body {
-            font-family: "Arial", sans-serif;
+            font-family: "LatoWeb", "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
             background-color: var(--bg-light);
-            color: var(--ut-black);
+            color: var(--ink);
             margin: 0;
+            font-size: 16px;
+            line-height: 1.5;
             -webkit-font-smoothing: antialiased;
         }
 
-        header {
-            padding: 1.2rem 10% 0.8rem 10%;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        h1 { font-size: 1.6rem; font-weight: 400; margin: 0; }
-
         main {
-            padding: 2rem 10% 3rem 10%;
-            max-width: 1100px;
-            margin: 0 auto;
+            padding: 0.75rem 0.25rem 1.5rem 0.25rem;
         }
 
-        .section-title {
-            font-size: 0.9rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid var(--ut-black);
-            display: inline-block;
-        }
-
-        /* exercise group tabs */
+        /* exercise group tabs (only rendered when an instance hosts >1) */
         #tabs { margin-bottom: 0; }
         #tabs .tab, #subtabs .subtab, #variant .vartab {
             background: #fff;
-            color: var(--ut-black);
+            color: var(--ink);
             border: 1px solid var(--border-color);
             border-bottom: none;
             padding: 8px 18px;
@@ -59,7 +46,8 @@
             margin-right: 2px;
         }
         #tabs .tab.active {
-            background: var(--ut-black); color: #fff; font-weight: bold;
+            background: var(--accent); border-color: var(--accent);
+            color: #fff; font-weight: bold;
         }
         #subtabs {
             margin-bottom: 1.2rem;
@@ -81,60 +69,75 @@
             align-items: center;
         }
         #subtabs .subtab.active {
-            border-bottom-color: var(--ut-red);
+            border-bottom-color: var(--accent);
             font-weight: bold;
-            color: var(--ut-red);
+            color: var(--accent);
         }
         #subtabs .subtab:hover {
             background: transparent;
-            color: var(--ut-red);
+            color: var(--accent);
         }
         #variant { margin: 0.6rem 0 1.4rem 0; }
-        #variant .varlabel { font-size: 0.85rem; color: #666; margin-right: 0.4rem; }
+        #variant .varlabel { font-size: 0.85rem; color: var(--muted); margin-right: 0.4rem; }
         #variant .vartab {
-            padding: 4px 12px; font-size: 0.8rem;
+            padding: 4px 12px; font-size: 0.85rem;
             border: 1px solid var(--border-color);
+            border-radius: 4px;
         }
         #variant .vartab.active {
-            background: var(--ut-black); color: #fff; font-weight: bold;
+            background: var(--accent); border-color: var(--accent);
+            color: #fff; font-weight: bold;
         }
-        #tabs .tab:hover, #subtabs .subtab:hover, #variant .vartab:hover {
-            background: var(--ut-red); color: #fff;
+        #tabs .tab:hover, #variant .vartab:hover {
+            background: var(--accent); color: #fff;
         }
 
         select, input[type="text"] {
             border: 1px solid var(--border-color);
+            border-radius: 4px;
             padding: 8px 10px;
             font-family: "Monaco", "Consolas", monospace;
             font-size: 0.95rem;
             background-color: #fafafa;
-            color: var(--ut-dark-grey);
+            color: var(--ink);
             outline: none;
         }
 
         select:focus, input[type="text"]:focus {
-            border-color: var(--ut-black);
+            border-color: var(--accent);
             background-color: #fff;
         }
 
+        /* canvas secondary-button look; primary only for #check */
         button {
-            background-color: var(--ut-black);
-            color: white;
-            border: none;
-            padding: 10px 22px;
+            background-color: #fff;
+            color: var(--ink);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px 16px;
             font-size: 0.9rem;
-            font-weight: bold;
             cursor: pointer;
         }
 
-        button:hover { background-color: var(--ut-red); }
+        button:hover { border-color: var(--muted); }
+
+        #check {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: bold;
+        }
+        #check:hover {
+            background-color: var(--accent-dark);
+            border-color: var(--accent-dark);
+        }
 
         #goal {
             font-family: "Monaco", "Consolas", monospace;
             font-size: 1.05rem;
             margin: 0 0 1.2rem 0;
         }
-        #goal .goaltitle { font-family: "Arial", sans-serif; }
+        #goal .goaltitle { font-family: inherit; }
         #goal .goaleq { margin-left: 0.6rem; }
 
         #rulesbox {
@@ -198,7 +201,7 @@
 
         #checkbar {
             margin-top: 0.5rem;
-            border-top: 2px solid var(--ut-black);
+            border-top: 1px solid var(--border-color);
             padding-top: 1.2rem;
             display: flex;
             align-items: baseline;
@@ -217,13 +220,13 @@
             gap: 1rem; flex-wrap: wrap;
         }
         #savebar button { padding: 8px 18px; font-size: 0.85rem; }
-        #savemsg { font-size: 0.85rem; color: #666; }
+        #savemsg { font-size: 0.85rem; color: var(--muted); }
         .savehint {
-            color: #666; font-size: 0.8rem;
+            color: var(--muted); font-size: 0.8rem;
             margin: 0.8rem 0 0.4rem 0; max-width: 46rem;
         }
         #savedetails { margin-top: 0.6rem; font-size: 0.85rem; }
-        #savedetails summary { cursor: pointer; color: var(--ut-dark-grey); }
+        #savedetails summary { cursor: pointer; color: var(--ink); }
         #stateta {
             width: 100%; box-sizing: border-box;
             font-family: "Monaco", "Consolas", monospace; font-size: 0.78rem;
@@ -233,22 +236,11 @@
         #loadtext { margin-top: 0.4rem; }
 
         .hint {
-            color: #666;
+            color: var(--muted);
             font-size: 0.8rem;
             margin-top: 0.6rem;
-            font-family: "Arial", sans-serif;
         }
 
-        footer {
-            margin-top: 4rem;
-            padding: 3rem 10%;
-            background-color: #f9f9f9;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        .ut-accent { color: var(--ut-red); font-weight: bold; }
     </style>
 
     <script>
@@ -279,10 +271,6 @@
     </script>
 </head>
 <body>
-
-<header>
-    <h1>Induction Proofs — Sheet 1</h1>
-</header>
 
 <main>
     <div id="tabs"></div>
@@ -334,9 +322,6 @@
         </details>
     </div>
 </main>
-
-<footer>
-</footer>
 
 </body>
 </html>
