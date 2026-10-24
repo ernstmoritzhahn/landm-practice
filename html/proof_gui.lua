@@ -77,8 +77,13 @@ local replace_table = {
     ["\\Sigma"]    = "Σ",
     ["\\sum"]      = "Σ",
     ["\\emptyset"] = "∅",
+    ["\\cup"]      = "∪",
+    ["\\cdot"]     = "·",
 }
-local function replace_symbols(e)
+local REGEXP_REPLACE = {
+    ["|"] = "∪",
+}
+local function replace_symbols(e, extra)
     local sel = e.selectionStart
     for k,v in pairs(replace_table) do
         local count
@@ -89,16 +94,27 @@ local function replace_symbols(e)
             e.selectionEnd = sel
         end
     end
+    if extra then
+        for k,v in pairs(extra) do
+            local count
+            e.value, count = e.value:gsub(k, v)
+            if count > 0 then
+                sel = sel - #k + 1
+                e.selectionStart = sel
+                e.selectionEnd = sel
+            end
+        end
+    end
 end
 -- oninput: clear the given status cell + the summary (stale verdicts
 -- must not survive edits)
-local function mk_input(cls, width, oninput)
+local function mk_input(cls, width, oninput, extra_repl)
     local i = el("input", cls)
     i.type = "text"
     i:setAttribute("spellcheck", "false")
     if width then i.size = width end
     i:addEventListener("input", function()
-        replace_symbols(i)
+        replace_symbols(i, extra_repl)
         if oninput then oninput() end
     end)
     return i
@@ -229,7 +245,7 @@ local function render_regexp_block(view)
         "Your regular expression E with L(E) = L:", "seclabel"))
     local r = el("div", "row")
     local st = el("span", "st")
-    local inp = mk_input("expr", 42, dirty(st))
+    local inp = mk_input("expr", 42, dirty(st), REGEXP_REPLACE)
     inp.placeholder = "e.g. (a∪b)*ab(a∪b)*"
     r:appendChild(inp)
     r:appendChild(st)
