@@ -5,13 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Induction Proofs</title>
     <style>
+        /* Instructure's Lato subset, bundled locally (SIL OFL) — same files
+           Canvas itself serves, so the embed renders identically */
+        @font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 300;
+                     src: url("fonts/Lato-Light-7244318390.woff2") format("woff2"); font-display: swap; }
+        @font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 400;
+                     src: url("fonts/Lato-Regular-bd03a2cc27.woff2") format("woff2"); font-display: swap; }
+        @font-face { font-family: "Lato Extended"; font-style: italic; font-weight: 400;
+                     src: url("fonts/Lato-Italic-4eb103b4d1.woff2") format("woff2"); font-display: swap; }
+        @font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 700;
+                     src: url("fonts/Lato-Bold-cccb897485.woff2") format("woff2"); font-display: swap; }
+
         :root {
-            /* canvas-like palette so the embed doesn't read as foreign */
-            --accent: #0374b5;
-            --accent-dark: #0260a0;
-            --ink: #2d3b45;
-            --muted: #6b7780;
+            /* UT canvas theme tokens (from canvas.utwente.nl variables css) */
+            --accent: #cf0072;              /* --ic-brand-primary */
+            --accent-dark: #c5006d;         /* primary darkened-5 */
+            --link: #0e68b3;                /* --ic-link-color */
+            --ink: #273540;                 /* --ic-brand-font-color-dark */
+            --muted: #47535c;
             --border-color: #c7cdd1;
+            --hairline: #e8eaec;
+            --btn-bg: #f2f4f4;
+            --btn-bg-hover: hsl(180, 8.33%, 90.29%);
             --bg-light: #ffffff;
             --ok: #0a7a30;
             --warn: #b26a00;
@@ -19,12 +34,13 @@
         }
 
         body {
-            font-family: "LatoWeb", "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-family: "Lato Extended", "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
             background-color: var(--bg-light);
             color: var(--ink);
             margin: 0;
             font-size: 16px;
             line-height: 1.5;
+            font-weight: 300;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -81,50 +97,53 @@
         #variant .vartab {
             padding: 4px 12px; font-size: 0.85rem;
             border: 1px solid var(--border-color);
-            border-radius: 4px;
+            border-radius: 3px;
         }
         #variant .vartab.active {
             background: var(--accent); border-color: var(--accent);
             color: #fff; font-weight: bold;
         }
         #tabs .tab:hover, #variant .vartab:hover {
-            background: var(--accent); color: #fff;
+            background: var(--btn-bg-hover); color: var(--ink);
         }
 
         select, input[type="text"] {
             border: 1px solid var(--border-color);
-            border-radius: 4px;
+            border-radius: 3px;
             padding: 8px 10px;
             font-family: "Monaco", "Consolas", monospace;
             font-size: 0.95rem;
-            background-color: #fafafa;
+            font-weight: 400;
+            background-color: #fff;
             color: var(--ink);
             outline: none;
         }
 
         select:focus, input[type="text"]:focus {
-            border-color: var(--accent);
-            background-color: #fff;
+            border-color: var(--link);
+            box-shadow: 0 0 0 1px var(--link);
         }
 
-        /* canvas secondary-button look; primary only for #check */
+        /* canvas .btn metrics: light-gray secondary; primary only for #check */
         button {
-            background-color: #fff;
+            background-color: var(--btn-bg);
             color: var(--ink);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 8px 16px;
-            font-size: 0.9rem;
+            border: 1px solid var(--hairline);
+            border-radius: 3px;
+            padding: 8px 14px;
+            font-size: 1rem;
+            line-height: 22px;
             cursor: pointer;
+            transition: background-color .2s ease-in-out;
         }
 
-        button:hover { border-color: var(--muted); }
+        button:hover { background-color: var(--btn-bg-hover); }
+        button:focus { box-shadow: inset 0 0 0 2px var(--link); }
 
         #check {
             background-color: var(--accent);
             border-color: var(--accent);
             color: #fff;
-            font-weight: bold;
         }
         #check:hover {
             background-color: var(--accent-dark);
@@ -140,8 +159,8 @@
         #goal .goaleq { margin-left: 0.6rem; }
 
         #rulesbox {
-            background: #f7f7f7;
-            border: 1px solid var(--border-color);
+            background: var(--btn-bg);
+            border: 1px solid var(--hairline);
             padding: 0.8rem 1.2rem;
             margin-bottom: 1.6rem;
             font-family: "Monaco", "Consolas", monospace;
@@ -229,7 +248,7 @@
         #stateta {
             width: 100%; box-sizing: border-box;
             font-family: "Monaco", "Consolas", monospace; font-size: 0.78rem;
-            border: 1px solid var(--border-color); background: #fafafa;
+            border: 1px solid var(--border-color); background: #fff;
             margin-top: 0.4rem;
         }
         #loadtext { margin-top: 0.4rem; }
