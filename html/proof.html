@@ -259,6 +259,67 @@
         }
         #loadtext { margin-top: 0.4rem; }
 
+        /* ---- exercise 1.3: composite "parts" tasks (aut/table/trace/
+           accept/regexp) ---- */
+        .givenbox {
+            margin: 0.4rem 0 1.4rem 0;
+        }
+        .part {
+            margin-bottom: 1.8rem;
+        }
+        .partlabel {
+            font-weight: bold;
+            margin-bottom: 0.4rem;
+        }
+        .partlabel .psub { color: var(--accent); margin-right: 0.5rem; }
+        .partlabel .st { margin-left: 0.8rem; }
+        .authost {
+            display: block;
+            width: 100%;
+            max-width: 46rem;
+            height: 26rem;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            background: #fff;
+            margin: 0.4rem 0;
+            overflow: hidden;
+        }
+        .authost.given { height: 22rem; }
+        /* the shadow :host rule forces min-height:600px (Anubis full
+           panel); inside .authost the element must take the host's
+           height instead, else it overflows onto the checkbar */
+        .authost > automata-app {
+            display: block; width: 100%; height: 100%;
+            min-height: 0;
+        }
+        table.trtable {
+            border-collapse: collapse;
+            font-family: "Monaco", "Consolas", monospace;
+            font-size: 0.95rem;
+            margin: 0.4rem 0;
+        }
+        table.trtable th, table.trtable td {
+            border: 1px solid var(--border-color);
+            padding: 4px 12px;
+            text-align: center;
+        }
+        table.trtable th {
+            background: var(--btn-bg);
+            font-weight: bold;
+        }
+        table.trtable td input {
+            width: 4.5rem; padding: 4px 6px; text-align: center;
+        }
+        table.trtable td.cell-ok input { border-color: var(--ok); }
+        table.trtable td.cell-bad input { border-color: var(--fail); }
+        .wordrow {
+            display: flex; align-items: baseline; gap: 1rem;
+            padding: 3px 0;
+            font-family: "Monaco", "Consolas", monospace;
+        }
+        .wordrow .wlabel { min-width: 7rem; }
+        .wordrow select { font-size: 0.85rem; padding: 4px 6px; }
+
         .hint {
             color: var(--muted);
             font-size: 0.8rem;
@@ -285,6 +346,65 @@
                 var r = new FileReader();
                 r.onload = function() { cb(r.result) };
                 r.readAsText(f);
+            },
+
+            /* ---- automata-ime <automata-app> bridge ----
+             * The plugin bundle (anubis_automata.js + ui-data.js +
+             * plugin-data.js + unified.js) lives in ../automata/ and is
+             * injected on first use.  Element methods queue internally
+             * until the wasm module has booted, so calls are safe any
+             * time after the <automata-app> node exists. */
+            _aut_script: function() {
+                if (!window.__autScriptP) {
+                    window.__autScriptP = new Promise(function(res, rej) {
+                        var s = document.createElement("script");
+                        s.src = "../automata-ime/anubis_automata.js";
+                        s.onload = res;
+                        s.onerror = function() {
+                            rej(new Error("automata script failed"));
+                        };
+                        document.head.appendChild(s);
+                    });
+                }
+                return window.__autScriptP;
+            },
+            aut_boot: function(hostId, appId, cfgJson) {
+                /* element ids, not elements: Lua-side DOM handles don't
+                   unwrap to raw nodes when passed back into JS */
+                var host = document.getElementById(hostId);
+                if (!host) return;
+                var app = document.createElement("automata-app");
+                app.id = appId;
+                host.appendChild(app);
+                landm._aut_script().then(function() {
+                    app.initializeApplication(cfgJson);
+                }).catch(function(e) {
+                    host.textContent =
+                        "automaton editor failed to load: " + e.message;
+                });
+            },
+            aut_state: function(appId) {
+                var app = document.getElementById(appId);
+                return (app && app.retrieveData) ? app.retrieveData() : "";
+            },
+            aut_load: function(appId, data) {
+                landm._aut_script().then(function() {
+                    var app = document.getElementById(appId);
+                    if (app && app.loadData) app.loadData(data);
+                });
+            },
+            aut_readonly: function(appId, b) {
+                landm._aut_script().then(function() {
+                    var app = document.getElementById(appId);
+                    if (app && app.setReadOnly) app.setReadOnly(b);
+                });
+            },
+            aut_on_edit: function(appId, cb) {
+                landm._aut_script().then(function() {
+                    var app = document.getElementById(appId);
+                    if (app) app.addEventListener("sendDataToExternal",
+                                                  function() { cb(); });
+                });
             }
         };
 

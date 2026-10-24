@@ -9,6 +9,7 @@
 --   {ok=false, kind=..., msg=...}      parse error / not equivalent /
 --                                      undecidable within the state cap
 
+require("lib.util").fix_path()
 local automata = require "automata"
 
 local M = {}

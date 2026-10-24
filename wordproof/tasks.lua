@@ -31,7 +31,7 @@ local function parse(s, spec)
 end
 
 local function def_task(t)
-    if t.type == "regexp" then
+    if t.type == "regexp" or t.type == "parts" then
         M.tasks[t.id] = t
         M.order[#M.order+1] = t.id
         return
@@ -116,7 +116,7 @@ local cites_a = {
 }
 
 def_task{
-    id = "1.1a",
+    id = "1.1a", letter = "A",
     title = "Prove (w^R)^i = (w^i)^R by induction on i.",
     goal_str = "(w^R)^i = (w^i)^R",
     hint = "In the induction step, replace i by a fresh variable "
@@ -169,7 +169,7 @@ local cites_b = {
 }
 
 def_task{
-    id = "1.1b",
+    id = "1.1b", letter = "B",
     title = "Prove (w^R)^R = w by induction on |w|.",
     goal_str = "(w^R)^R = w",
     hint = "In the induction step, decompose w = u·a with a ∈ Σ "
@@ -258,7 +258,7 @@ local cites_c = {
 }
 
 def_task{
-    id = "1.1c",
+    id = "1.1c", letter = "C",
     title = "f(n) = #{w : |w| ≤ n} over a k-letter alphabet. "
          .. "Prove f(n) = Σ_{i=0}^n k^i by induction on n.",
     goal_str = "f(n) = sum(i,0,n;k^i)",
@@ -306,7 +306,7 @@ local function regexp_task(t)
 end
 
 regexp_task{
-    id = "1.2a",
+    id = "1.2a", letter = "D",
     title = "a before b before c",
     desc = "L is the language of all words over {a, b, c} in which "
         .. "all occurrences of a precede all occurrences of b and c, "
@@ -315,7 +315,7 @@ regexp_task{
 }
 
 regexp_task{
-    id = "1.2b",
+    id = "1.2b", letter = "E",
     title = "a before b before c, nonempty",
     desc = "L is the same language as in (a), except it does not "
         .. "contain λ.",
@@ -323,7 +323,7 @@ regexp_task{
 }
 
 regexp_task{
-    id = "1.2c",
+    id = "1.2c", letter = "F",
     title = "length three",
     desc = "L is the language of all words over {a, b, c} of "
         .. "length three.",
@@ -331,7 +331,7 @@ regexp_task{
 }
 
 regexp_task{
-    id = "1.2d",
+    id = "1.2d", letter = "G",
     title = "substring ab, length > 2",
     desc = "L is the language of all words in {a, b}* that contain "
         .. "the substring ab and have length > 2.",
@@ -339,7 +339,7 @@ regexp_task{
 }
 
 regexp_task{
-    id = "1.2e",
+    id = "1.2e", letter = "H",
     title = "substrings aa and bb",
     desc = "L is the language over {a, b} such that all words contain "
         .. "both aa and bb.",
@@ -347,12 +347,130 @@ regexp_task{
 }
 
 regexp_task{
-    id = "1.2f",
+    id = "1.2f", letter = "I",
     title = "(extra) substrings ab and ba",
     desc = "L is the language over {a, b} such that all words contain "
         .. "both ab and ba.",
     reference = "(a|b)*ab(a|b)*ba(a|b)*|(a|b)*ba(a|b)*ab(a|b)*"
              .. "|(a|b)*aba(a|b)*|(a|b)*bab(a|b)*",
+}
+
+-- ======================================================================
+-- 1.3  deterministic finite automata — composite "parts" tasks:
+--      a subtask bundles lettered sub-parts (a)(b)(c)… of different
+--      kinds: aut (graph editor), table (transition table), trace
+--      (run state sequences), accept (word acceptance), regexp.
+--      task.given renders the fixed problem data above the parts.
+-- ======================================================================
+
+local function parts_task(t)
+    t.type = "parts"
+    def_task(t)
+end
+
+-- J (book 5.1): the transition table is given, everything else is asked
+local J_DFA = "({q0,q1,q2},{a,b},"
+    .. "{(q0,a,q0),(q0,b,q1),(q1,a,q2),(q1,b,q1),(q2,a,q2),(q2,b,q0)},"
+    .. "q0,{q2})"
+
+parts_task{
+    id = "1.3j", letter = "J",
+    title = "DFA given by transition table",
+    desc = "Let M be the DFA with Q = {q0, q1, q2}, initial state q0, "
+        .. "Σ = {a, b} and F = {q2}, with δ given by the table below.",
+    given = { kind="table", dfa=J_DFA },
+    parts = {
+        { kind="aut", label="Draw the state diagram for M.",
+          aut_type="dfa", alphabet="a,b", reference=J_DFA },
+        { kind="trace",
+          label="Trace the computations of M (the state sequence of "
+             .. "the run) on each of the following words:",
+          words={"abaa","bbbabb","bababa","bbbaa"}, reference=J_DFA },
+        { kind="accept",
+          label="Which of the four words are accepted by M?",
+          words={"abaa","bbbabb","bababa","bbbaa"}, reference=J_DFA },
+        { kind="regexp", label="Give a regular expression for L(M).",
+          reference="a*b+a+(b a*b+a+)*" },
+    },
+}
+
+-- K (book 5.3): the state diagram is given (readonly editor), the
+-- transition table is asked
+local K_DFA = "({q0,q1,q2},{a,b},"
+    .. "{(q0,a,q1),(q0,b,q0),(q1,a,q1),(q1,b,q2),(q2,a,q0),(q2,b,q1)},"
+    .. "q0,{q2})"
+local K_MODEL = {
+    type="dfa", alphabet="a,b",
+    states = {
+        {id=1, name="q0", x=70,  y=90,  initial=true},
+        {id=2, name="q1", x=370, y=90},
+        {id=3, name="q2", x=220, y=280, accepting=true},
+    },
+    transitions = {
+        {id=1, from=1, to=2, label="a"},
+        {id=2, from=1, to=1, label="b"},
+        {id=3, from=2, to=2, label="a"},
+        {id=4, from=2, to=3, label="b"},
+        {id=5, from=3, to=2, label="b"},
+        {id=6, from=3, to=1, label="a"},
+    },
+}
+
+parts_task{
+    id = "1.3k", letter = "K",
+    title = "DFA given by state diagram",
+    desc = "Let M be the DFA defined by the following state diagram:",
+    given = { kind="aut", model=K_MODEL, readonly=true,
+              alphabet="a,b", aut_type="dfa" },
+    parts = {
+        { kind="table",
+          label="Construct the transition table of M.",
+          reference=K_DFA,
+          states={"q0","q1","q2"}, alphabet={"a","b"},
+          initial="q0", accepting={"q2"} },
+        { kind="accept",
+          label="Which of the following words are accepted by M?",
+          words={"baba","baab","abab","abaaab"}, reference=K_DFA },
+        { kind="regexp", label="Give a regular expression for L(M).",
+          reference="b*a+b(a b*a+b|b a*b)*" },
+    },
+}
+
+-- L (book 5.7/5.8/5.15): draw a DFA per language; a regexp is optional
+local LA_DFA = "({q0,q1,q2,q3,q4},{a,b},{(q0,a,q1),(q0,b,q4),"
+    .. "(q1,a,q2),(q1,b,q4),(q2,a,q3),(q2,b,q4),(q3,a,q3),(q3,b,q3),"
+    .. "(q4,a,q4),(q4,b,q4)},q0,{q0,q1,q2,q4})"
+local LB_DFA = "({q0,q1,q2,q3},{a,b},{(q0,a,q1),(q0,b,q0),"
+    .. "(q1,a,q2),(q1,b,q0),(q2,a,q3),(q2,b,q0),(q3,a,q3),(q3,b,q3)},"
+    .. "q0,{q0,q1,q2})"
+local LC_DFA = "({q0,q1,q2,q3,q4},{a,b,c},"
+    .. "{(q0,a,q2),(q0,b,q1),(q0,c,q1),(q1,a,q3),(q1,b,q0),(q1,c,q0),"
+    .. "(q2,a,q4),(q2,b,q3),(q2,c,q3),(q3,a,q4),(q3,b,q2),(q3,c,q2),"
+    .. "(q4,a,q4),(q4,b,q4),(q4,c,q4)},q0,{q3})"
+
+parts_task{
+    id = "1.3l", letter = "L",
+    title = "Draw a DFA for each language",
+    desc = "For each of the following languages L, draw the state "
+        .. "diagram of a DFA that accepts L.  The regular expression "
+        .. "is optional.",
+    parts = {
+        { kind="aut", with_regexp=true, aut_type="dfa", alphabet="a,b",
+          label="L: words over {a, b} that do not begin with aaa.",
+          reference=LA_DFA,
+          re_reference="(λ|a|aa)(λ|b(a|b)*)" },
+        { kind="aut", with_regexp=true, aut_type="dfa", alphabet="a,b",
+          label="L: words over {a, b} that do not contain the "
+             .. "substring aaa.",
+          reference=LB_DFA,
+          re_reference="(λ|a|aa)(b+(λ|a|aa))*" },
+        { kind="aut", with_regexp=true, aut_type="dfa",
+          alphabet="a,b,c",
+          label="(extra) L: words of even length over {a, b, c} "
+             .. "that contain exactly one a.",
+          reference=LC_DFA,
+          re_reference="((b|c)(b|c))*(a(b|c)|(b|c)a)((b|c)(b|c))*" },
+    },
 }
 
 -- ======================================================================
@@ -387,6 +505,8 @@ M.sheets = {
           subtasks = {"1.1a","1.1b","1.1c"} },
         { id="1.2", title="Exercise 1.2",
           subtasks = {"1.2a","1.2b","1.2c","1.2d","1.2e","1.2f"} },
+        { id="1.3", title="Exercise 1.3",
+          subtasks = {"1.3j","1.3k","1.3l"} },
       }},
 }
 
@@ -403,7 +523,8 @@ function M.sheet_structure()
                 subs[#subs+1] = {
                     id = sid,
                     free_id = free and free.id or nil,
-                    sub = (sid:match("(%a)$") or sid):upper(),
+                    sub = (t and t.letter)
+                          or (sid:match("(%a)$") or sid):upper(),
                     title = t and t.title or sid,
                     goal_html = t and t.goal_lhs and
                         T.show_html(t.goal_lhs).." = "..T.show_html(t.goal_rhs)
@@ -418,7 +539,65 @@ function M.sheet_structure()
 end
 
 -- ============ serializable view for the GUI ============
+local function view_part(pd, pi)
+    local v = { kind=pd.kind, label=pd.label,
+                sub=string.char(96 + pi) .. ")",
+                optional = pd.optional or false }
+    if pd.kind == "aut" then
+        v.aut_type, v.alphabet = pd.aut_type, pd.alphabet
+        v.with_regexp = pd.with_regexp or false
+        v.checks = pd.checks
+        v.initial = pd.initial
+        v.readonly = pd.readonly or false
+    elseif pd.kind == "trace" or pd.kind == "accept" then
+        v.words = pd.words
+    elseif pd.kind == "table" then
+        v.states, v.alphabet = pd.states, pd.alphabet
+        v.initial, v.accepting = pd.initial, pd.accepting
+    end
+    return v
+end
+
+local function view_given(g)
+    if not g then return nil end
+    if g.kind == "table" then
+        -- render the reference DFA's transition table as plain data;
+        -- the GUI builds the HTML table
+        local dfa = require("automata").parse_dfa(g.dfa)
+        local syms, states, rows = {}, {}, {}
+        for s,_ in pairs(dfa:get_symbols()) do syms[#syms+1] = s end
+        table.sort(syms)
+        for s,_ in pairs(dfa:get_states()) do states[#states+1]=s end
+        table.sort(states)
+        for _,q in ipairs(states) do
+            local r = { state=q,
+                        initial = dfa:get_initial() == q,
+                        accepting = dfa:is_accepting(q) }
+            for _,s in ipairs(syms) do
+                r[s] = dfa:get_to_states(q, s)
+            end
+            rows[#rows+1] = r
+        end
+        return { kind="table", symbols=syms, rows=rows }
+    elseif g.kind == "aut" then
+        return { kind="aut", model=g.model, readonly=g.readonly,
+                 alphabet=g.alphabet, aut_type=g.aut_type }
+    end
+end
+
 function M.view(task)
+    if task.type == "parts" then
+        local parts = {}
+        for i,pd in ipairs(task.parts or {}) do
+            parts[#parts+1] = view_part(pd, i)
+        end
+        return {
+            id=task.id, type="parts",
+            title=task.title, desc=task.desc,
+            given=view_given(task.given),
+            parts=parts,
+        }
+    end
     if task.type == "regexp" then
         return {
             id=task.id, type="regexp",

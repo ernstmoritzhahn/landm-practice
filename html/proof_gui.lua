@@ -37,6 +37,12 @@ local REGEXP_SYNTAX_HINT =
     '    postfixes: <code>*</code> <code>+</code> <code>^n</code> ·\n' ..
     '    <code>∅</code> = empty language · braces <code>{ }</code>' ..
     ' group too'
+local PARTS_SYNTAX_HINT =
+    'runs: state sequence, e.g. <code>q0 q0 q1 q2</code>' ..
+    ' (start state optional) ·\n' ..
+    '    regex: <code>∪</code>/<code>|</code> union · juxtaposition' ..
+    ' concat · <code>*</code> <code>+</code> ·' ..
+    ' <code>\\lambda</code> → λ · <code>∅</code> = empty language'
 
 local state = {
     sheets = nil,          -- tab structure from the worker
@@ -46,6 +52,7 @@ local state = {
     pinned  = false,       -- ?exercise=<id>: fixed single group, no tab bar
     id = nil, view = nil,
     holes = {}, st = {}, free_blocks = {},
+    parts = {},
 }
 
 -- ?exercise=<group-id> embeds one exercise per page (Canvas gets one
@@ -254,6 +261,177 @@ local function render_regexp_block(view)
     return box
 end
 
+-- ---------- composite "parts" tasks (exercise 1.3) ----------
+-- kinds: aut (automata-app editor), table (transition table),
+-- trace (run state sequences), accept (per-word yes/no),
+-- regexp (regular expression field)
+local function landm_call(name, ...)
+    -- lua-interop: the FIRST Lua argument arrives JS-side as `this`,
+    -- not positionally — prepend a throwaway so real args line up
+    return util.js_get("landm." .. name)(false, ...)
+end
+
+local aut_id_seq = 0
+local pending_aut = {}      -- editor boots only once the host is in the DOM
+
+local function mount_aut(host, cfg_tbl, readonly)
+    -- ids, not element handles, cross the Lua<->JS bridge
+    aut_id_seq = aut_id_seq + 1
+    local host_id = "authost-" .. aut_id_seq
+    local app_id  = "autapp-" .. aut_id_seq
+    host.id = host_id
+    pending_aut[#pending_aut + 1] =
+        { host_id = host_id, app_id = app_id,
+          cfg = json.encode(cfg_tbl), readonly = readonly }
+    return app_id
+end
+
+local function boot_pending_aut()
+    for _,p in ipairs(pending_aut) do
+        landm_call("aut_boot", p.host_id, p.app_id, p.cfg)
+        if p.readonly then
+            landm_call("aut_readonly", p.app_id, true)
+        else
+            landm_call("aut_on_edit", p.app_id,
+                       function() dirty(nil)() end)
+        end
+    end
+    pending_aut = {}
+end
+
+local function aut_cfg(v)
+    return { mode="aut",
+             aut_type = v.aut_type or "dfa",
+             alphabet = v.alphabet or "",
+             checks   = v.checks,
+             initial  = v.initial or v.model }
+end
+
+local function acc_mark(pv, q)
+    local m = q
+    if pv.initial == q then m = "→ " .. m end
+    for _,a in ipairs(pv.accepting or {}) do
+        if a == q then m = m .. "  ★" end
+    end
+    return m
+end
+
+local function render_given(g)
+    local box = el("div", "givenbox")
+    if g.kind == "table" then
+        local tb = el("table", "trtable")
+        local hr = el("tr")
+        hr:appendChild(text("th", "δ"))
+        for _,s in ipairs(g.symbols) do hr:appendChild(text("th", s)) end
+        tb:appendChild(hr)
+        for _,row in ipairs(g.rows) do
+            local tr = el("tr")
+            local mark = (row.initial and "→ " or "") .. row.state
+                .. (row.accepting and "  ★" or "")
+            tr:appendChild(text("td", mark))
+            for _,s in ipairs(g.symbols) do
+                tr:appendChild(text("td", tostring(row[s] or "—")))
+            end
+            tb:appendChild(tr)
+        end
+        box:appendChild(tb)
+    elseif g.kind == "aut" then
+        local host = el("div", "authost given")
+        box:appendChild(host)
+        mount_aut(host, aut_cfg(g), true)
+    end
+    return box
+end
+
+local function render_part(pv, pi)
+    local box = el("div", "part")
+    local lab = el("div", "partlabel")
+    lab:appendChild(text("span", pv.sub, "psub"))
+    lab:appendChild(text("span", pv.label or ""))
+    local st = el("span", "st")
+    lab:appendChild(st)
+    box:appendChild(lab)
+    local rec = { kind = pv.kind, st = st }
+    state.parts[pi] = rec
+    if pv.kind == "aut" then
+        local host = el("div", "authost")
+        box:appendChild(host)
+        rec.app = mount_aut(host, aut_cfg(pv), false)
+        if pv.with_regexp then
+            local r = el("div", "wordrow")
+            r:appendChild(text("span",
+                "regular expression (optional):", "wlabel"))
+            local rst = el("span", "st")
+            local inp = mk_input("expr", 30, dirty(rst), REGEXP_REPLACE)
+            r:appendChild(inp); r:appendChild(rst)
+            box:appendChild(r)
+            rec.re, rec.re_st = inp, rst
+        end
+    elseif pv.kind == "trace" then
+        rec.seqs, rec.row_st = {}, {}
+        for wi,w in ipairs(pv.words or {}) do
+            local r = el("div", "wordrow")
+            r:appendChild(text("span", "w = " .. w .. ":", "wlabel"))
+            local rst = el("span", "st")
+            local inp = mk_input("expr", 30, dirty(rst))
+            inp.placeholder = "q0 q0 q1 q2 q2"
+            r:appendChild(inp); r:appendChild(rst)
+            box:appendChild(r)
+            rec.seqs[wi], rec.row_st[wi] = inp, rst
+        end
+    elseif pv.kind == "accept" then
+        rec.ans, rec.row_st = {}, {}
+        for wi,w in ipairs(pv.words or {}) do
+            local r = el("div", "wordrow")
+            r:appendChild(text("span", "w = " .. w, "wlabel"))
+            local sel = el("select")
+            for _,o in ipairs{{"","(choose)"},
+                              {"yes","accepted"},
+                              {"no","not accepted"}} do
+                local op = document:createElement("option")
+                op.value, op.textContent = o[1], o[2]
+                sel:appendChild(op)
+            end
+            local rst = el("span", "st")
+            sel:addEventListener("change", dirty(rst))
+            r:appendChild(sel); r:appendChild(rst)
+            box:appendChild(r)
+            rec.ans[wi], rec.row_st[wi] = sel, rst
+        end
+    elseif pv.kind == "table" then
+        local tb = el("table", "trtable")
+        local hr = el("tr")
+        hr:appendChild(text("th", "δ"))
+        for _,s in ipairs(pv.alphabet or {}) do
+            hr:appendChild(text("th", s))
+        end
+        tb:appendChild(hr)
+        rec.cells = {}
+        for i,q in ipairs(pv.states or {}) do
+            local tr = el("tr")
+            tr:appendChild(text("td", acc_mark(pv, q)))
+            for _,s in ipairs(pv.alphabet or {}) do
+                local td = el("td")
+                local inp = mk_input(nil, 4, dirty(nil))
+                td:appendChild(inp)
+                tr:appendChild(td)
+                rec.cells[i .. "|" .. s] = { input = inp, td = td }
+            end
+            tb:appendChild(tr)
+        end
+        box:appendChild(tb)
+    elseif pv.kind == "regexp" then
+        local r = el("div", "wordrow")
+        local rst = el("span", "st")
+        local inp = mk_input("expr", 40, dirty(rst), REGEXP_REPLACE)
+        inp.placeholder = "e.g. (a∪b)*ab(a∪b)*"
+        r:appendChild(inp); r:appendChild(rst)
+        box:appendChild(r)
+        rec.expr, rec.expr_st = inp, rst
+    end
+    return box
+end
+
 -- ---------- persistence (localStorage, keys "landm:<sheet>:<task>") ----------
 local STORE_PREFIX = "landm:"
 local function storage_key()
@@ -273,6 +451,30 @@ save_local = function()
     local rec = { free = state.view.free and true or false }
     if state.view.type == "regexp" then
         rec.expr = state.regexp_input and state.regexp_input.value or ""
+        ls_set(storage_key(), json.encode(rec))
+        return
+    end
+    if state.view.type == "parts" then
+        rec.parts = {}
+        for pi,p in pairs(state.parts) do
+            local pr = {}
+            if p.kind == "aut" then
+                pr.aut = p.app and landm_call("aut_state", p.app) or ""
+                if p.re then pr.re = p.re.value end
+            elseif p.kind == "trace" then
+                pr.seqs = {}
+                for wi,inp in ipairs(p.seqs) do pr.seqs[wi] = inp.value end
+            elseif p.kind == "accept" then
+                pr.ans = {}
+                for wi,sel in ipairs(p.ans) do pr.ans[wi] = sel.value end
+            elseif p.kind == "table" then
+                pr.cells = {}
+                for k,c in pairs(p.cells) do pr.cells[k] = c.input.value end
+            elseif p.kind == "regexp" then
+                pr.expr = p.expr.value
+            end
+            rec.parts[pi] = pr
+        end
         ls_set(storage_key(), json.encode(rec))
         return
     end
@@ -307,6 +509,35 @@ local function restore_local()
     if state.view.type == "regexp" then
         if state.regexp_input and type(rec.expr) == "string" then
             state.regexp_input.value = rec.expr
+        end
+        return
+    end
+    if state.view.type == "parts" then
+        for pi, pr in pairs(rec.parts or {}) do
+            local p = state.parts[tonumber(pi)]
+            if p then
+                if p.kind == "aut" then
+                    if p.app and type(pr.aut) == "string"
+                       and pr.aut ~= "" then
+                        landm_call("aut_load", p.app, pr.aut)
+                    end
+                    if p.re and pr.re then p.re.value = pr.re end
+                elseif p.kind == "trace" then
+                    for wi,inp in ipairs(p.seqs) do
+                        inp.value = (pr.seqs or {})[wi] or ""
+                    end
+                elseif p.kind == "accept" then
+                    for wi,sel in ipairs(p.ans) do
+                        sel.value = (pr.ans or {})[wi] or ""
+                    end
+                elseif p.kind == "table" then
+                    for k,c in pairs(p.cells) do
+                        c.input.value = (pr.cells or {})[k] or ""
+                    end
+                elseif p.kind == "regexp" then
+                    if pr.expr then p.expr.value = pr.expr end
+                end
+            end
         end
         return
     end
@@ -378,6 +609,7 @@ local function save_note(s) savemsg_el.textContent = s end
 local function render(view)
     state.view = view
     state.holes, state.st, state.free_blocks = {}, {}, {}
+    state.parts = {}
     state.ih_input, state.ih_st = nil, nil
     state.regexp_input, state.regexp_st = nil, nil
     clear(proof_el); clear(summary_el)
@@ -394,6 +626,22 @@ local function render(view)
     end
     checkbtn.textContent = "Check proof"
     if syntaxhint_el then syntaxhint_el.innerHTML = PROOF_SYNTAX_HINT end
+    if view.type == "parts" then
+        checkbtn.textContent = "Check"
+        rulesbox_el.style.display = "none"
+        if syntaxhint_el then
+            syntaxhint_el.innerHTML = PARTS_SYNTAX_HINT
+        end
+        if view.given then
+            proof_el:appendChild(render_given(view.given))
+        end
+        for pi,pv in ipairs(view.parts or {}) do
+            proof_el:appendChild(render_part(pv, pi))
+        end
+        boot_pending_aut()
+        restore_local()
+        return
+    end
     if view.type == "regexp" then
         checkbtn.textContent = "Check"
         rulesbox_el.style.display = "none"
@@ -461,6 +709,38 @@ local function send_check()
         util.js_post_message(json.encode(data))
         return
     end
+    if view.type == "parts" then
+        local parts = {}
+        for pi,p in pairs(state.parts) do
+            local pd = { pi = pi }
+            if p.kind == "aut" then
+                pd.aut = p.app
+                    and landm_call("aut_state", p.app) or ""
+                if p.re then pd.re = p.re.value end
+            elseif p.kind == "trace" then
+                pd.seqs = {}
+                for wi,inp in ipairs(p.seqs) do
+                    pd.seqs[wi] = inp.value
+                end
+            elseif p.kind == "accept" then
+                pd.ans = {}
+                for wi,sel in ipairs(p.ans) do
+                    pd.ans[wi] = sel.value
+                end
+            elseif p.kind == "table" then
+                pd.cells = {}
+                for k,c in pairs(p.cells) do
+                    pd.cells[k] = c.input.value
+                end
+            elseif p.kind == "regexp" then
+                pd.expr = p.expr.value
+            end
+            parts[#parts+1] = pd
+        end
+        data.parts = parts
+        util.js_post_message(json.encode(data))
+        return
+    end
     if view.free then
         data.ih = state.ih_input and state.ih_input.value or ""
         for si,blk in pairs(state.free_blocks) do
@@ -491,6 +771,8 @@ end
 -- ---------- paint results ----------
 local KIND = {
     ok             = { "ok",     "✓" },
+    fail           = { "fail",   "✗" },
+    warn           = { "warn",   "⚠" },
     noop           = { "fail",   "✗" },
     instance_fail  = { "fail",   "✗" },
     mismatch       = { "fail",   "✗" },
@@ -531,6 +813,17 @@ local function clear_all_st()
     end
     if state.ih_st then state.ih_st.textContent=""; state.ih_st.className="st" end
     if state.regexp_st then state.regexp_st.textContent=""; state.regexp_st.className="st" end
+    for _,p in pairs(state.parts or {}) do
+        if p.st then p.st.textContent=""; p.st.className="st" end
+        for _,rst in pairs(p.row_st or {}) do
+            rst.textContent=""; rst.className="st"
+        end
+        for _,c in pairs(p.cells or {}) do c.td.className = "" end
+        if p.re_st then p.re_st.textContent=""; p.re_st.className="st" end
+        if p.expr_st then
+            p.expr_st.textContent=""; p.expr_st.className="st"
+        end
+    end
 end
 
 local function paint(res)
@@ -550,6 +843,49 @@ local function paint(res)
         else
             summary_el:appendChild(text("span",
                 res.msg or "not verified.", "st fail"))
+        end
+        return
+    end
+    if state.view and state.view.type == "parts" then
+        for _,pres in ipairs(res.parts or {}) do
+            local p = state.parts[pres.pi]
+            if p then
+                if pres.msg then
+                    paint_st(p.st, pres.kind or "fail", pres.msg)
+                else
+                    paint_st(p.st, pres.ok and "ok"
+                             or pres.kind or "pending")
+                end
+                for wi,row in pairs(pres.rows or {}) do
+                    local rst = p.row_st and p.row_st[tonumber(wi)]
+                    if rst and row.kind and row.kind ~= "empty" then
+                        paint_st(rst, row.kind,
+                                 row.kind ~= "ok" and row.msg or nil)
+                    end
+                end
+                for k,cr in pairs(pres.cells or {}) do
+                    local c = p.cells and p.cells[k]
+                    if c and c.td then
+                        c.td.className =
+                            cr.kind == "ok" and "cell-ok"
+                            or cr.kind == "empty" and ""
+                            or "cell-bad"
+                    end
+                end
+                if pres.re and p.re_st then
+                    if pres.re.ok then paint_st(p.re_st, "ok")
+                    else paint_st(p.re_st, pres.re.kind or "mismatch",
+                                  pres.re.msg) end
+                end
+            end
+        end
+        clear(summary_el)
+        if res.ok then
+            summary_el:appendChild(text("span",
+                "all parts verified ✓", "st ok"))
+        else
+            summary_el:appendChild(text("span",
+                res.msg or "not yet fully verified.", "st fail"))
         end
         return
     end
@@ -690,12 +1026,12 @@ savefile_btn:addEventListener("click", function()
     local dump = dump_all()
     if not dump then save_note("browser storage unavailable") return end
     stateta.value = dump
-    util.js_get("landm.download")("landm-saved-work.json", dump)
+    util.js_get("landm.download")(false, "landm-saved-work.json", dump)
     save_note("file downloaded — it contains every exercise on every sheet")
 end)
 loadfile_btn:addEventListener("click", function() loadinput:click() end)
 loadinput:addEventListener("change", function()
-    util.js_get("landm.read_file")(loadinput, import_and_reload)
+    util.js_get("landm.read_file")(false, loadinput, import_and_reload)
     loadinput.value = ""
 end)
 loadtext_btn:addEventListener("click", function() import_and_reload(stateta.value) end)

@@ -17,6 +17,7 @@ local json = require "lib.json"
 local T = require "wordproof.term"
 local C = require "wordproof.check"
 local RC = require "wordproof.regexp_check"
+local DC = require "wordproof.dfa_check"
 local tasks = require "wordproof.tasks"
 
 local function build_input(task, data)
@@ -93,6 +94,53 @@ return function(data)
             end
             util.js_post_message(json.encode(
                 { what="result", id=data.id, res=res }))
+            return
+        end
+        if task.type == "parts" then
+            local by_pi = {}
+            for _,p in ipairs(data.parts or {}) do
+                by_pi[p.pi] = p
+            end
+            local parts, all_ok = {}, true
+            for pi,pdef in ipairs(task.parts or {}) do
+                local pd = by_pi[pi] or {}
+                local okp, pres = pcall(function()
+                    if pdef.kind == "aut" then
+                        local r = DC.check_aut(pdef, pd.aut,
+                                               pdef.aut_type)
+                        if pdef.with_regexp
+                           and (pd.re or ""):match("%S") then
+                            local redef = { reference =
+                                            pdef.re_reference }
+                            r.re = RC.check(redef, pd.re)
+                            if r.ok and not r.re.ok then
+                                r.ok = false
+                            end
+                        end
+                        return r
+                    elseif pdef.kind == "trace" then
+                        return DC.check_trace(pdef, pd.seqs)
+                    elseif pdef.kind == "accept" then
+                        return DC.check_accept(pdef, pd.ans)
+                    elseif pdef.kind == "table" then
+                        return DC.check_table(pdef, pd.cells)
+                    elseif pdef.kind == "regexp" then
+                        return RC.check({reference=pdef.reference},
+                                        pd.expr)
+                    end
+                    return { ok=false, msg="unknown part kind" }
+                end)
+                if not okp then
+                    pres = { ok=false,
+                             msg="internal error: "..tostring(pres) }
+                end
+                pres.pi = pi
+                if not pres.ok then all_ok = false end
+                parts[#parts+1] = pres
+            end
+            util.js_post_message(json.encode(
+                { what="result", id=data.id,
+                  res={ ok=all_ok, parts=parts } }))
             return
         end
         local ok2,input = pcall(build_input, task, data)
