@@ -403,7 +403,7 @@ function M.sheet_structure()
                 subs[#subs+1] = {
                     id = sid,
                     free_id = free and free.id or nil,
-                    sub = sid:match("(%a)$") or sid,
+                    sub = (sid:match("(%a)$") or sid):upper(),
                     title = t and t.title or sid,
                     goal_html = t and t.goal_lhs and
                         T.show_html(t.goal_lhs).." = "..T.show_html(t.goal_rhs)
