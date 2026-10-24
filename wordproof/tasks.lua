@@ -31,6 +31,11 @@ local function parse(s, spec)
 end
 
 local function def_task(t)
+    if t.type == "regexp" then
+        M.tasks[t.id] = t
+        M.order[#M.order+1] = t.id
+        return
+    end
     -- spec list helpers
     t.spec.wvar_list = {}
     for s,_ in pairs(t.spec.wvar or {}) do t.spec.wvar_list[#t.spec.wvar_list+1]=s end
@@ -291,6 +296,66 @@ def_task{
 }
 
 -- ======================================================================
+-- 1.2  regular expressions — student input is a single regexp; the
+--      checker compares its language with the reference (type="regexp")
+-- ======================================================================
+
+local function regexp_task(t)
+    t.type = "regexp"
+    def_task(t)
+end
+
+regexp_task{
+    id = "1.2a",
+    title = "a before b before c",
+    desc = "L is the language of all words over {a, b, c} in which "
+        .. "all occurrences of a precede all occurrences of b and c, "
+        .. "and in turn all the b precede all the c.",
+    reference = "a*b*c*",
+}
+
+regexp_task{
+    id = "1.2b",
+    title = "a before b before c, nonempty",
+    desc = "L is the same language as in (a), except it does not "
+        .. "contain λ.",
+    reference = "a+b*c*|a*b+c*|a*b*c+",
+}
+
+regexp_task{
+    id = "1.2c",
+    title = "length three",
+    desc = "L is the language of all words over {a, b, c} of "
+        .. "length three.",
+    reference = "(a|b|c)^3",
+}
+
+regexp_task{
+    id = "1.2d",
+    title = "substring ab, length > 2",
+    desc = "L is the language of all words in {a, b}* that contain "
+        .. "the substring ab and have length > 2.",
+    reference = "(a|b)*ab(a|b)+|(a|b)+ab",
+}
+
+regexp_task{
+    id = "1.2e",
+    title = "substrings aa and bb",
+    desc = "L is the language over {a, b} such that all words contain "
+        .. "both aa and bb.",
+    reference = "(a|b)*aa(a|b)*bb(a|b)*|(a|b)*bb(a|b)*aa(a|b)*",
+}
+
+regexp_task{
+    id = "1.2f",
+    title = "(extra) substrings ab and ba",
+    desc = "L is the language over {a, b} such that all words contain "
+        .. "both ab and ba.",
+    reference = "(a|b)*ab(a|b)*ba(a|b)*|(a|b)*ba(a|b)*ab(a|b)*"
+             .. "|(a|b)*aba(a|b)*|(a|b)*bab(a|b)*",
+}
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -320,6 +385,8 @@ M.sheets = {
       groups = {
         { id="1.1", title="Exercise 1.1",
           subtasks = {"1.1a","1.1b","1.1c"} },
+        { id="1.2", title="Exercise 1.2",
+          subtasks = {"1.2a","1.2b","1.2c","1.2d","1.2e","1.2f"} },
       }},
 }
 
@@ -352,6 +419,14 @@ end
 
 -- ============ serializable view for the GUI ============
 function M.view(task)
+    if task.type == "regexp" then
+        return {
+            id=task.id, type="regexp",
+            title=task.title, desc=task.desc,
+            hint="syntax: letters, juxtaposition, ∪ or |, *, +, "
+              .. "λ (or \\lambda), ∅, ( ), E^n",
+        }
+    end
     local secs, sec_labels = nil, {}
     for si,sec in ipairs(task.sections or {}) do
         sec_labels[#sec_labels+1] = { label=sec.label,

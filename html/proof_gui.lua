@@ -208,6 +208,22 @@ local function render_free_block(secdef, si)
     return box
 end
 
+-- ---------- regexp task rendering (exercise 1.2) ----------
+local function render_regexp_block(view)
+    local box = el("div", "sec")
+    box:appendChild(text("div",
+        "Your regular expression E with L(E) = L:", "seclabel"))
+    local r = el("div", "row")
+    local st = el("span", "st")
+    local inp = mk_input("expr", 42, dirty(st))
+    inp.placeholder = "e.g. (a∪b)*ab(a∪b)*"
+    r:appendChild(inp)
+    r:appendChild(st)
+    box:appendChild(r)
+    state.regexp_input, state.regexp_st = inp, st
+    return box
+end
+
 -- ---------- persistence (localStorage, keys "landm:<sheet>:<task>") ----------
 local STORE_PREFIX = "landm:"
 local function storage_key()
@@ -225,6 +241,11 @@ end
 save_local = function()
     if not (state.id and state.view) then return end
     local rec = { free = state.view.free and true or false }
+    if state.view.type == "regexp" then
+        rec.expr = state.regexp_input and state.regexp_input.value or ""
+        ls_set(storage_key(), json.encode(rec))
+        return
+    end
     if state.view.free then
         rec.ih = state.ih_input and state.ih_input.value or ""
         rec.secs = {}
@@ -253,6 +274,12 @@ local function restore_local()
     if not raw then return end
     local ok, rec = pcall(json.decode, raw)
     if not (ok and type(rec) == "table") then return end
+    if state.view.type == "regexp" then
+        if state.regexp_input and type(rec.expr) == "string" then
+            state.regexp_input.value = rec.expr
+        end
+        return
+    end
     if state.view.free then
         if state.ih_input and type(rec.ih) == "string" then
             state.ih_input.value = rec.ih
@@ -322,6 +349,7 @@ local function render(view)
     state.view = view
     state.holes, state.st, state.free_blocks = {}, {}, {}
     state.ih_input, state.ih_st = nil, nil
+    state.regexp_input, state.regexp_st = nil, nil
     clear(proof_el); clear(summary_el)
     clear(ihrow_el); clear(rulesbox_el)
     goal_el.innerHTML = ""
@@ -330,6 +358,17 @@ local function render(view)
         local g = el("span", "goaleq")
         g.innerHTML = view.goal_html
         goal_el:appendChild(g)
+    end
+    if view.desc then
+        goal_el:appendChild(text("div", view.desc, "desc"))
+    end
+    if view.type == "regexp" then
+        if view.hint then
+            goal_el:appendChild(text("div", view.hint, "hint"))
+        end
+        proof_el:appendChild(render_regexp_block(view))
+        restore_local()
+        return
     end
     if view.hint then
         goal_el:appendChild(text("div", view.hint, "hint"))
@@ -381,6 +420,11 @@ local function send_check()
     local view = state.view
     if not view then return end
     local data = { what="check", id=state.id, sections={} }
+    if view.type == "regexp" then
+        data.expr = state.regexp_input and state.regexp_input.value or ""
+        util.js_post_message(json.encode(data))
+        return
+    end
     if view.free then
         data.ih = state.ih_input and state.ih_input.value or ""
         for si,blk in pairs(state.free_blocks) do
@@ -419,6 +463,7 @@ local KIND = {
     pending        = { "pending","…" },
     missing_ih     = { "fail",   "✗" },
     parse          = { "fail",   "✗" },
+    too_large      = { "fail",   "✗" },
     empty          = { "pending","□" },
 }
 
@@ -449,10 +494,29 @@ local function clear_all_st()
         end
     end
     if state.ih_st then state.ih_st.textContent=""; state.ih_st.className="st" end
+    if state.regexp_st then state.regexp_st.textContent=""; state.regexp_st.className="st" end
 end
 
 local function paint(res)
     clear_all_st()
+    if state.view and state.view.type == "regexp" then
+        if state.regexp_st then
+            if res.ok then
+                paint_st(state.regexp_st, "ok")
+            else
+                paint_st(state.regexp_st, res.kind or "mismatch", res.msg)
+            end
+        end
+        clear(summary_el)
+        if res.ok then
+            summary_el:appendChild(text("span",
+                "L(E) = L verified ✓", "st ok"))
+        else
+            summary_el:appendChild(text("span",
+                res.msg or "not verified.", "st fail"))
+        end
+        return
+    end
     -- links first, then row statuses (a parse error should override the
     -- "…" a pending link would leave on the same cell)
     for _,sres in ipairs(res.sections or {}) do

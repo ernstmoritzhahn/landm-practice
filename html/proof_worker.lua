@@ -16,6 +16,7 @@ util.fix_path()
 local json = require "lib.json"
 local T = require "wordproof.term"
 local C = require "wordproof.check"
+local RC = require "wordproof.regexp_check"
 local tasks = require "wordproof.tasks"
 
 local function build_input(task, data)
@@ -84,6 +85,16 @@ return function(data)
     elseif data.what == "check" then
         local task = tasks.tasks[data.id]
         if not task then return end
+        if task.type == "regexp" then
+            local okr,res = pcall(RC.check, task, data.expr)
+            if not okr then
+                res = { ok=false,
+                        msg="internal error: "..tostring(res) }
+            end
+            util.js_post_message(json.encode(
+                { what="result", id=data.id, res=res }))
+            return
+        end
         local ok2,input = pcall(build_input, task, data)
         if not ok2 then
             util.js_post_message(json.encode(
