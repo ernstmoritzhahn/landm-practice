@@ -19,6 +19,10 @@ local variant_el = get("variant")
 local goal_el, ihrow_el = get("goal"), get("ihrow")
 local rulesbox_el = get("rulesbox")
 local proof_el, summary_el = get("proof"), get("summary")
+local savefile_btn, loadfile_btn = get("savefile"), get("loadfile")
+local loadinput, stateta = get("loadinput"), get("stateta")
+local loadtext_btn = get("loadtext")
+local savedetails_el, savemsg_el = get("savedetails"), get("savemsg")
 
 local state = {
     sheets = nil,          -- tab structure from the worker
@@ -75,10 +79,13 @@ local function mk_input(cls, width, oninput)
     end)
     return i
 end
+local save_local  -- forward declaration (persistence section below)
+
 local function dirty(st)
     return function()
         if st then st.textContent = "" ; st.className = "st" end
         summary_el.textContent = ""
+        if save_local then save_local() end
     end
 end
 
@@ -191,6 +198,115 @@ local function render_free_block(secdef, si)
     return box
 end
 
+-- ---------- persistence (localStorage, keys "landm:<sheet>:<task>") ----------
+local STORE_PREFIX = "landm:"
+local function storage_key()
+    local sh = state.sheets and state.sheets[1]
+    return STORE_PREFIX .. (sh and sh.id or "sheet") .. ":" .. tostring(state.id)
+end
+local function ls_set(k, v)
+    pcall(function() window.localStorage:setItem(k, v) end)
+end
+local function ls_get(k)
+    local ok, v = pcall(function() return window.localStorage:getItem(k) end)
+    return ok and v or nil
+end
+
+save_local = function()
+    if not (state.id and state.view) then return end
+    local rec = { free = state.view.free and true or false }
+    if state.view.free then
+        rec.ih = state.ih_input and state.ih_input.value or ""
+        rec.secs = {}
+        for si,blk in pairs(state.free_blocks) do
+            local rows = {}
+            for ri,r in ipairs(blk.rows) do
+                rows[ri] = { e = r.expr.value, c = r.cite.value }
+            end
+            rec.secs[#rec.secs+1] = { si=si, bind=blk.bind.value, rows=rows }
+        end
+    else
+        rec.holes = {}
+        for si,rows in pairs(state.holes) do
+            for ri,inp in pairs(rows) do
+                if (inp.value or "") ~= "" then
+                    rec.holes[si..":"..ri] = inp.value
+                end
+            end
+        end
+    end
+    ls_set(storage_key(), json.encode(rec))
+end
+
+local function restore_local()
+    local raw = ls_get(storage_key())
+    if not raw then return end
+    local ok, rec = pcall(json.decode, raw)
+    if not (ok and type(rec) == "table") then return end
+    if state.view.free then
+        if state.ih_input and type(rec.ih) == "string" then
+            state.ih_input.value = rec.ih
+        end
+        for _,srec in ipairs(rec.secs or {}) do
+            local blk = state.free_blocks[srec.si]
+            if blk then
+                blk.bind.value = srec.bind or ""
+                local rows = srec.rows or {}
+                while #blk.rows < #rows do add_free_row(blk, srec.si) end
+                for ri,r in ipairs(rows) do
+                    local row = blk.rows[ri]
+                    if row then
+                        row.expr.value = r.e or ""
+                        row.cite.value = r.c or ""
+                    end
+                end
+            end
+        end
+    else
+        for k,v in pairs(rec.holes or {}) do
+            local si,ri = k:match("^(%d+):(%d+)$")
+            local inp = si and state.holes[tonumber(si)]
+                        and state.holes[tonumber(si)][tonumber(ri)]
+            if inp then inp.value = v end
+        end
+    end
+end
+
+local function dump_all()
+    local ok, ls = pcall(function() return window.localStorage end)
+    if not (ok and ls) then return nil end
+    local data = {}
+    pcall(function()
+        for i = 0, (ls.length or 0) - 1 do
+            local k = ls:key(i)
+            if k and k:sub(1, #STORE_PREFIX) == STORE_PREFIX then
+                data[k] = ls:getItem(k)
+            end
+        end
+    end)
+    return json.encode{ format="landm-practice-state", v=1,
+        saved_at=os.date("!%Y-%m-%dT%H:%M:%SZ"), data=data }
+end
+
+local function import_all(text)
+    local ok, env = pcall(json.decode, text)
+    if not (ok and type(env) == "table"
+            and env.format == "landm-practice-state"
+            and type(env.data) == "table") then
+        return nil, "not a saved-work file"
+    end
+    local n = 0
+    for k,v in pairs(env.data) do
+        if type(k) == "string" and k:sub(1, #STORE_PREFIX) == STORE_PREFIX
+           and type(v) == "string" then
+            ls_set(k, v); n = n + 1
+        end
+    end
+    return n
+end
+
+local function save_note(s) savemsg_el.textContent = s end
+
 -- ---------- render dispatch ----------
 local function render(view)
     state.view = view
@@ -240,6 +356,7 @@ local function render(view)
             proof_el:appendChild(render_section(view, sec, si))
         end
     end
+    restore_local()
 end
 
 -- ---------- request view/check ----------
@@ -442,6 +559,34 @@ end
 
 -- ---------- events ----------
 checkbtn:addEventListener("click", send_check)
+
+local function import_and_reload(text)
+    local n, err = import_all(text)
+    if n then
+        save_note("restored "..n.." saved task(s) — all sheets")
+        if state.id then request_view(state.id) end
+    else
+        save_note("load failed: "..(err or "?"))
+    end
+end
+
+savefile_btn:addEventListener("click", function()
+    save_local()
+    local dump = dump_all()
+    if not dump then save_note("browser storage unavailable") return end
+    stateta.value = dump
+    util.js_get("landm.download")("landm-saved-work.json", dump)
+    save_note("file downloaded — it contains every exercise on every sheet")
+end)
+loadfile_btn:addEventListener("click", function() loadinput:click() end)
+loadinput:addEventListener("change", function()
+    util.js_get("landm.read_file")(loadinput, import_and_reload)
+    loadinput.value = ""
+end)
+loadtext_btn:addEventListener("click", function() import_and_reload(stateta.value) end)
+savedetails_el:addEventListener("toggle", function()
+    if savedetails_el.open then stateta.value = dump_all() or "" end
+end)
 -- NB: no js_post_message here — it is only wired after this module's
 -- require() returns.  The worker pushes the task list itself on load.
 

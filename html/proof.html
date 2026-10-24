@@ -193,6 +193,31 @@
 
         #summary { font-size: 0.95rem; }
 
+        #savebar {
+            margin-top: 1.6rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.2rem;
+        }
+        #savebar .saverow {
+            display: flex; align-items: baseline;
+            gap: 1rem; flex-wrap: wrap;
+        }
+        #savebar button { padding: 8px 18px; font-size: 0.85rem; }
+        #savemsg { font-size: 0.85rem; color: #666; }
+        .savehint {
+            color: #666; font-size: 0.8rem;
+            margin: 0.8rem 0 0.4rem 0; max-width: 46rem;
+        }
+        #savedetails { margin-top: 0.6rem; font-size: 0.85rem; }
+        #savedetails summary { cursor: pointer; color: var(--ut-dark-grey); }
+        #stateta {
+            width: 100%; box-sizing: border-box;
+            font-family: "Monaco", "Consolas", monospace; font-size: 0.78rem;
+            border: 1px solid var(--border-color); background: #fafafa;
+            margin-top: 0.4rem;
+        }
+        #loadtext { margin-top: 0.4rem; }
+
         .hint {
             color: #666;
             font-size: 0.8rem;
@@ -212,6 +237,27 @@
         .ut-accent { color: var(--ut-red); font-weight: bold; }
     </style>
 
+    <script>
+        // persistence helpers for proof_gui.lua (constructors/promises are
+        // awkward through the wasm interop, so they live here)
+        window.landm = {
+            download: function(name, text) {
+                var a = document.createElement("a");
+                a.href = URL.createObjectURL(
+                    new Blob([text], {type: "application/json"}));
+                a.download = name;
+                a.click();
+                setTimeout(function() { URL.revokeObjectURL(a.href) }, 10000);
+            },
+            read_file: function(input, cb) {
+                var f = input.files && input.files[0];
+                if (!f) return;
+                var r = new FileReader();
+                r.onload = function() { cb(r.result) };
+                r.readAsText(f);
+            }
+        };
+    </script>
     <script src="../lib/prepare_util.js" type="module"></script>
     <script type="module">
         import {start_worker} from "../lib/start_worker.js"
@@ -245,6 +291,33 @@
         <code>w^R</code>, <code>w^(k+1)</code>, <code>w^k</code> ·
         sum: <code>sum(i,0,n;k^i)</code> ·
         <code>f(n)</code>
+    </div>
+
+    <div id="savebar">
+        <div class="saverow">
+            <button id="savefile">Save ALL work to file</button>
+            <button id="loadfile">Load work from file</button>
+            <input type="file" id="loadinput"
+                   accept=".json,.txt,application/json" hidden>
+            <span id="savemsg"></span>
+        </div>
+        <p class="savehint">
+            Your work is auto-saved in this browser as you type. The
+            downloaded file (and the text below) always contains
+            <b>every exercise on every sheet</b> of this site — keep it as
+            a backup or use it to move your work to another browser.
+        </p>
+        <details id="savedetails">
+            <summary>All saved work as text (copy / paste alternative)</summary>
+            <p class="savehint">
+                This text is everything saved in this browser — all sheets,
+                all exercises. Copy it to keep a backup, or paste a
+                previously saved text here and click
+                &ldquo;Restore from text&rdquo;.
+            </p>
+            <textarea id="stateta" rows="6" spellcheck="false"></textarea>
+            <button id="loadtext">Restore from text</button>
+        </details>
     </div>
 </main>
 
