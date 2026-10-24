@@ -61,16 +61,17 @@
         #tabs .tab.active {
             background: var(--ut-black); color: #fff; font-weight: bold;
         }
-        #subtabs { margin-bottom: 1.2rem; border-bottom: 2px solid var(--ut-black); padding-bottom: 0; }
+        #subtabs { margin-bottom: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0; }
         #subtabs .subtab {
             font-family: "Monaco", "Consolas", monospace;
             font-size: 0.85rem;
             padding: 6px 14px;
-            border-bottom: none;
-            margin-bottom: -2px;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            color: #555;
         }
         #subtabs .subtab.active {
-            border-bottom: 2px solid var(--ut-red);
+            border-bottom-color: var(--ut-red);
             font-weight: bold;
             color: var(--ut-red);
         }
