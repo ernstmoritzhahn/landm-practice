@@ -336,7 +336,9 @@ local function render(view)
     end
     -- citable rules, verbatim (so "Thm 2.1.6" is inspectable on-page)
     if view.cite_docs and #view.cite_docs > 0 then
-        rulesbox_el:appendChild(text("div", "You may cite:", "seclabel"))
+        rulesbox_el:appendChild(text("div",
+            state.free and "You may cite:" or "Rules used in this proof:",
+            "seclabel"))
         for _,d in ipairs(view.cite_docs) do
             local row = el("div", "rule")
             row:appendChild(text("span", d.label, "rulelabel"))
