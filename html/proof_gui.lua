@@ -483,7 +483,8 @@ local function paint(res)
         end
         for ri,row in pairs(sres.rows or {}) do
             local st = row_st_el(si, ri)
-            if st and row.kind and row.kind ~= "ok" then
+            if st and row.kind and row.kind ~= "ok"
+                and row.msg ~= "(empty)" then
                 paint_st(st, row.kind, row.msg)
             end
         end
