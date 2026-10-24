@@ -36,9 +36,11 @@ local state = {
 
 -- ?exercise=<group-id> embeds one exercise per page (Canvas gets one
 -- iframe per Aufgabe); absent -> fall back to a group tab bar.
-local ex_param
+local ex_param, sub_param
 pcall(function()
-    ex_param = (window.location.search or ""):match("exercise=([%w_%.%-]+)")
+    local q = window.location.search or ""
+    ex_param = q:match("exercise=([%w_%.%-]+)")
+    sub_param = q:match("sub=([%w_%.%-]+)")
 end)
 
 -- ---------- dom helpers ----------
@@ -613,6 +615,12 @@ return function(data)
                     state.group_i, state.pinned = gi, true
                     break
                 end
+            end
+        end
+        if sub_param then
+            local g = state.sheets[1].groups[state.group_i]
+            for si,sub in ipairs(g.subtasks) do
+                if sub.sub == sub_param then state.sub_i = si break end
             end
         end
         render_tabs()
