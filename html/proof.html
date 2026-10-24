@@ -296,10 +296,14 @@
                 parent.postMessage(
                     {subject: "lti.frameResize", height: h}, "*");
             }
-            new ResizeObserver(report).observe(document.body);
+            function start() {
+                new ResizeObserver(report).observe(document.body);
+                report();
+            }
+            if (document.body) start();
+            else addEventListener("DOMContentLoaded", start);
             addEventListener("load", report);
             setInterval(report, 1500);   // wasm renders don't fire DOM events reliably
-            report();
         })();
     </script>
     <script src="../lib/prepare_util.js" type="module"></script>
