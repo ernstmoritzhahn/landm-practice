@@ -329,7 +329,17 @@ end
 
 local function render_given(g)
     local box = el("div", "givenbox")
-    if g.kind == "table" then
+    if g[1] then
+        for _, item in ipairs(g) do
+            box:appendChild(render_given(item))
+        end
+        return box
+    end
+    if g.kind == "text" then
+        local pre = el("pre", "giventext")
+        pre.textContent = g.text
+        box:appendChild(pre)
+    elseif g.kind == "table" then
         local tb = el("table", "trtable")
         local hr = el("tr")
         hr:appendChild(text("th", "δ"))
@@ -1043,6 +1053,48 @@ local function render_part(pv, pi)
         box:appendChild(r)
         rec.classes = cinp
         rec.cells["classes"] = { td = cst }
+    elseif pv.kind == "grammar" or pv.kind == "tree"
+        or pv.kind == "pattern" then
+        local r = el("div", "wordrow")
+        local rst = el("span", "st")
+        local ta = document:createElement("textarea")
+        ta.className = "grammartext"
+        ta:setAttribute("spellcheck", "false")
+        ta.rows = pv.kind == "grammar" and 6 or 3
+        ta.cols = 52
+        ta.placeholder = pv.kind == "grammar" and
+            "S -> aA | λ\nA -> bA | b" or
+            (pv.kind == "tree" and "S(a b S(…) c c)"
+             or "(ab)^n c^m d^m c^n | n>=0, m>0")
+        ta:addEventListener("input", dirty(rst))
+        r:appendChild(ta); r:appendChild(rst)
+        box:appendChild(r)
+        if pv.hint then
+            box:appendChild(text("div", pv.hint, "wlabel"))
+        end
+        rec.text, rec.expr_st = ta, rst
+        rec.cells = { text = { td = rst } }
+    elseif pv.kind == "derivation" then
+        rec.fields, rec.cells = {}, {}
+        for d = 1, (pv.count or 1) do
+            local r = el("div", "wordrow")
+            if (pv.count or 1) > 1 then
+                r:appendChild(text("span",
+                    "derivation #" .. d .. ":", "wlabel"))
+            end
+            local rst = el("span", "st")
+            local ta = document:createElement("textarea")
+            ta.className = "grammartext"
+            ta:setAttribute("spellcheck", "false")
+            ta.rows, ta.cols = 5, 52
+            ta.placeholder = "S\nSAB\nAB\n…\n"
+                .. (pv.target or "")
+            ta:addEventListener("input", dirty(rst))
+            r:appendChild(ta); r:appendChild(rst)
+            box:appendChild(r)
+            rec.fields[d] = ta
+            rec.cells["d" .. d] = { td = rst }
+        end
     end
     return box
 end
@@ -1090,6 +1142,14 @@ save_local = function()
                 for wi,inp in ipairs(p.sets) do pr.sets[wi] = inp.value end
             elseif p.kind == "regexp" then
                 pr.expr = p.expr.value
+            elseif p.kind == "grammar" or p.kind == "tree"
+                or p.kind == "pattern" then
+                pr.text = p.text and p.text.value or ""
+            elseif p.kind == "derivation" then
+                pr.texts = {}
+                for d, ta in ipairs(p.fields or {}) do
+                    pr.texts[d] = ta.value
+                end
             elseif p.kind == "choice" then
                 pr.sel = {}
                 for k, sel in pairs(p.sels) do pr.sel[k] = sel.value end
@@ -1201,6 +1261,15 @@ local function restore_local()
                         inp.value = (pr.wit or {})[k] or ""
                     end
                     if pr.classes then p.classes.value = pr.classes end
+                elseif p.kind == "grammar" or p.kind == "tree"
+                    or p.kind == "pattern" then
+                    if pr.text and p.text then
+                        p.text.value = pr.text
+                    end
+                elseif p.kind == "derivation" then
+                    for d, ta in ipairs(p.fields or {}) do
+                        ta.value = (pr.texts or {})[d] or ""
+                    end
                 end
             end
         end
@@ -1488,6 +1557,14 @@ send_check = function(only_pi)
                 pd.gen = p.gen and {
                     u = p.gen.u.value, v = p.gen.v.value,
                     w = p.gen.w.value, i = p.gen.i.value } or nil
+            elseif p.kind == "grammar" or p.kind == "tree"
+                or p.kind == "pattern" then
+                pd.text = p.text and p.text.value or ""
+            elseif p.kind == "derivation" then
+                pd.texts = {}
+                for d, ta in ipairs(p.fields or {}) do
+                    pd.texts[d] = ta.value
+                end
             elseif p.kind == "min_table" then
                 pd.marks = {}
                 for k, c in pairs(p.cells) do
@@ -1716,11 +1793,12 @@ local function paint(res)
         for _,pres in ipairs(res.parts or {}) do
             local p = state.parts[pres.pi]
             if p then
-                if pres.msg then
+                if pres.ok then
+                    paint_st(p.st, "ok", pres.msg)
+                elseif pres.msg then
                     paint_st(p.st, pres.kind or "fail", pres.msg)
                 else
-                    paint_st(p.st, pres.ok and "ok"
-                             or pres.kind or "pending")
+                    paint_st(p.st, pres.kind or "pending")
                 end
                 for wi,row in pairs(pres.rows or {}) do
                     local rst = p.row_st and p.row_st[tonumber(wi)]

@@ -1320,6 +1320,294 @@ mtask("3.3b", "s.2", D2, Q6)
 mtask("3.3c", "s.3", D3, Q7)
 
 -- ======================================================================
+-- SHEET 4 — projection & product, context-free grammars,
+--           regular grammar <-> NFA
+-- ======================================================================
+
+local AUT = require "automata"
+
+-- M1 / M2 of §4.1
+local M1_STR = "({q0,q1,q2},{a,b},"
+    .. "{(q0,b,q0),(q0,a,q1),(q1,a,q1),(q1,b,q2),"
+    .. "(q2,b,q1),(q2,a,q0)},q0,{q2})"
+local M2_STR = "({q0,q1,q2},{a,b},"
+    .. "{(q0,a,q0),(q0,a,q1),(q1,b,q1),(q1,b,q2),"
+    .. "(q2,a,q1),(q2,a,q0)},q0,{q2})"
+
+local M1_MODEL = { type="dfa", alphabet="a,b",
+    states={ {id=1,name="q0",x=110,y=130,initial=true},
+             {id=2,name="q1",x=330,y=130},
+             {id=3,name="q2",x=220,y=300,accepting=true} },
+    transitions={ {id=1,from=1,to=1,label="b"},
+                  {id=2,from=1,to=2,label="a"},
+                  {id=3,from=2,to=2,label="a"},
+                  {id=4,from=2,to=3,label="b"},
+                  {id=5,from=3,to=2,label="b"},
+                  {id=6,from=3,to=1,label="a"} } }
+local M2_MODEL = { type="nfa", alphabet="a,b",
+    states={ {id=1,name="q0",x=110,y=130,initial=true},
+             {id=2,name="q1",x=330,y=130},
+             {id=3,name="q2",x=220,y=300,accepting=true} },
+    transitions={ {id=1,from=1,to=1,label="a"},
+                  {id=2,from=1,to=2,label="a"},
+                  {id=3,from=2,to=2,label="b"},
+                  {id=4,from=2,to=3,label="b"},
+                  {id=5,from=3,to=2,label="a"},
+                  {id=6,from=3,to=1,label="a"} } }
+
+-- projection M↾Σ': letters outside `keep` become λ-steps (NFA-λ)
+local function project(aut_str, keep)
+    local src = AUT.parse_nfa_lambda(aut_str)
+    local n = AUT.make_nfa(true)
+    for s, _ in pairs(src:get_states()) do
+        n:add_state(s)
+        if src:is_accepting(s) then n:set_accepting(s, true) end
+    end
+    n:set_initial(src:get_initial(), true)
+    for _, t in ipairs(src:get_transitions()) do
+        n:add_transition(t.from, keep[t.label] and t.label or "",
+                         t.target)
+    end
+    return n
+end
+
+local function lazy(fn) return fn end
+
+parts_task{
+    id = "4.1a", letter = "a",
+    title = "Projection onto {a}",
+    desc = "Project each machine onto {a}: every transition on a "
+        .. "letter other than a becomes a λ-step.  Draw the two "
+        .. "NFA-λ.",
+    given = {
+        { kind="aut", model=M1_MODEL, readonly=true,
+          alphabet="a,b", aut_type="dfa" },
+        { kind="aut", model=M2_MODEL, readonly=true,
+          alphabet="a,b", aut_type="nfa" },
+    },
+    parts = {
+        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) left",
+          label="M1 restricted to {a}",
+          reference=lazy(function() return project(M1_STR, {a=true})
+              end) },
+        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) right",
+          label="M2 restricted to {a}",
+          reference=lazy(function() return project(M2_STR, {a=true})
+              end) },
+    },
+}
+
+parts_task{
+    id = "4.1b", letter = "b",
+    title = "Product M1 × M2",
+    desc = "Draw the product automaton M1 × M2 (states are pairs "
+        .. "q_ij; a state is accepting when BOTH components accept).",
+    given = {
+        { kind="aut", model=M1_MODEL, readonly=true,
+          alphabet="a,b", aut_type="dfa" },
+        { kind="aut", model=M2_MODEL, readonly=true,
+          alphabet="a,b", aut_type="nfa" },
+    },
+    parts = {
+        { kind="aut", aut_type="nfa", alphabet="a,b", sub="b)",
+          label="the product M1 × M2",
+          reference=lazy(function()
+              return AUT.intersec_regular(
+                  AUT.parse_nfa(M1_STR), AUT.parse_nfa(M2_STR))
+          end) },
+    },
+}
+
+-- ---------- 4.2: context-free grammars ----------
+
+local GR_C = "S -> abSc | A\nA -> cAd | cd"
+local GR_D = "S -> SAB | \nA -> aA | a\nB -> bB | "
+local GR_E = "S -> AB\nA -> aA | a\nB -> AB | b"
+local GR_F_REF = "S -> aAASb | \nA -> a | "
+local GR_G = "S -> aSA | \nA -> bA | "
+
+parts_task{
+    id = "4.2c", letter = "c",
+    title = "A context-free grammar",
+    given = { kind="text",
+              text="G:\n  S -> abSc | A\n  A -> cAd | cd" },
+    parts = {
+        { kind="derivation", sub="c.a)", grammar=GR_C,
+          target="ababccddcc", mode="any",
+          label="Give the derivation of ababccddcc (one sentential "
+             .. "form per line, or separated by =>)" },
+        { kind="tree", sub="c.b)", grammar=GR_C,
+          target="ababccddcc",
+          label="The derivation tree, in bracket notation "
+             .. "S(a b S(…) c c) — a λ-leaf is A() or A(λ)" },
+        { kind="pattern", sub="c.c)", grammar=GR_C, vars="n,m",
+          label="L(G) in set notation: a block pattern like "
+             .. "(ab)^n c^m d^m c^n, with domain guards after | "
+             .. "(e.g. | n>=0, m>0)",
+          maxlen = 24 },
+    },
+}
+
+parts_task{
+    id = "4.2d", letter = "d",
+    title = "Derivations and ambiguity",
+    given = { kind="text",
+              text="G:\n  S -> SAB | λ\n  A -> aA | a\n"
+                   .. "  B -> bB | λ" },
+    parts = {
+        { kind="derivation", sub="d.a)", grammar=GR_D,
+          target="abbaab", mode="leftmost",
+          label="Give a LEFTMOST derivation of abbaab" },
+        { kind="derivation", sub="d.b)", grammar=GR_D,
+          target="aa", mode="leftmost", count=2, distinct=true,
+          label="Give TWO different leftmost derivations of aa "
+             .. "(they prove ambiguity)" },
+        { kind="regexp", sub="d.d)", ref_aut=function()
+              return AUT.grammar_to_nfa(AUT.parse_rules(GR_D))
+          end,
+          label="A regular expression for L(G)  (e.g. a+b* style)" },
+    },
+}
+
+parts_task{
+    id = "4.2e", letter = "e",
+    title = "Tree to derivations",
+    given = { kind="text",
+              text="G:\n  S -> AB\n  A -> aA | a\n"
+                   .. "  B -> AB | b\n\n"
+                   .. "derivation tree DT:\n"
+                   .. "  S(A(aA(a)) B(A(a) B(b)))" },
+    parts = {
+        { kind="derivation", sub="e.a)", grammar=GR_E,
+          target="aaab", mode="leftmost",
+          label="A leftmost derivation generating DT" },
+        { kind="derivation", sub="e.b)", grammar=GR_E,
+          target="aaab", mode="rightmost",
+          label="A rightmost derivation generating DT" },
+    },
+}
+
+parts_task{
+    id = "4.2f", letter = "f",
+    title = "Construct a grammar",
+    parts = {
+        { kind="grammar", sub="f)", grammar_ref=GR_F_REF,
+          context_free=true,
+          label="Construct a grammar over {a,b} with "
+             .. "L(G) = {a^m b^n | 0 ≤ n ≤ m ≤ 3n} "
+             .. "(one rule per line: S -> aAASb | λ)" },
+    },
+}
+
+parts_task{
+    id = "4.2g", letter = "g",
+    title = "Ambiguous and unambiguous",
+    given = { kind="text",
+              text="G:\n  S -> aSA | λ\n  A -> bA | λ" },
+    parts = {
+        { kind="regexp", sub="g.1)", ref_aut=function()
+              return AUT.grammar_to_nfa(AUT.parse_rules(GR_G))
+          end,
+          label="A regular expression (or set term) for L(G)" },
+        { kind="derivation", sub="g.2)", grammar=GR_G,
+          target="aab", mode="leftmost", count=2, distinct=true,
+          label="Show G is ambiguous: TWO different leftmost "
+             .. "derivations of aab" },
+        { kind="grammar", sub="g.3)", grammar_ref=GR_G,
+          context_free=true,
+          label="An equivalent UNAMBIGUOUS grammar (language "
+             .. "equality is checked; the unambiguity is your "
+             .. "argument)" },
+    },
+}
+
+-- ---------- 4.3: regular grammar -> NFA ----------
+
+local function gnfa(grammar_text)
+    return function()
+        return AUT.grammar_to_nfa(AUT.parse_rules(grammar_text))
+    end
+end
+
+local function g2n_task(id, letter, gtext, hint)
+    parts_task{
+        id = id, letter = letter,
+        title = "Regular grammar to NFA",
+        desc = hint,
+        given = { kind="text", text = "G:\n" .. gtext },
+        parts = {
+            { kind="aut", aut_type="nfa", alphabet="a,b",
+              sub=letter .. ")",
+              label="an NFA M with L(M) = L(G) — the construction "
+                 .. "takes variables as states",
+              reference=gnfa(gtext) },
+        },
+    }
+end
+
+g2n_task("4.3h", "h", "S -> aA\nA -> aA | bA | b")
+g2n_task("4.3i", "i", "S -> aS | bA | λ\nA -> aA | bS")
+g2n_task("4.3j", "j", "S -> aA\nA -> aA | bB\nB -> bB | λ",
+         "(extra)")
+
+-- ---------- 4.4: NFA -> regular grammar ----------
+
+local NFA_K_STR = "({q0,q1,q2},{a,b},{(q0,a,q1),(q1,a,q1),"
+    .. "(q1,b,q0),(q1,a,q2),(q2,b,q1)},q0,{q0,q2})"
+local NFA_L_STR = M1_STR   -- exercise 5.3's machine = M1
+local NFA_M_STR = "({q0,q1,q2},{a,b,c},{(q0,a,q0),(q0,c,q1),"
+    .. "(q0,,q2),(q1,c,q1),(q2,b,q1),(q2,b,q2)},q0,{q1,q2})"
+
+local NFA_K_MODEL = { type="nfa", alphabet="a,b",
+    states={ {id=1,name="q0",x=100,y=160,initial=true,accepting=true},
+             {id=2,name="q1",x=300,y=160},
+             {id=3,name="q2",x=500,y=160,accepting=true} },
+    transitions={ {id=1,from=1,to=2,label="a"},
+                  {id=2,from=2,to=2,label="a"},
+                  {id=3,from=2,to=1,label="b"},
+                  {id=4,from=2,to=3,label="a"},
+                  {id=5,from=3,to=2,label="b"} } }
+local NFA_M_MODEL = { type="nfa-eps", alphabet="a,b,c",
+    states={ {id=1,name="q0",x=100,y=160,initial=true},
+             {id=2,name="q1",x=340,y=160,accepting=true},
+             {id=3,name="q2",x=220,y=320,accepting=true} },
+    transitions={ {id=1,from=1,to=1,label="a"},
+                  {id=2,from=1,to=2,label="c"},
+                  {id=3,from=1,to=3,label="λ"},
+                  {id=4,from=2,to=2,label="c"},
+                  {id=5,from=3,to=2,label="b"},
+                  {id=6,from=3,to=3,label="b"} } }
+
+local function n2g_task(id, letter, aut_str, model, atype, alpha,
+                        extra_desc)
+    parts_task{
+        id = id, letter = letter,
+        title = "NFA to regular grammar",
+        desc = "Construct a regular grammar G with L(G) = L(M). "
+            .. "Variables are the states, e.g. Q0 -> aQ1 | λ.  "
+            .. (extra_desc or ""),
+        given = { kind="aut", model=model, readonly=true,
+                  alphabet=alpha, aut_type=atype },
+        parts = {
+            { kind="grammar", sub=letter .. ")",
+              regular = true,
+              aut_ref = function()
+                  return AUT.parse_nfa_lambda(aut_str)
+              end,
+              start_variable = "Q0",
+              label="G (one rule per line; states as variables, "
+                 .. "initial state = start variable)" },
+        },
+    }
+end
+
+n2g_task("4.4k", "k", NFA_K_STR, NFA_K_MODEL, "nfa", "a,b")
+n2g_task("4.4l", "l", NFA_L_STR, M1_MODEL, "dfa", "a,b")
+n2g_task("4.4m", "m", NFA_M_STR, NFA_M_MODEL, "nfa-eps", "a,b,c",
+         "(extra) The machine has a λ-step — the grammar "
+         .. "construction needs a plain NFA, so remove it first.")
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -1375,6 +1663,17 @@ M.sheets = {
           subtasks = {"3.2c","3.2e"} },
         { id="3.3", title="Exercise 3.3",
           subtasks = {"3.3a","3.3b","3.3c"} },
+      }},
+    { id="sheet4", title="Sheet 4",
+      groups = {
+        { id="4.1", title="Exercise 4.1",
+          subtasks = {"4.1a","4.1b"} },
+        { id="4.2", title="Exercise 4.2",
+          subtasks = {"4.2c","4.2d","4.2e","4.2f","4.2g"} },
+        { id="4.3", title="Exercise 4.3",
+          subtasks = {"4.3h","4.3i","4.3j"} },
+        { id="4.4", title="Exercise 4.4",
+          subtasks = {"4.4k","4.4l","4.4m"} },
       }},
 }
 
@@ -1438,12 +1737,33 @@ local function view_part(pd, pi)
         v.initial, v.accepting = pd.initial, pd.accepting
     elseif pd.kind == "closure" then
         v.states = pd.states
+    elseif pd.kind == "grammar" then
+        v.hint = pd.hint
+    elseif pd.kind == "derivation" then
+        v.count = pd.count or 1
+        v.mode = pd.mode or "any"
+        v.target = pd.target
+    elseif pd.kind == "tree" then
+        v.target = pd.target
+    elseif pd.kind == "pattern" then
+        v.vars = pd.vars
     end
     return v
 end
 
 local function view_given(g)
     if not g then return nil end
+    if g[1] then
+        -- a list of given blocks (e.g. two machines side by side)
+        local out = {}
+        for _, item in ipairs(g) do
+            out[#out + 1] = view_given(item)
+        end
+        return out
+    end
+    if g.kind == "text" then
+        return { kind="text", text=g.text }
+    end
     if g.kind == "table" then
         -- render the reference DFA's transition table as plain data;
         -- the GUI builds the HTML table
@@ -1466,6 +1786,8 @@ local function view_given(g)
     elseif g.kind == "aut" then
         return { kind="aut", model=g.model, readonly=g.readonly,
                  alphabet=g.alphabet, aut_type=g.aut_type }
+    elseif g.kind == "text" then
+        return { kind="text", text=g.text }
     end
 end
 

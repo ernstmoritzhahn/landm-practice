@@ -30,9 +30,19 @@ end
 -- compile the task's reference expression once per task/table lifetime
 local function reference_dfa(task)
     if task._ref_dfa then return task._ref_dfa end
-    local re = automata.parse_regexp_string(task.reference)
-    local dfa = to_dfa(re)
-    assert(dfa, "reference regexp too large: " .. tostring(task.reference))
+    local dfa
+    if task.ref_aut then
+        -- precomputed automaton reference (e.g. grammar_to_nfa of a
+        -- given grammar): determinise it
+        local aut = type(task.ref_aut) == "function"
+            and task.ref_aut() or task.ref_aut
+        dfa = automata.is_finished_dfa(aut) and aut
+            or automata.nfa_to_dfa(aut, MAX_STATES)
+    else
+        local re = automata.parse_regexp_string(task.reference)
+        dfa = to_dfa(re)
+    end
+    assert(dfa, "reference too large: " .. tostring(task.reference))
     task._ref_dfa = dfa
     return dfa
 end

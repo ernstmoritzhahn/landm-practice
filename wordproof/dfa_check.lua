@@ -275,6 +275,19 @@ end
 -- Separate cache: ref_dfa stores bare automata under the same keys.
 local ref_any_cache = {}
 local function ref_any(reference)
+    -- a reference may be a string (regexp or tuple) or a precomputed
+    -- automaton — either the object itself or a 0-ary function
+    -- returning it (lazy: built on first check)
+    if type(reference) == "function" then
+        local hit = ref_any_cache[reference]
+        if hit then return hit.aut, hit.tuple end
+        local aut = reference()
+        ref_any_cache[reference] = { aut = aut, tuple = false }
+        return aut, false
+    end
+    if type(reference) == "table" and reference.get_states then
+        return reference, false
+    end
     local hit = ref_any_cache[reference]
     if hit then return hit.aut, hit.tuple end
     local aut, is_tuple

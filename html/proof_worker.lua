@@ -18,6 +18,7 @@ local T = require "wordproof.term"
 local C = require "wordproof.check"
 local RC = require "wordproof.regexp_check"
 local DC = require "wordproof.dfa_check"
+local GC = require "wordproof.grammar_check"
 local tasks = require "wordproof.tasks"
 
 local function build_input(task, data)
@@ -149,7 +150,8 @@ return function(data)
                     elseif pdef.kind == "closure" then
                         return DC.check_closure(pdef, pd.sets)
                     elseif pdef.kind == "regexp" then
-                        return RC.check({reference=pdef.reference},
+                        return RC.check({reference=pdef.reference,
+                                         ref_aut=pdef.ref_aut},
                                         pd.expr)
                     elseif pdef.kind == "choice" then
                         return DC.check_choice(pdef, pd.sel)
@@ -159,6 +161,14 @@ return function(data)
                     elseif pdef.kind == "min_table" then
                         return DC.check_min_table(pdef, pd.marks,
                                                   pd.classes, pd.wit)
+                    elseif pdef.kind == "grammar" then
+                        return GC.check_grammar(pdef, pd.text)
+                    elseif pdef.kind == "derivation" then
+                        return GC.check_derivation(pdef, pd.texts)
+                    elseif pdef.kind == "tree" then
+                        return GC.check_tree(pdef, pd.text)
+                    elseif pdef.kind == "pattern" then
+                        return GC.check_pattern(pdef, pd.text)
                     end
                     return { ok=false, msg="unknown part kind" }
                 end)
