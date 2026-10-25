@@ -913,13 +913,14 @@ parts_task{
         .. "work too).  'decompose' then lists every legal split "
         .. "z = uvw with |uv| ≤ k and |v| ≥ 1 for k = 3 — pick a "
         .. "pumping index i for EACH split so that uv^iw leaves L "
-        .. "(you can redo the example at other values of k).  Then do "
-        .. "the GENERAL decomposition: if z's first k letters lie in "
-        .. "one block, every legal split has v = sym^q for some "
-        .. "1 ≤ q ≤ k — give i(k,q) there (constants like 2 or 0 "
-        .. "work, or e.g. k+1) — the checker then verifies uv^iw ∉ L "
-        .. "for all k ≥ 1 symbolically when it can, and samples "
-        .. "k ≤ 8 otherwise.",
+        .. "(you can redo the example at other values of k).  Then "
+        .. "write the GENERAL decomposition yourself: u, v, w as "
+        .. "patterns in k and your own parameters — every legal "
+        .. "split has u = sym^p, v = sym^q with p ≥ 0, q ≥ 1 and "
+        .. "p+q ≤ k — plus a pumping index i(k,q).  The checker "
+        .. "verifies uvw ≡ z(k), legality, coverage of every legal "
+        .. "split, and uv^iw ∉ L — symbolically for all k ≥ 1 when "
+        .. "it can, sampled otherwise.",
     parts = {
         pstep("a)", "eq_ab",
               "L = {w ∈ {a,b}* | #a(w) = #b(w)}"),

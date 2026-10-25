@@ -751,7 +751,7 @@ end
 local function clear_pump_rows(p)
     if p.splitbox then clear(p.splitbox) end
     p.i_inps, p.row_st = {}, {}
-    p.gen_inp, p.gen_st, p.last_k = nil, nil, nil
+    p.gen, p.gen_st, p.last_k = nil, nil, nil
 end
 local function request_splits(pi)
     local p = state.parts[pi]
@@ -1096,7 +1096,9 @@ save_local = function()
             elseif p.kind == "pumping" then
                 pr.z = p.z.value
                 pr.k = p.ksel and p.ksel.value or nil
-                pr.gen_i = p.gen_inp and p.gen_inp.value or nil
+                pr.gen = p.gen and {
+                    u = p.gen.u.value, v = p.gen.v.value,
+                    w = p.gen.w.value, i = p.gen.i.value } or nil
                 pr.is = {}
                 for ri, inp in ipairs(p.i_inps) do pr.is[ri] = inp.value end
             elseif p.kind == "min_table" then
@@ -1184,7 +1186,7 @@ local function restore_local()
                     if pr.z then p.z.value = pr.z end
                     if pr.k and p.ksel then p.ksel.value = pr.k end
                     p.pending_is = pr.is
-                    p.pending_gen = pr.gen_i
+                    p.pending_gen = pr.gen
                     if pr.z and pr.z:match("%S") then
                         request_splits(tonumber(pi))
                     end
@@ -1483,7 +1485,9 @@ send_check = function(only_pi)
                        (p.ksel and tonumber(p.ksel.value))
                 pd.is = {}
                 for ri, inp in ipairs(p.i_inps) do pd.is[ri] = inp.value end
-                pd.gen_i = p.gen_inp and p.gen_inp.value or nil
+                pd.gen = p.gen and {
+                    u = p.gen.u.value, v = p.gen.v.value,
+                    w = p.gen.w.value, i = p.gen.i.value } or nil
             elseif p.kind == "min_table" then
                 pd.marks = {}
                 for k, c in pairs(p.cells) do
@@ -1597,32 +1601,44 @@ local function render_splits(pi, res)
     end
     -- the general decomposition (all k): only available when the
     -- first block of z(k) dominates the first-k window — then every
-    -- legal split has v = sym^q for some 1 ≤ q ≤ k
+    -- legal split has v = sym^q for some 1 ≤ q ≤ k.  The student
+    -- writes u, v, w themselves as patterns in the parameters
+    -- (k, p, q).
     p.last_k = res.k
     local gen = res.gen or {}
     if gen.sym then
         p.splitbox:appendChild(text("div",
-            "general decomposition (all k):  every legal split has "
-            .. "v = " .. gen.sym .. "^q for some 1 ≤ q ≤ k.",
+            "general decomposition (all k):  write u, v, w as "
+            .. "patterns in the parameters — every legal split has "
+            .. "u = " .. gen.sym .. "^p, v = " .. gen.sym .. "^q "
+            .. "with p ≥ 0, q ≥ 1, p+q ≤ k.",
             "wlabel"))
-        local gr = el("div", "wordrow")
-        gr:appendChild(text("span", "i(k,q) =", "wlabel"))
+        local pend = p.pending_gen or {}
+        p.pending_gen = nil
         local gst = el("span", "st")
-        local ginp = mk_input(nil, 8, dirty(gst))
-        ginp.placeholder = "e.g. 2, q+1, k+1"
-        if p.pending_gen then
-            ginp.value = p.pending_gen
-            p.pending_gen = nil
+        local function grow(lab, ph, key)
+            local gr = el("div", "wordrow")
+            gr:appendChild(text("span", lab, "wlabel"))
+            local inp = mk_input("expr", 20, dirty(gst))
+            inp.placeholder = ph
+            if pend[key] then inp.value = pend[key] end
+            gr:appendChild(inp)
+            p.splitbox:appendChild(gr)
+            return inp
         end
-        gr:appendChild(ginp); gr:appendChild(gst)
-        p.splitbox:appendChild(gr)
-        p.gen_inp, p.gen_st = ginp, gst
+        local u_inp = grow("u =", "e.g. a^p", "u")
+        local v_inp = grow("v =", "e.g. a^q", "v")
+        local w_inp = grow("w =", "e.g. a^{k-p-q}b^k", "w")
+        local i_inp = grow("i(k,q) =", "e.g. 2, q+1, k+1", "i")
+        p.splitbox:appendChild(gst)
+        p.gen = { u = u_inp, v = v_inp, w = w_inp, i = i_inp }
+        p.gen_st = gst
     elseif gen.err then
         p.splitbox:appendChild(text("div",
             "general decomposition: " .. gen.err, "wlabel"))
-        p.gen_inp = nil
+        p.gen = nil
     else
-        p.gen_inp = nil
+        p.gen = nil
     end
     if p.pending_is then
         for ri, v in pairs(p.pending_is) do

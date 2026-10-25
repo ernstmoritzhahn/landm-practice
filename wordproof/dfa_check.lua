@@ -981,8 +981,8 @@ end
 
 -- part.kind == "pumping": the adversary game — see wordproof/pumping.lua
 local PUMP = require "wordproof.pumping"
-function M.check_pumping(part, z, is_tbl, k, gen_i)
-    return PUMP.check(part.lang, z, is_tbl, k or part.pump_k, gen_i)
+function M.check_pumping(part, z, is_tbl, k, gen)
+    return PUMP.check(part.lang, z, is_tbl, k or part.pump_k, gen)
 end
 function M.pump_splits(part, z, k)
     return PUMP.instantiate(part.lang, z, k or part.pump_k)

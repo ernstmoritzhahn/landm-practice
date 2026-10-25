@@ -155,7 +155,7 @@ return function(data)
                         return DC.check_choice(pdef, pd.sel)
                     elseif pdef.kind == "pumping" then
                         return DC.check_pumping(pdef, pd.z, pd.is,
-                                                pd.k, pd.gen_i)
+                                                pd.k, pd.gen)
                     elseif pdef.kind == "min_table" then
                         return DC.check_min_table(pdef, pd.marks,
                                                   pd.classes, pd.wit)

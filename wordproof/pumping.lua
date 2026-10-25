@@ -19,22 +19,40 @@ local M = {}
 
 -- ---------- pattern parsing ----------
 
--- exponent forms: k | N | Nk | k+N | Nk+N | k-N | Nk-N  (a·k + b)
+-- exponent forms: linear in the variables k,p,q plus a constant:
+--  k | N | Nk | k+N | k-p-q | 2q | p+1 | ...   ->  {k,p,q,c} coeffs
 local function parse_exp(s)
     s = (s or ""):gsub("%s", "")
-    if s:match("^%d+$") then return 0, tonumber(s) end
-    local ak, rest = s:match("^(%d*)k(.*)$")
-    if not ak then return nil end
-    local a = (ak == "") and 1 or tonumber(ak)
-    local b
-    if rest == "" then b = 0
-    else
-        local sgn, num = rest:match("^([+-])(%d+)$")
-        if not sgn then return nil end
-        b = tonumber(num) * (sgn == "-" and -1 or 1)
+    if s == "" then return nil end
+    local r = { k = 0, p = 0, q = 0, c = 0 }
+    local pos, sgn = 1, 1
+    while pos <= #s do
+        local sgn2 = s:sub(pos, pos)
+        if sgn2 == "+" then
+            pos = pos + 1
+        elseif sgn2 == "-" then
+            sgn, pos = -1, pos + 1
+        elseif pos > 1 then
+            return nil
+        end
+        local num, var =
+            s:match("^(%d*)([kpq])", pos)
+        if var then
+            r[var] = r[var] + sgn * ((num == "") and 1 or tonumber(num))
+            pos = pos + #num + 1
+        else
+            local digits = s:match("^(%d+)", pos)
+            if not digits then return nil end
+            r.c = r.c + sgn * tonumber(digits)
+            pos = pos + #digits
+        end
+        if pos <= #s then sgn = 1 end
     end
-    if a < 0 or (a + b) < 0 then return nil end   -- e(k) < 0 for some k ≥ 1
-    return a, b
+    return r
+end
+
+local function exp_ge0_k(r)   -- e(k) ≥ 0 for all k ≥ 1 when p,q = 0
+    return r.k >= 0 and r.k + r.c >= 0 and r.p == 0 and r.q == 0
 end
 
 function M.parse_pattern(s)
@@ -47,7 +65,7 @@ function M.parse_pattern(s)
         elseif c == "^" or c == "{" or c == "}" then
             return nil, "unexpected '" .. c .. "'"
         else
-            local sym, a, b = c, 0, 1
+            local sym, e = c, { k = 0, p = 0, q = 0, c = 1 }
             i = i + 1
             if s:sub(i, i) == "^" then
                 i = i + 1
@@ -58,7 +76,8 @@ function M.parse_pattern(s)
                     body, i = s:sub(i + 1, j - 1), j + 1
                 else
                     local j = i
-                    while j <= n and s:sub(j, j):match("[0-9k+%-]") do
+                    while j <= n
+                        and s:sub(j, j):match("[0-9kpq+%-]") do
                         j = j + 1
                     end
                     body, i = s:sub(i, j - 1), j
@@ -66,16 +85,72 @@ function M.parse_pattern(s)
                         return nil, "empty exponent after '^'"
                     end
                 end
-                a, b = parse_exp(body)
-                if not a then
+                e = parse_exp(body)
+                if not e then
                     return nil, "bad exponent '" .. body
-                        .. "' (use k, k+c, c·k, or a plain number)"
+                        .. "' (linear in k, p, q plus a constant)"
+                end
+                if e.p ~= 0 or e.q ~= 0 then
+                    return nil,
+                        "parameters p, q may only appear in the "
+                        .. "decomposition u, v, w — not in z(k)"
+                end
+                if not exp_ge0_k(e) then
+                    return nil, "'" .. sym .. "^" .. body
+                        .. "' is empty for some k ≥ 1"
                 end
             end
-            if a == 0 and b == 0 then
+            if e.k == 0 and e.c == 0 then
                 return nil, "'" .. sym .. "^0' is always empty"
             end
-            blocks[#blocks + 1] = { sym = sym, k = a, c = b }
+            blocks[#blocks + 1] = { sym = sym, k = e.k,
+                                    p = e.p, q = e.q, c = e.c }
+        end
+    end
+    if #blocks == 0 then return nil, "empty pattern" end
+    return blocks
+end
+
+-- same grammar, but p and q allowed (for the student-written
+-- decomposition u(k,p,q) · v(k,q) · w(k,p,q))
+function M.parse_pattern_pq(s)
+    s = (s or ""):gsub("λ", " ")
+    local blocks, i, n = {}, 1, #s
+    while i <= n do
+        local c = s:sub(i, i)
+        if c:match("%s") then
+            i = i + 1
+        elseif c == "^" or c == "{" or c == "}" then
+            return nil, "unexpected '" .. c .. "'"
+        else
+            local sym, e = c, { k = 0, p = 0, q = 0, c = 1 }
+            i = i + 1
+            if s:sub(i, i) == "^" then
+                i = i + 1
+                local body
+                if s:sub(i, i) == "{" then
+                    local j = s:find("}", i + 1, true)
+                    if not j then return nil, "missing '}'" end
+                    body, i = s:sub(i + 1, j - 1), j + 1
+                else
+                    local j = i
+                    while j <= n
+                        and s:sub(j, j):match("[0-9kpq+%-]") do
+                        j = j + 1
+                    end
+                    body, i = s:sub(i, j - 1), j
+                    if body == "" then
+                        return nil, "empty exponent after '^'"
+                    end
+                end
+                e = parse_exp(body)
+                if not e then
+                    return nil, "bad exponent '" .. body
+                        .. "' (linear in k, p, q plus a constant)"
+                end
+            end
+            blocks[#blocks + 1] = { sym = sym, k = e.k,
+                                    p = e.p, q = e.q, c = e.c }
         end
     end
     if #blocks == 0 then return nil, "empty pattern" end
@@ -89,9 +164,13 @@ local function merge(blocks)
     for _, b in ipairs(blocks) do
         local top = out[#out]
         if top and top.sym == b.sym then
-            top.k, top.c = top.k + b.k, top.c + b.c
+            top.k = top.k + b.k
+            top.p = (top.p or 0) + (b.p or 0)
+            top.q = (top.q or 0) + (b.q or 0)
+            top.c = top.c + b.c
         else
-            out[#out + 1] = { sym = b.sym, k = b.k, c = b.c }
+            out[#out + 1] = { sym = b.sym, k = b.k, p = b.p or 0,
+                              q = b.q or 0, c = b.c }
         end
     end
     return out
@@ -102,6 +181,15 @@ function M.expand(blocks, k)
     local t = {}
     for _, b in ipairs(blocks) do
         t[#t + 1] = b.sym:rep(b.k * k + b.c)
+    end
+    return table.concat(t)
+end
+
+function M.expand_params(blocks, k, p, q)
+    local t = {}
+    for _, b in ipairs(blocks) do
+        local n = b.k * k + (b.p or 0) * p + (b.q or 0) * q + b.c
+        if n > 0 then t[#t + 1] = b.sym:rep(n) end
     end
     return table.concat(t)
 end
@@ -273,160 +361,224 @@ end
 
 -- ---------- symbolic general decomposition ----------
 --
--- When the first block of z(k) fills the whole first-k window
--- (e_1 ≥ k for all k), EVERY legal split has v = s_1^q for some
--- 1 ≤ q ≤ k (u = s_1^p, p+q ≤ k — and u drops out of the pumped
--- word).  The student then gives i = i(k,q) as a linear expression
--- A·q + B·k + C and the checker must show uv^iw ∉ L on the whole
--- domain  D = { k ≥ 1, 1 ≤ q ≤ k }.
+-- For a witness whose first block dominates the first-k window
+-- (e_1 ≥ k for all k), every legal split has the form
+--   u = s_1^p,  v = s_1^q,  w = s_1^{e_1-p-q} · rest,  p≥0, q≥1,
+--   p+q ≤ k
+-- The STUDENT writes u, v, w as patterns over the parameters
+-- (k,p,q);  the checker verifies  u·v·w ≡ z(k)  as a polynomial
+-- identity, legality (|v| ≥ 1, |uv| ≤ k), coverage of every legal
+-- split, and then uv^iw ∉ L on
+--   D = { k ≥ 1, p ≥ 0, q ≥ 1, p+q ≤ k }
+-- for the student's i(k,q) (a linear expression).
 --
--- Polynomials over (k,q): sparse table {c, k, q, k2, q2, kq}
--- (degree ≤ 2 is enough: block exponents are linear, i is linear,
--- and q·(i−1) is quadratic).
+-- Polynomials over (k,p,q): sparse table over keys
+-- {c, k, p, q, k2, p2, q2, kp, kq, pq} — degree ≤ 2 is enough:
+-- exponents are linear, i is linear, v^i contributes quadratic.
 
-local POLY_KEYS = { "c", "k", "q", "k2", "q2", "kq" }
-local function poly(c, k, q, k2, q2, kq)
-    return { c = c or 0, k = k or 0, q = q or 0,
-             k2 = k2 or 0, q2 = q2 or 0, kq = kq or 0 }
+local POLY_KEYS = { "c", "k", "p", "q",
+                    "k2", "p2", "q2", "kp", "kq", "pq" }
+local TERM_EXP = { c={0,0,0}, k={1,0,0}, p={0,1,0}, q={0,0,1},
+                   k2={2,0,0}, p2={0,2,0}, q2={0,0,2},
+                   kp={1,1,0}, kq={1,0,1}, pq={0,1,1} }
+local function poly(t)
+    local r = {}
+    for _, k2 in ipairs(POLY_KEYS) do r[k2] = t[k2] or 0 end
+    return r
 end
 local function poly_zero(f)
     for _, t in ipairs(POLY_KEYS) do
-        if f[t] ~= 0 then return false end
+        if (f[t] or 0) ~= 0 then return false end
     end
     return true
 end
-local function poly_eval(f, k, q)
-    return f.c + f.k * k + f.q * q
-           + f.k2 * k * k + f.q2 * q * q + f.kq * k * q
+local function poly_eval(f, k, p, q)
+    return f.c + f.k * k + (f.p or 0) * p + f.q * q
+           + f.k2 * k * k + (f.p2 or 0) * p * p + f.q2 * q * q
+           + (f.kp or 0) * k * p + f.kq * k * q + (f.pq or 0) * p * q
 end
--- e1' = e1 + q·(i−1):  e1 = {k=a,c=b}, i = {q=A,k=B,c=C}
-local function pumped_first_exp(e1, iexpr)
-    return { k = e1.k, c = e1.c, k2 = 0,
-             q = iexpr.c - 1, q2 = iexpr.q, kq = iexpr.k }
+local function poly_sub(a, b)
+    local r = {}
+    for _, t in ipairs(POLY_KEYS) do r[t] = (a[t] or 0) - (b[t] or 0) end
+    return r
 end
-
--- extract the maximal common monomial factor  k^a·q^b  (the factor is
--- ≥ 1 on the domain, so the residual carries the sign)
-local TERM_EXP = { c = {0,0}, k = {1,0}, q = {0,1},
-                   k2 = {2,0}, q2 = {0,2}, kq = {1,1} }
-local function common_monomial(f)
-    local ka, qa = math.huge, math.huge
-    for _, t in ipairs(POLY_KEYS) do
-        if f[t] ~= 0 then
-            ka = math.min(ka, TERM_EXP[t][1])
-            qa = math.min(qa, TERM_EXP[t][2])
+local function poly_scale(a, s)
+    local r = {}
+    for _, t in ipairs(POLY_KEYS) do r[t] = (a[t] or 0) * s end
+    return r
+end
+-- product of two LINEAR polys (degree ≤ 2 result)
+local function poly_mul(a, b)
+    local r = poly({})
+    for _, ta in ipairs(POLY_KEYS) do
+        local ea = TERM_EXP[ta]
+        if (a[ta] or 0) ~= 0 and ea[1] + ea[2] + ea[3] <= 1 then
+            for _, tb in ipairs(POLY_KEYS) do
+                local eb = TERM_EXP[tb]
+                if (b[tb] or 0) ~= 0 and eb[1] + eb[2] + eb[3] <= 1 then
+                    local e = { ea[1] + eb[1], ea[2] + eb[2],
+                                ea[3] + eb[3] }
+                    for _, nt in ipairs(POLY_KEYS) do
+                        local ne = TERM_EXP[nt]
+                        if ne[1] == e[1] and ne[2] == e[2]
+                           and ne[3] == e[3] then
+                            r[nt] = r[nt] + a[ta] * b[tb]
+                        end
+                    end
+                end
+            end
         end
     end
-    if ka == math.huge then ka, qa = 0, 0 end
-    return ka, qa
+    return r
 end
-local function divide_monomial(f, ka, qa)
-    if ka == 0 and qa == 0 then return f end
-    local nr = poly(0, 0, 0)
+local function block_poly(b)   -- {sym,k,p,q,c} -> exponent poly
+    return poly{ k = b.k or 0, p = b.p or 0, q = b.q or 0,
+                 c = b.c or 0 }
+end
+
+-- extract the maximal common monomial factor  k^a·p^b·q^c
+local function common_monomial(f)
+    local mn = { math.huge, math.huge, math.huge }
+    for _, t in ipairs(POLY_KEYS) do
+        if (f[t] or 0) ~= 0 then
+            local e = TERM_EXP[t]
+            for d = 1, 3 do mn[d] = math.min(mn[d], e[d]) end
+        end
+    end
+    if mn[1] == math.huge then mn = { 0, 0, 0 } end
+    return mn
+end
+local function divide_monomial(f, mn)
+    if mn[1] == 0 and mn[2] == 0 and mn[3] == 0 then return f end
+    local nr = poly({})
     for t, v in pairs(f) do
         if v ~= 0 then
-            local ek, eq = TERM_EXP[t][1] - ka, TERM_EXP[t][2] - qa
+            local e = TERM_EXP[t]
+            local tgt = { e[1] - mn[1], e[2] - mn[2], e[3] - mn[3] }
             for _, nt in ipairs(POLY_KEYS) do
-                if TERM_EXP[nt][1] == ek and TERM_EXP[nt][2] == eq then
-                    nr[nt] = v
-                end
+                local ne = TERM_EXP[nt]
+                if ne[1] == tgt[1] and ne[2] == tgt[2]
+                   and ne[3] == tgt[3] then nr[nt] = v end
             end
         end
     end
     return nr
 end
 
--- is f(k,q) ≠ 0 for ALL (k,q) in the domain?
--- returns true (proven), or {k=,q=} a counterexample, or nil (cannot
--- decide — caller should fall back to sampling / warn)
-local nz_domain, gez_domain
-local function nz_raw(f)
-    if poly_zero(f) then return { k = 1, q = 1 } end
-    -- single nonzero term: nonzero on the whole domain
-    local terms = 0
-    for _, t in ipairs(POLY_KEYS) do
-        if f[t] ~= 0 then terms = terms + 1 end
-    end
-    if terms == 1 then return true end
-    -- sign-definite: all coefficients ≥ 0 with one > 0 (or all ≤ 0)
-    local pos, neg = false, false
-    for _, t in ipairs(POLY_KEYS) do
-        if f[t] > 0 then pos = true elseif f[t] < 0 then neg = true end
-    end
-    if pos and not neg then return true end
-    if neg and not pos then return true end
-    -- linear: extrema on the triangle sit on the three boundary
-    -- pieces (1,1), ray q=1, ray q=k
-    if f.k2 == 0 and f.q2 == 0 and f.kq == 0 then
-        local a, b, c = f.k, f.q, f.c
-        if a >= 0 and a + b >= 0 and a + b + c > 0 then return true end
-        if a <= 0 and a + b <= 0 and a + b + c < 0 then return true end
-    end
-    -- look for a concrete counterexample on a bounded grid
+-- iterate domain grid points (bounded); legal(k,p,q) may restrict
+-- the iteration to the student's legal splits
+local function each_domain_point(legal, fn)
     for k = 1, 8 do
-        for q = 1, k do
-            if poly_eval(f, k, q) == 0 then return { k = k, q = q } end
-        end
-    end
-    return nil
-end
-nz_domain = function(f)
-    local ka, qa = common_monomial(f)
-    return nz_raw(divide_monomial(f, ka, qa))
-end
-
--- is f(k,q) ≥ 0 for all domain points?  (same answer contract)
-local function gez_raw(f)
-    if poly_zero(f) then return true, "identity" end
-    local pos, neg = false, false
-    for _, t in ipairs(POLY_KEYS) do
-        if f[t] > 0 then pos = true elseif f[t] < 0 then neg = true end
-    end
-    if not neg then return true end          -- all coeffs ≥ 0
-    if f.k2 == 0 and f.q2 == 0 and f.kq == 0 then
-        local a, b, c = f.k, f.q, f.c
-        if a >= 0 and a + b >= 0 and a + b + c >= 0 then return true end
-    end
-    for k = 1, 8 do
-        for q = 1, k do
-            if poly_eval(f, k, q) < 0 then return { k = k, q = q } end
-        end
-    end
-    return nil
-end
-gez_domain = function(f)
-    local ka, qa = common_monomial(f)
-    return gez_raw(divide_monomial(f, ka, qa))
-end
-
--- i(k,q) = A·q + B·k + C:  terms "+"-joined, each N | Nq | Nk | q | k
-local function parse_iexpr(s)
-    s = (s or ""):gsub("%s", "")
-    if s == "" then return nil end
-    if s == "-" then return nil end
-    -- allow a leading "-" only on a lone constant?  i must be ≥ 0 on
-    -- the domain — simplest is to forbid '-' entirely except inside
-    -- terms, which we simply reject: negative i values are caught by
-    -- the per-case validity check anyway
-    if s:find("-") then
-        -- allow "k-q"?  too subtle — reject minus signs
-        return nil
-    end
-    local aq, bk, c = 0, 0, 0
-    for term in s:gmatch("[^+]+") do
-        local n = term:match("^(%d+)q$") or (term == "q" and 1)
-        if n then aq = aq + tonumber(n) else
-            n = term:match("^(%d+)k$") or (term == "k" and 1)
-            if n then bk = bk + tonumber(n) else
-                n = term:match("^(%d+)$")
-                if n then c = c + tonumber(n) else return nil end
+        for p = 0, k do
+            for q = 1, k - p do
+                if not legal or legal(k, p, q) then
+                    local r = fn(k, p, q)
+                    if r ~= nil then return r end
+                end
             end
         end
     end
-    return { q = aq, k = bk, c = c }
 end
-local function iexpr_eval(i, k, q)
-    return i.c + i.q * q + i.k * k
+
+-- is f(k,p,q) ≠ 0 for ALL legal domain points?
+-- -> true (proven) | {k,p,q} counterexample | nil (undecided)
+local nz_domain, gez_domain
+local function nz_raw(f, legal)
+    if poly_zero(f) then return { k = 1, p = 0, q = 1 } end
+    local terms = 0
+    for _, t in ipairs(POLY_KEYS) do
+        if (f[t] or 0) ~= 0 then terms = terms + 1 end
+    end
+    if terms == 1 then
+        -- a monomial has a zero iff it carries p (p = 0 is in domain)
+        -- or only c... check the actual monomial's exponent
+        local tn
+        for _, t in ipairs(POLY_KEYS) do
+            if (f[t] or 0) ~= 0 then tn = t end
+        end
+        if TERM_EXP[tn][2] > 0 or tn == "c" then
+            -- p^b·… with b ≥ 1: p = 0 makes it 0;  bare c ≠ 0 never
+            if tn == "c" then return true end
+            return { k = 1, p = 0, q = 1 }
+        end
+        return true
+    end
+    local pos, neg = false, false
+    for _, t in ipairs(POLY_KEYS) do
+        if (f[t] or 0) > 0 then pos = true
+        elseif (f[t] or 0) < 0 then neg = true end
+    end
+    if pos and not neg then return true end
+    if neg and not pos then return true end
+    -- linear f = a·k + b·p + c·q + d:  extrema of D sit at the
+    -- vertex (1,0,1) and the recession cone's extreme rays
+    -- (1,0,0), (1,1,0), (1,0,1)
+    if f.k2 == 0 and f.q2 == 0 and (f.p2 or 0) == 0
+       and f.kq == 0 and (f.kp or 0) == 0 and (f.pq or 0) == 0 then
+        local a, b, c, d = f.k, f.p or 0, f.q, f.c
+        if a >= 0 and a + b >= 0 and a + c >= 0
+           and a + c + d > 0 then return true end
+        if a <= 0 and a + b <= 0 and a + c <= 0
+           and a + c + d < 0 then return true end
+    end
+    return each_domain_point(legal, function(k, p, q)
+        if poly_eval(f, k, p, q) == 0 then
+            return { k = k, p = p, q = q }
+        end
+    end)
+end
+nz_domain = function(f, legal)
+    local mn = common_monomial(f)
+    -- a common p-factor means f = 0 at p = 0 — a real domain point
+    if mn[2] > 0 then return { k = 1, p = 0, q = 1 } end
+    return nz_raw(divide_monomial(f, mn), legal)
+end
+
+-- is f ≥ 0 for all legal domain points?  (same contract)
+local function gez_raw(f, legal)
+    if poly_zero(f) then return true, "identity" end
+    local pos, neg = false, false
+    for _, t in ipairs(POLY_KEYS) do
+        if (f[t] or 0) > 0 then pos = true
+        elseif (f[t] or 0) < 0 then neg = true end
+    end
+    if not neg then return true end
+    if f.k2 == 0 and f.q2 == 0 and (f.p2 or 0) == 0
+       and f.kq == 0 and (f.kp or 0) == 0 and (f.pq or 0) == 0 then
+        local a, b, c, d = f.k, f.p or 0, f.q, f.c
+        if a >= 0 and a + b >= 0 and a + c >= 0
+           and a + c + d >= 0 then return true end
+    end
+    return each_domain_point(legal, function(k, p, q)
+        if poly_eval(f, k, p, q) < 0 then
+            return { k = k, p = p, q = q }
+        end
+    end)
+end
+gez_domain = function(f, legal)
+    return gez_raw(divide_monomial(f, common_monomial(f)), legal)
+end
+
+-- i(k,q) = A·q + B·k + C — a LINEAR poly (constants and k,q terms;
+-- also p allowed: i may depend on the whole split)
+local function parse_iexpr(s)
+    s = (s or ""):gsub("%s", "")
+    if s == "" then return nil end
+    if s:find("-") then return nil end   -- i ≥ 0 required anyway
+    local r = { c = 0, k = 0, p = 0, q = 0 }
+    for term in s:gmatch("[^+]+") do
+        local n, var = term:match("^(%d*)([kpq])$")
+        if var then
+            r[var] = r[var] + (n == "" and 1 or tonumber(n))
+        else
+            local d = term:match("^(%d+)$")
+            if d then r.c = r.c + tonumber(d) else return nil end
+        end
+    end
+    return r
+end
+local function iexpr_eval(i, k, p, q)
+    return i.c + i.k * k + (i.p or 0) * p + i.q * q
 end
 
 -- ---------- concrete membership (for the pumped words) ----------
@@ -475,126 +627,122 @@ function MEM.aibjc(w)
 end
 
 -- ---------- symbolic out-of-language proofs (general case) ----------
--- GEN[lang](mb, iexpr) -> true (proven uv^iw ∉ L on the domain),
---   {k=,q=,word=} counterexample, or nil (cannot decide)
+-- GEN[lang](pb, legal):  pb = pumped merged block list
+-- {sym, poly={c,k,p,q,...}};  legal(k,p,q) filters to the student's
+-- legal splits.  -> true (proven ∉ L) | {k,p,q} counterexample |
+-- nil (cannot decide — caller warns)
 local GEN = {}
 
--- q·(i−1) as a poly in (k,q)
-local function dqp(iexpr)
-    return { c = 0, k = 0, k2 = 0,
-             q = iexpr.c - 1, q2 = iexpr.q, kq = iexpr.k }
-end
-local function poly_sub(a, b)
+local function poly_add(a, b)
     local r = {}
-    for _, t in ipairs(POLY_KEYS) do
-        r[t] = (a[t] or 0) - (b[t] or 0)
-    end
+    for _, t in ipairs(POLY_KEYS) do r[t] = (a[t] or 0) + (b[t] or 0) end
     return r
 end
 
--- eq_ab: pumped word's #a−#b differs from 0 by ±q(i−1)
-GEN.eq_ab = function(mb, s1, iexpr)
-    return nz_domain(dqp(iexpr))
-end
-
--- parens: balance changes by q(i−1); unbalanced => out
-GEN.parens = function(mb, s1, iexpr)
-    return nz_domain(dqp(iexpr))
-end
-
--- palindrome: block1's mirror is the last block; their exponent
--- difference becomes e1 + q(i−1) − e_last
-GEN.pal = function(mb, s1, iexpr)
-    if #mb < 2 then return nil end      -- single-run z: cannot prove
-    local last = mb[#mb]
-    if last.sym ~= s1 then return nil end
-    local e1p = pumped_first_exp(mb[1], iexpr)
-    local el = { c = last.c, k = last.k, q = 0, k2 = 0, q2 = 0, kq = 0 }
-    return nz_domain(poly_sub(e1p, el))
-end
-
--- {a^n b^m | n<m}: need pumped n ≥ m (or broken shape)
-GEN.anbm_lt = function(mb, s1, iexpr)
-    if s1 ~= "a" then
-        return { k = 1, q = 1,
-                 msg = "v lies in the b-block — pumping b's keeps "
-                    .. "n = 0 < m, so no i works; include an a-block "
-                    .. "in z" }
+-- eq_ab:  Σ ±exp must be ≠ 0 on the whole legal domain
+GEN.eq_ab = function(pb, legal)
+    local diff = poly{}
+    for _, b in ipairs(pb) do
+        diff = poly_add(diff,
+            poly_scale(b.poly, b.sym == "a" and 1 or -1))
     end
-    local eb = { c = mb[2].c, k = mb[2].k, q = 0, k2 = 0, q2 = 0, kq = 0 }
-    local g = poly_sub(pumped_first_exp(mb[1], iexpr), eb)
-    return gez_domain(g)
+    return nz_domain(diff, legal)
 end
 
--- {a^i b^j c^{2j}}: need #c ≠ 2·#b after pumping
-GEN.aibjc = function(mb, s1, iexpr)
-    if s1 ~= "b" then
-        return { k = 1, q = 1,
-                 msg = "v must lie in the b-block — pumping "
-                    .. s1 .. "'s keeps #c = 2·#b; pick a witness "
-                    .. "starting with b^k" }
+-- parens:  total balance ≠ 0, or some block-boundary prefix dips
+-- below 0, on the whole legal domain
+GEN.parens = function(pb, legal)
+    local bal = poly{}
+    for _, b in ipairs(pb) do
+        bal = poly_add(bal,
+            poly_scale(b.poly, b.sym == "(" and 1 or -1))
     end
-    local d = dqp(iexpr)
-    d.c, d.k, d.q, d.k2, d.q2, d.kq =
-        2 * d.c, 2 * d.k, 2 * d.q, 2 * d.k2, 2 * d.q2, 2 * d.kq
-    return nz_domain(d)   -- pumped #c−2#b = −2·q(i−1) ≠ 0 needed
+    if nz_domain(bal, legal) == true then return true end
+    -- try a boundary dip: balance after block j stays < 0 everywhere
+    local acc = poly{}
+    for j = 1, #pb - 1 do
+        acc = poly_add(acc,
+            poly_scale(pb[j].poly,
+                       pb[j].sym == "(" and 1 or -1))
+        -- need acc ≤ −1 on all legal points
+        local neg1 = poly_sub(poly_scale(acc, -1), poly{ c = 1 })
+        if gez_domain(neg1, legal) == true then return true end
+    end
+    return nil
 end
 
--- {ww}:  parity first, then symbolic half-split
-GEN.ww = function(mb, s1, iexpr)
-    local d = dqp(iexpr)
-    -- total pumped length poly
-    local len = { c = 0, k = 0, q = d.q, k2 = 0, q2 = d.q2, kq = d.kq }
-    for _, b in ipairs(mb) do
-        len.k, len.c = len.k + b.k, len.c + b.c
+-- palindrome:  some mirror pair must mismatch everywhere
+GEN.pal = function(pb, legal)
+    if #pb < 2 then return nil end
+    for j = 1, math.floor(#pb / 2) do
+        local f, s = pb[j], pb[#pb + 1 - j]
+        if f.sym ~= s.sym then return true end
+        local diff = poly_sub(f.poly, s.poly)
+        if nz_domain(diff, legal) == true then return true end
     end
-    -- if len' is provably odd on the whole domain -> always out.
-    -- parity of a poly over integer points: need every coeff of
-    -- variable-involving terms even and const odd
+    return nil
+end
+
+-- {a^n b^m | n<m}:  pumped must break the a·b shape or n' ≥ m'
+GEN.anbm_lt = function(pb, legal)
+    if #pb ~= 2 or pb[1].sym ~= "a" or pb[2].sym ~= "b" then
+        if #pb == 1 then return nil end   -- all-a/b still in L
+        return true                       -- shape broken -> out
+    end
+    local g = poly_sub(pb[1].poly, pb[2].poly)
+    return gez_domain(g, legal)
+end
+
+-- {a^i b^j c^{2j}}:  pumped must satisfy #c ≠ 2·#b on any
+-- a*·b*·c* shape (a or b blocks may have collapsed to nothing)
+GEN.aibjc = function(pb, legal)
+    local order = { a = 1, b = 2, c = 3 }
+    local prev = 0
+    for _, b in ipairs(pb) do
+        local o = order[b.sym]
+        if not o or o < prev then return true end   -- shape broken
+        prev = o
+    end
+    -- all-a word: a^i is always in L — cannot prove out
+    if #pb == 1 and pb[1].sym == "a" then return nil end
+    local cb, bb = poly{}, poly{}
+    for _, b in ipairs(pb) do
+        if b.sym == "c" then cb = poly_add(cb, b.poly) end
+        if b.sym == "b" then bb = poly_add(bb, b.poly) end
+    end
+    local g = poly_sub(cb, poly_scale(bb, 2))
+    return nz_domain(g, legal)
+end
+
+-- {ww}:  length odd everywhere, or the halves differ everywhere
+GEN.ww = function(pb, legal)
+    local len = poly{}
+    for _, b in ipairs(pb) do len = poly_add(len, b.poly) end
     local var_odd = false
-    for _, t in ipairs({ "k", "q", "k2", "q2", "kq" }) do
-        if len[t] % 2 ~= 0 then var_odd = true end
+    for _, t in ipairs(POLY_KEYS) do
+        if t ~= "c" and len[t] % 2 ~= 0 then var_odd = true end
     end
     if not var_odd and len.c % 2 == 1 then return true end
-    -- half-split: H = len'/2 formally (correct on the even-parity
-    -- subdomain; odd-parity points are out anyway)
-    local H = {}
-    for _, t in ipairs(POLY_KEYS) do H[t] = len[t] / 2 end
-    local pb = {}
-    for j, b in ipairs(mb) do
-        pb[j] = { sym = b.sym,
-                  poly = (j == 1) and pumped_first_exp(b, iexpr)
-                        or { c = b.c, k = b.k, q = 0, k2 = 0, q2 = 0,
-                             kq = 0 } }
-    end
-    -- walk: find the block the midpoint falls into, with the
-    -- cumulative-vs-H comparisons decided by gez_domain
-    local C = poly(0, 0, 0)
-    local first, second, j = {}, {}, 1
+    -- symbolic half-split (formal halves; odd-length points are out
+    -- anyway, so it suffices to prove mismatch on the whole domain)
+    local H = poly_scale(len, 0.5)
+    local C, first, second, j = poly{}, {}, {}, 1
     while j <= #pb do
         local b = pb[j]
-        local nj = {}
-        for _, t in ipairs(POLY_KEYS) do nj[t] = C[t] + b.poly[t] end
+        local nj = poly_add(C, b.poly)
         local D = poly_sub(nj, H)
-        local nonpos = gez_domain(poly_sub(poly(0, 0, 0), D))
-        local nonneg = gez_domain(D)
+        local nonpos = gez_domain(poly_scale(D, -1), legal)
+        local nonneg = gez_domain(D, legal)
         if nonpos == true then
+            first[#first + 1] = b
             if poly_zero(D) then
-                -- midpoint exactly at this block's end: the tail
-                -- piece is empty — halves are [..block j] | [j+1..]
-                first[#first + 1] = b
                 for m = j + 1, #pb do
                     second[#second + 1] = pb[m]
                 end
                 break
             end
-            -- whole block strictly before the midpoint
-            first[#first + 1] = b
             C, j = nj, j + 1
         elseif nonneg == true or nonneg == nil then
-            -- midpoint inside block j (nonneg unproven stays on the
-            -- conservative side: the split is still well-defined for
-            -- the witness shapes we expect)
             local e1 = poly_sub(H, C)
             local tail = poly_sub(b.poly, e1)
             first[#first + 1] = { sym = b.sym, poly = e1 }
@@ -604,18 +752,17 @@ GEN.ww = function(mb, s1, iexpr)
             for m = j + 1, #pb do second[#second + 1] = pb[m] end
             break
         else
-            return nil   -- midpoint position not decidable
+            return nil
         end
     end
-    -- halves must differ at every domain point
     if #first ~= #second then return true end
     for m = 1, #first do
         local f, s = first[m], second[m]
         if f.sym ~= s.sym then return true end
         local diff = poly_sub(f.poly, s.poly)
-        if nz_domain(diff) == true then return true end
+        if nz_domain(diff, legal) == true then return true end
     end
-    return nil    -- could not prove the halves differ everywhere
+    return nil
 end
 
 M.LANGS = {
@@ -659,9 +806,12 @@ function M.general_case(mb)
     return { sym = e.sym }
 end
 
--- full general check: symbolic proof attempt after a concrete grid
--- scan.  returns {ok,kind,msg}
-function M.check_general(lang_id, z_str, i_str)
+-- full general check over the STUDENT-written decomposition
+--   gen = { u = "a^p", v = "a^q", w = "a^{k-p-q}b^k", i = "2" }
+-- verified: uvw ≡ z(k) as a poly identity, legality |v| ≥ 1 /
+-- |uv| ≤ k on the legal domain, coverage of every legal split,
+-- then uv^iw ∉ L — symbolically where possible, else sampled.
+function M.check_general(lang_id, z_str, gen)
     local lang = M.LANGS[lang_id]
     if not lang then
         return { ok = false, kind = "fail", msg = "unknown language" }
@@ -682,41 +832,170 @@ function M.check_general(lang_id, z_str, i_str)
     if gcase.err then
         return { ok = false, kind = "fail", msg = gcase.err }
     end
-    local iexpr = parse_iexpr(i_str)
+    local ub, uerr = M.parse_pattern_pq(gen.u or "")
+    if not ub then return { ok = false, kind = "fail",
+                            msg = "u: " .. uerr } end
+    local vb, verr2 = M.parse_pattern_pq(gen.v or "")
+    if not vb then return { ok = false, kind = "fail",
+                            msg = "v: " .. verr2 } end
+    local wb, werr = M.parse_pattern_pq(gen.w or "")
+    if not wb then return { ok = false, kind = "fail",
+                            msg = "w: " .. werr } end
+    if #vb ~= 1 then
+        return { ok = false, kind = "fail",
+                 msg = "v must be a single block — inside the "
+                    .. "first block of z every v is " .. gcase.sym
+                    .. "^q anyway" }
+    end
+    local iexpr = parse_iexpr(gen.i or "")
     if not iexpr then
         return { ok = false, kind = "fail",
                  msg = "i must be a non-negative integer or an "
-                    .. "expression in k and q (e.g. 2, 0, q+1, k+1)" }
+                    .. "expression in k, p, q (e.g. 2, 0, q+1, k+1)" }
     end
-    -- concrete counterexample search: instantiate uv^iw on the grid
+
+    -- (1) uvw ≡ z(k):  merged concatenation must equal z's merged
+    --     list — same symbols, identical exponent polys
+    local cat = {}
+    for _, b in ipairs(ub) do cat[#cat + 1] = b end
+    for _, b in ipairs(vb) do cat[#cat + 1] = b end
+    for _, b in ipairs(wb) do cat[#cat + 1] = b end
+    local cm = merge(cat)
+    if #cm ~= #mb then
+        return { ok = false, kind = "fail",
+                 msg = "uvw has " .. #cm .. " block(s), z has " .. #mb
+                    .. " — the decomposition does not reassemble "
+                    .. "into z(k)" }
+    end
+    for j = 1, #mb do
+        if cm[j].sym ~= mb[j].sym then
+            return { ok = false, kind = "fail",
+                     msg = "uvw's block " .. j .. " is '"
+                        .. cm[j].sym .. "', z's is '" .. mb[j].sym
+                        .. "'" }
+        end
+        local d = poly_sub(block_poly(cm[j]), block_poly(mb[j]))
+        if not poly_zero(d) then
+            return { ok = false, kind = "fail",
+                     msg = "block " .. j .. ": exponents differ — "
+                        .. "uvw ≢ z(k) as an identity" }
+        end
+    end
+
+    -- the student's legal domain: every exponent ≥ 0, |v| ≥ 1,
+    -- |uv| ≤ k — derived from their expressions
+    local ulen = poly{}
+    for _, b in ipairs(ub) do ulen = poly_add(ulen, block_poly(b)) end
+    local vlen = block_poly(vb[1])
+    local uvlen = poly_add(ulen, vlen)
+    local legal = function(k, p, q)
+        for _, bl in ipairs(cm) do
+            if poly_eval(block_poly(bl), k, p, q) < 0 then
+                return false
+            end
+        end
+        if poly_eval(vlen, k, p, q) < 1 then return false end
+        if poly_eval(uvlen, k, p, q) > k then return false end
+        return true
+    end
+
+    -- (2) legality must allow at least the standard splits — check
+    --     v ≥ 1 possible and uv ≤ k possible somewhere
+    local any_legal = false
     for k = 1, 8 do
-        local z = M.expand(mb, k)
-        for q = 1, math.min(k, #z) do
-            local i = iexpr_eval(iexpr, k, q)
-            if i == math.floor(i) and i >= 0 then
-                local u = z:sub(1, k - q)      -- u = s1^{k-q}… any
-                local v = z:sub(k - q + 1, k)  -- tail inside block 1
-                local w = z:sub(k + 1)
-                local pumped = u .. v:rep(i) .. w
-                if lang.mem(pumped) then
+        for p = 0, k do
+            for q = 1, k - p do
+                if legal(k, p, q) then any_legal = true end
+            end
+        end
+    end
+    if not any_legal then
+        return { ok = false, kind = "fail",
+                 msg = "your decomposition allows no legal split "
+                    .. "at all (|v| ≥ 1 and |uv| ≤ k never both "
+                    .. "hold)" }
+    end
+
+    -- (3) coverage: every legal split at k = 3, 4 must be reachable
+    --     by some (p,q) — catches parametrisations that bind p to q
+    for K = 3, 4 do
+        for pc = 0, K - 1 do
+            for qc = 1, K - pc do
+                local covered = false
+                for p = 0, K do
+                    for q = 1, K - p do
+                        if legal(K, p, q)
+                           and poly_eval(ulen, K, p, q) == pc
+                           and poly_eval(vlen, K, p, q) == qc then
+                            covered = true
+                        end
+                    end
+                end
+                if not covered then
                     return { ok = false, kind = "fail",
-                        msg = "counterexample at k=" .. k .. ", |v|=q="
-                            .. q .. ":  uv^" .. i .. "w = " .. pumped
-                            .. " ∈ L" }
+                        msg = "your decomposition cannot express the "
+                           .. "legal split u = " .. gcase.sym .. "^"
+                           .. pc .. ", v = " .. gcase.sym .. "^" .. qc
+                           .. " (e.g. at k=" .. K
+                           .. ") — keep the parameters free" }
                 end
             end
         end
     end
-    -- symbolic proof attempt
-    local prov = lang.gen and lang.gen(mb, gcase.sym, iexpr)
+
+    -- (4) concrete counterexample scan on the legal domain
+    for k = 1, 8 do
+        for p = 0, k do
+            for q = 1, k - p do
+                if legal(k, p, q) then
+                    local i = iexpr_eval(iexpr, k, p, q)
+                    if i == math.floor(i) and i >= 0 then
+                        local us = M.expand_params(ub, k, p, q)
+                        local vs = M.expand_params(vb, k, p, q)
+                        local ws = M.expand_params(wb, k, p, q)
+                        local pumped = us .. vs:rep(i) .. ws
+                        if lang.mem(pumped) then
+                            return { ok = false, kind = "fail",
+                                msg = "counterexample at k=" .. k
+                                    .. ", p=" .. p .. ", q=" .. q
+                                    .. ":  uv^" .. i .. "w = "
+                                    .. pumped .. " ∈ L" }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- (5) symbolic proof: pumped merged block list with poly exps
+    local vi = poly_mul(block_poly(vb[1]), iexpr)
+    local cat2 = {}
+    for _, b in ipairs(ub) do
+        cat2[#cat2 + 1] = { sym = b.sym, poly = block_poly(b) }
+    end
+    cat2[#cat2 + 1] = { sym = vb[1].sym, poly = vi }
+    for _, b in ipairs(wb) do
+        cat2[#cat2 + 1] = { sym = b.sym, poly = block_poly(b) }
+    end
+    local pb = {}
+    for _, b in ipairs(cat2) do
+        local top = pb[#pb]
+        if top and top.sym == b.sym then
+            top.poly = poly_add(top.poly, b.poly)
+        else
+            pb[#pb + 1] = { sym = b.sym, poly = b.poly }
+        end
+    end
+    local prov = lang.gen and lang.gen(pb, legal)
     if prov == true then
         return { ok = true, kind = "ok",
-                 msg = "uv^iw ∉ L for all k ≥ 1 and 1 ≤ q ≤ k — "
-                    .. "verified symbolically" }
+                 msg = "uvw ≡ z(k), all splits covered, and uv^iw ∉ L "
+                    .. "for all k ≥ 1 — verified symbolically" }
     elseif type(prov) == "table" and prov.k then
         return { ok = false, kind = "fail",
                  msg = prov.msg or ("counterexample at k=" .. prov.k
-                       .. ", q=" .. prov.q) }
+                       .. (prov.p and (", p=" .. prov.p) or "")
+                       .. ", q=" .. tostring(prov.q)) }
     end
     return { ok = false, kind = "warn",
              msg = "no counterexample found (tested k ≤ 8), but the "
@@ -763,7 +1042,7 @@ end
 
 -- full check: z valid + every split row has a working i.
 -- is_tbl[ri] = the student's pumping index for split row ri.
-function M.check(lang_id, z_str, is_tbl, K, gen_i)
+function M.check(lang_id, z_str, is_tbl, K, gen)
     K = K or 3
     local lang = M.LANGS[lang_id]
     if not lang then
@@ -809,20 +1088,23 @@ function M.check(lang_id, z_str, is_tbl, K, gen_i)
             end
         end
     end
-    -- the general decomposition (all k): i(k,q) per case
-    local gen
-    if gen_i ~= nil and (type(gen_i) ~= "string" or gen_i:match("%S")) then
-        gen = M.check_general(lang_id, z_str, gen_i)
-        if not gen.ok then all_ok = false end
+    -- the general decomposition (all k): student-written u, v, w, i
+    local genres
+    if type(gen) == "table"
+       and ((gen.u or ""):match("%S") or (gen.v or ""):match("%S")
+            or (gen.w or ""):match("%S") or (gen.i or ""):match("%S"))
+    then
+        genres = M.check_general(lang_id, z_str, gen)
+        if not genres.ok then all_ok = false end
     end
     if all_ok then
-        return { ok = true, kind = "ok", rows = rows, gen = gen,
-                 msg = "z(k) ∈ L, |z| ≥ k, and every decomposition "
+        return { ok = true, kind = "ok", rows = rows,
+                 gen = genres, msg = "z(k) ∈ L, |z| ≥ k, and every decomposition "
                     .. "is beaten — the pumping argument works (k="
                     .. K .. ")" }
     end
-    return { ok = false, kind = "fail", rows = rows, gen = gen,
-             msg = "every split (u,v,w) needs an i with uv^iw ∉ L" }
+    return { ok = false, kind = "fail", rows = rows,
+             gen = genres, msg = "every split (u,v,w) needs an i with uv^iw ∉ L" }
 end
 
 return M
