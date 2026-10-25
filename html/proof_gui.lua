@@ -1227,6 +1227,8 @@ local KIND = {
     too_large      = { "fail",   "✗" },
     comp_missing   = { "fail",   "✗" },
     stale          = { "fail",   "✗" },
+    boundary       = { "fail",   "✗" },
+    composable     = { "fail",   "✗" },
     disconnected   = { "fail",   "✗" },
     empty          = { "pending","□" },
 }

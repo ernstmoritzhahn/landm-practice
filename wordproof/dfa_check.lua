@@ -477,6 +477,24 @@ function M.check_compose(part, model_json, seeds)
             end
         end
     end
+    -- adjacency over the whole submission, needed for the wiring,
+    -- boundary and composable-form checks below
+    local id_name, adj, radj = {}, {}, {}
+    for _, s in ipairs(m.states) do
+        id_name[tostring(s.id)] = tostring(s.name or s.id)
+    end
+    for _, s in ipairs(m.states) do
+        adj[tostring(s.name or s.id)] = {}
+        radj[tostring(s.name or s.id)] = {}
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local f, t = id_name[tostring(e.from)],
+                     id_name[tostring(e.to)]
+        if f and t then
+            adj[f][t] = true
+            radj[t][f] = true
+        end
+    end
     for _, tag in ipairs(part.seeds_locked or {}) do
         local stage = tag:match("^[^#]+") or tag
         local prefix = tag:gsub("#", "_") .. "_"
@@ -522,25 +540,36 @@ function M.check_compose(part, model_json, seeds)
                 end
             end
         end
-        -- integration: every embedded state must lie on a path from
-        -- the initial state to an accepting state (lambda steps count)
-        local adj, radj = {}, {}
-        for _, s in ipairs(m.states) do
-            adj[tostring(s.name or s.id)] = {}
-            radj[tostring(s.name or s.id)] = {}
-        end
-        local id_name = {}
-        for _, s in ipairs(m.states) do
-            id_name[tostring(s.id)] = tostring(s.name or s.id)
+        -- boundary: the component is a black box (the lecture's
+        -- "composable" discipline) — student wiring may enter it only
+        -- at its initial state and leave it only at its final state
+        local entry, exits = nil, {}
+        for _, s in ipairs(sm.states) do
+            local en = prefix .. tostring(s.name or s.id)
+            if s.initial then entry = en end
+            if s.accepting then exits[en] = true end
         end
         for _, e in ipairs(m.transitions or {}) do
-            local f, t = id_name[tostring(e.from)],
-                         id_name[tostring(e.to)]
-            if f and t then
-                adj[f][t] = true
-                radj[t][f] = true
+            if not e.seed then
+                local f = id_name[tostring(e.from)]
+                local t = id_name[tostring(e.to)]
+                if f and emb_set[f] and not exits[f] then
+                    return { ok=false, kind="boundary",
+                             msg="an edge leaves component " .. shown
+                              .. ") at state " .. f .. " — leave a "
+                              .. "component only via its final state" }
+                end
+                if t and emb_set[t] and t ~= entry then
+                    return { ok=false, kind="boundary",
+                             msg="an edge enters component " .. shown
+                              .. ") at state " .. t .. " — enter a "
+                              .. "component only via its initial "
+                              .. "state" }
+                end
             end
         end
+        -- integration: every embedded state must lie on a path from
+        -- the initial state to an accepting state (lambda steps count)
         local start, accs = nil, {}
         for _, s in ipairs(m.states) do
             local nm = tostring(s.name or s.id)
@@ -572,6 +601,35 @@ function M.check_compose(part, model_json, seeds)
                           .. " lies on no accepting path" }
             end
         end
+    end
+    -- the composed automaton must itself be composable again — the
+    -- lecture's invariant: exactly one initial state without incoming
+    -- arrows, exactly one final state without outgoing arrows
+    local n_init, n_fin, init, fin = 0, 0, nil, nil
+    for _, s in ipairs(m.states) do
+        local nm = tostring(s.name or s.id)
+        if s.initial then n_init = n_init + 1; init = nm end
+        if s.accepting then n_fin = n_fin + 1; fin = nm end
+    end
+    if n_init ~= 1 then
+        return { ok=false, kind="composable",
+                 msg="not composable: a composable NFA-λ has exactly "
+                  .. "one initial state (found " .. n_init .. ")" }
+    end
+    if next(radj[init] or {}) then
+        return { ok=false, kind="composable",
+                 msg="not composable: the initial state must have no "
+                  .. "incoming transitions" }
+    end
+    if n_fin ~= 1 then
+        return { ok=false, kind="composable",
+                 msg="not composable: a composable NFA-λ has exactly "
+                  .. "one final state (found " .. n_fin .. ")" }
+    end
+    if next(adj[fin] or {}) then
+        return { ok=false, kind="composable",
+                 msg="not composable: the final state must have no "
+                  .. "outgoing transitions" }
     end
     -- components check out: now the language, like a plain aut part
     local aut, problems = model_to_nfa(m, part.aut_type)
@@ -622,6 +680,32 @@ function M.check_simplify(part, model_json, src_json)
     if cmp ~= "=" then
         return { ok=false, kind="mismatch",
                  msg="the simplified automaton changed the language" }
+    end
+    -- the result becomes the next stage's component: warn when it is
+    -- not composable (1 initial without incoming, 1 final without
+    -- outgoing transitions)
+    local n_init, n_fin, init, fin = 0, 0, nil, nil
+    local adj, radj = {}, {}
+    for _, s in ipairs(m.states) do
+        local nm = tostring(s.name or s.id)
+        adj[nm], radj[nm] = {}, {}
+        if s.initial then n_init = n_init + 1; init = nm end
+        if s.accepting then n_fin = n_fin + 1; fin = nm end
+    end
+    local id_name = {}
+    for _, s in ipairs(m.states) do
+        id_name[tostring(s.id)] = tostring(s.name or s.id)
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local f, t = id_name[tostring(e.from)], id_name[tostring(e.to)]
+        if f and t then adj[f][t] = true; radj[t][f] = true end
+    end
+    if n_init ~= 1 or n_fin ~= 1
+       or next(radj[init] or {}) or next(adj[fin] or {}) then
+        return { ok=true, kind="warn",
+                 msg="correct language, but not composable — the next "
+                  .. "step can only enter it via its initial state and "
+                  .. "leave it via its final state" }
     end
     local ok2, src = pcall(json.decode, src_json or "")
     if ok2 and type(src) == "table" and src.states then

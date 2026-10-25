@@ -632,7 +632,9 @@ parts_task{
     desc = "Guided variant: each composition step embeds the automata "
         .. "of the earlier steps as locked components (the navy "
         .. "parts) — wire them together with your own states and "
-        .. "transitions.  The components stay in sync with the "
+        .. "transitions, entering each component via its initial "
+        .. "state and leaving it via its final state, so the result "
+        .. "stays composable.  The components stay in sync with the "
         .. "earlier steps automatically; an optional simplify slot "
         .. "lets you reduce a step's automaton, and the simplified "
         .. "version is what the next step embeds.",
@@ -658,7 +660,8 @@ parts_task{
     id = "2.2o-g", letter = "O",
     title = "From RE to NFA-λ: (abc)*a*",
     desc = "Guided variant for E = (abc)* ∪ a* over {a, b, c} — "
-        .. "locked components from the previous steps; optional "
+        .. "locked components from the previous steps, entered via "
+        .. "their initial and left via their final state; optional "
         .. "simplify slots feed the next step.",
     parts = {
         gstep("a", "E = a", "a", nil, "a,b,c"),
@@ -685,7 +688,9 @@ parts_task{
 parts_task{
     id = "2.2p-g", letter = "P",
     title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
-    desc = "(extra) Guided variant for E = (ba ∪ bb)* ∪ (ab ∪ aa)*.",
+    desc = "(extra) Guided variant for E = (ba ∪ bb)* ∪ (ab ∪ aa)* — "
+        .. "locked components, entered via their initial and left via "
+        .. "their final state.",
     parts = {
         gstep("a", "E = a", "a"),
         gstep("b", "E = b", "b"),
