@@ -1119,49 +1119,49 @@ local function sc_pair(goal)
 end
 
 parts_task{
-    id = "3.2c", letter = "C",
+    id = "3.2c", letter = "h–l",
     title = "Closure properties",
     desc = "Two closure arguments, then the constructions carried "
         .. "out on a concrete machine.",
     parts = {
-        { kind="regexp", sub="a)",
+        { kind="regexp", sub="h)",
           label="L' = {w ∈ L | w ends with aa}.  Give a regular "
              .. "expression Ê over {a,b,c} for the CONDITION, i.e. "
              .. "L(Ê) = Σ*aa (then L' = L ∩ L(Ê))",
           reference="(a|b|c)*aa" },
-        { kind="regexp", sub="b)",
+        { kind="regexp", sub="i)",
           label="L' = {w ∉ L | w has no a}.  Give Ê over {a,b,c} "
              .. "with L(Ê) = {words without a} (then L' = L̄ ∩ L(Ê))",
           reference="(b|c)*" },
-        { kind="choice", sub="c)",
-          label="Which closure properties prove parts a) and b)?",
+        { kind="choice", sub="h)+i)",
+          label="Which closure properties prove parts h) and i)?",
           slots = {
             { key="c", label="used properties",
               options = {
-                { id="inter",   label="a): ∩;  b): complement + ∩" },
-                { id="un",      label="a): ∪;  b): complement + ∪" },
-                { id="concat",  label="a): concatenation;  b): ∩" },
-                { id="star",    label="a): star;  b): complement" } } } },
+                { id="inter",   label="h): ∩;  i): complement + ∩" },
+                { id="un",      label="h): ∪;  i): complement + ∪" },
+                { id="concat",  label="h): concatenation;  i): ∩" },
+                { id="star",    label="h): star;  i): complement" } } } },
           sel_check = function(sel)
               if sel.c == "inter" then
                   return { ok=true, kind="ok",
-                    msg="∩ (a) and complement + ∩ (b) — right" }
+                    msg="∩ (h) and complement + ∩ (i) — right" }
               end
               return { ok=false, kind="fail",
-                       msg="think again: a) intersects L with a "
-                        .. "regular condition; b) needs the "
+                       msg="think again: h) intersects L with a "
+                        .. "regular condition; i) needs the "
                         .. "complement too" }
           end },
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="d)", reference="(ab)*(λ|a)",
+          sub="j)", reference="(ab)*(λ|a)",
           label="prefixes of L(M): build an NFA-λ accepting "
              .. "{u | ∃v: uv ∈ L(M)} for the given M" },
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="e)", reference="(ba)*",
+          sub="k)", reference="(ba)*",
           label="reversals: build an NFA-λ accepting "
              .. "{w^R | w ∈ L(M)}   (extra)" },
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="f)", reference="(a|b)*(ab)*",
+          sub="l)", reference="(a|b)*(ab)*",
           label="words having a suffix in L(M): build an NFA-λ "
              .. "accepting {uv | v ∈ L(M)} = Σ*·L(M)   (extra)" },
     },
@@ -1179,29 +1179,29 @@ parts_task{
 }
 
 parts_task{
-    id = "3.2e", letter = "E",
+    id = "3.2e", letter = "m–q",
     title = "Regular and non-regular languages can mix",
     desc = "Give example languages L1, L2 over {a,b} satisfying "
         .. "each combination of conditions (choose from the "
         .. "palette).",
     parts = {
-        { kind="choice", sub="a)",
+        { kind="choice", sub="m)",
           label="L1 regular, L2 non-regular, L1 ∪ L2 regular",
           slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
           sel_check = sc_pair("ureg") },
-        { kind="choice", sub="b)",
+        { kind="choice", sub="n)",
           label="L1 regular, L2 non-regular, L1 ∪ L2 non-regular",
           slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
           sel_check = sc_pair("unon") },
-        { kind="choice", sub="c)",
+        { kind="choice", sub="o)",
           label="L1 regular, L2 non-regular, L1 ∩ L2 regular",
           slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
           sel_check = sc_pair("ireg") },
-        { kind="choice", sub="d)",
+        { kind="choice", sub="p)",
           label="L1, L2 both non-regular, L1 ∪ L2 regular",
           slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
           sel_check = sc_pair("nnureg") },
-        { kind="choice", sub="e)",
+        { kind="choice", sub="q)",
           label="L1 non-regular but L1* regular   (extra)",
           slots = { pal_slot("l1","L1") },
           sel_check = function(sel)
@@ -1256,7 +1256,7 @@ local DC = require "wordproof.dfa_check"
 
 -- the lemma as a multiple-argument choice
 local LEMMA_PART = {
-    kind="choice", sub="★)",
+    kind="choice", sub="r)",
     label="Lemma: if q_i ~ q_j are equivalent states and "
        .. "δ̂(q_i,u)=q_m, δ̂(q_j,u)=q_n — why are q_m, q_n "
        .. "equivalent?",
@@ -1295,28 +1295,29 @@ local function mtask(id, letter, dfa_str, states, extra_part)
     local ps = {}
     if extra_part then ps[#ps+1] = extra_part end
     ps[#ps+1] = { kind="min_table", reference=dfa_str, states=states,
-        sub="a)", label="Mark every distinguishable pair "
+        sub="a)+b)", label="Mark every distinguishable pair "
          .. "(tick the box), give a distinguishing word for each "
          .. "marked pair, and write the equivalence classes as "
          .. "{q0,q3} {q1,q4} …" }
     ps[#ps+1] = { kind="aut", aut_type="dfa", alphabet="a,b",
         reference=dfa_str, exact_states=ncls,
-        sub="b)", label="Draw the minimised DFA (it has " .. ncls
+        sub="c)", label="Draw the minimised DFA (it has " .. ncls
          .. " states)" }
     parts_task{
         id = id, letter = letter,
         title = "DFA minimisation",
-        desc = "Algorithm 5.7.2: a pair {p,q} is distinguishable "
-            .. "when exactly one of p,q is final, or when some "
-            .. "letter moves it into a distinguishable pair.",
+        desc = "item s) of the sheet — Algorithm 5.7.2: a pair "
+            .. "{p,q} is distinguishable when exactly one of p,q "
+            .. "is final, or when some letter moves it into a "
+            .. "distinguishable pair.",
         given = { kind="table", dfa=dfa_str },
         parts = ps,
     }
 end
 
-mtask("3.3a", "A", D1, Q6, LEMMA_PART)
-mtask("3.3b", "B", D2, Q6)
-mtask("3.3c", "C", D3, Q7)
+mtask("3.3a", "s.1", D1, Q6, LEMMA_PART)
+mtask("3.3b", "s.2", D2, Q6)
+mtask("3.3c", "s.3", D3, Q7)
 
 -- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
