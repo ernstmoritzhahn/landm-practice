@@ -124,6 +124,10 @@ return function(data)
                         return DC.check_accept(pdef, pd.ans)
                     elseif pdef.kind == "table" then
                         return DC.check_table(pdef, pd.cells)
+                    elseif pdef.kind == "stable" then
+                        return DC.check_stable(pdef, pd.cells)
+                    elseif pdef.kind == "closure" then
+                        return DC.check_closure(pdef, pd.sets)
                     elseif pdef.kind == "regexp" then
                         return RC.check({reference=pdef.reference},
                                         pd.expr)

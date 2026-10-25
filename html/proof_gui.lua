@@ -350,6 +350,69 @@ local function render_given(g)
     return box
 end
 
+-- merge the model of part `spi`'s editor into `rec`'s editor: states
+-- are copied with fresh ids, prefixed names ("a_q0") and an offset so
+-- the construction step can wire them further.  The first inserted
+-- seed keeps its initial flag; later seeds arrive un-initial so the
+-- "one initial state" rule picks the global start deliberately.
+local function insert_seed(rec, spi)
+    local seed = state.parts[spi]
+    if not (seed and seed.app and rec.app) then return end
+    local ok_s, sm = pcall(json.decode,
+        landm_call("aut_state", seed.app) or "")
+    local ok_c, cm = pcall(json.decode,
+        landm_call("aut_state", rec.app) or "")
+    if not (ok_s and type(sm) == "table" and sm.states) then return end
+    -- retrieveData() is "" for an untouched editor — an empty model
+    -- is a fine merge target, synthesise the skeleton
+    if not (ok_c and type(cm) == "table" and cm.states) then
+        cm = { type = rec.aut_type or sm.type or "nfa-eps",
+               alphabet = sm.alphabet,
+               states = {}, transitions = {} }
+    end
+    local max_id, max_x, has_init = 0, nil, false
+    for _, s in ipairs(cm.states) do
+        if (s.id or 0) > max_id then max_id = s.id end
+        if not max_x or (s.x or 0) > max_x then max_x = s.x end
+        if s.initial then has_init = true end
+    end
+    for _, t in ipairs(cm.transitions or {}) do
+        if (t.id or 0) > max_id then max_id = t.id end
+    end
+    local smin_x, smin_y
+    for _, s in ipairs(sm.states) do
+        smin_x = math.min(smin_x or s.x or 0, s.x or 0)
+        smin_y = math.min(smin_y or s.y or 0, s.y or 0)
+    end
+    if not smin_x then return end   -- seed editor is empty
+    local dx = (max_x or -66) + 132 - smin_x
+    local dy = 66 - smin_y
+    local idmap = {}
+    local pre = string.char(96 + spi) .. "_"
+    for _, s in ipairs(sm.states) do
+        max_id = max_id + 1
+        idmap[s.id] = max_id
+        local keep_init = s.initial and not has_init
+        if keep_init then has_init = true end
+        cm.states[#cm.states + 1] = {
+            id = max_id,
+            name = pre .. tostring(s.name or s.id),
+            x = (s.x or 0) + dx, y = (s.y or 0) + dy,
+            initial = keep_init and true or false,
+            accepting = s.accepting and true or false }
+    end
+    cm.transitions = cm.transitions or {}
+    for _, t in ipairs(sm.transitions or {}) do
+        if idmap[t.from] and idmap[t.to] then
+            max_id = max_id + 1
+            cm.transitions[#cm.transitions + 1] = {
+                id = max_id, from = idmap[t.from], to = idmap[t.to],
+                label = t.label }
+        end
+    end
+    landm_call("aut_load", rec.app, json.encode(cm))
+end
+
 local function render_part(pv, pi)
     local box = el("div", "part")
     local lab = el("div", "partlabel")
@@ -364,6 +427,26 @@ local function render_part(pv, pi)
         local host = el("div", "authost")
         box:appendChild(host)
         rec.app = mount_aut(host, aut_cfg(pv), false)
+        rec.aut_type = pv.aut_type
+        if pv.seeds and #pv.seeds > 0 then
+            local sr = el("div", "wordrow")
+            sr:appendChild(text("span",
+                "insert automaton from part:", "wlabel"))
+            local sel = el("select")
+            for _, spi in ipairs(pv.seeds) do
+                local op = document:createElement("option")
+                op.value = tostring(spi)
+                op.textContent = string.char(96 + spi) .. ")"
+                sel:appendChild(op)
+            end
+            local btn = el("button", "seedbtn")
+            btn.textContent = "insert"
+            btn:addEventListener("click", function()
+                insert_seed(rec, tonumber(sel.value))
+            end)
+            sr:appendChild(sel); sr:appendChild(btn)
+            box:appendChild(sr)
+        end
         if pv.with_regexp then
             local r = el("div", "wordrow")
             r:appendChild(text("span",
@@ -405,10 +488,10 @@ local function render_part(pv, pi)
             box:appendChild(r)
             rec.ans[wi], rec.row_st[wi] = sel, rst
         end
-    elseif pv.kind == "table" then
+    elseif pv.kind == "table" or pv.kind == "stable" then
         local tb = el("table", "trtable")
         local hr = el("tr")
-        hr:appendChild(text("th", "δ"))
+        hr:appendChild(text("th", pv.kind == "stable" and "t" or "δ"))
         for _,s in ipairs(pv.alphabet or {}) do
             hr:appendChild(text("th", s))
         end
@@ -419,7 +502,8 @@ local function render_part(pv, pi)
             tr:appendChild(text("td", acc_mark(pv, q)))
             for _,s in ipairs(pv.alphabet or {}) do
                 local td = el("td")
-                local inp = mk_input(nil, 4, dirty(nil))
+                local inp = mk_input(nil, pv.kind == "stable" and 9 or 4,
+                                     dirty(nil))
                 td:appendChild(inp)
                 tr:appendChild(td)
                 rec.cells[i .. "|" .. s] = { input = inp, td = td }
@@ -427,6 +511,19 @@ local function render_part(pv, pi)
             tb:appendChild(tr)
         end
         box:appendChild(tb)
+    elseif pv.kind == "closure" then
+        rec.sets, rec.row_st = {}, {}
+        for wi,q in ipairs(pv.states or {}) do
+            local r = el("div", "wordrow")
+            r:appendChild(text("span",
+                "λ-closure(" .. q .. ") =", "wlabel"))
+            local rst = el("span", "st")
+            local inp = mk_input("expr", 20, dirty(rst))
+            inp.placeholder = "{q0, q2}"
+            r:appendChild(inp); r:appendChild(rst)
+            box:appendChild(r)
+            rec.sets[wi], rec.row_st[wi] = inp, rst
+        end
     elseif pv.kind == "regexp" then
         local r = el("div", "wordrow")
         local rst = el("span", "st")
@@ -474,9 +571,12 @@ save_local = function()
             elseif p.kind == "accept" then
                 pr.ans = {}
                 for wi,sel in ipairs(p.ans) do pr.ans[wi] = sel.value end
-            elseif p.kind == "table" then
+            elseif p.kind == "table" or p.kind == "stable" then
                 pr.cells = {}
                 for k,c in pairs(p.cells) do pr.cells[k] = c.input.value end
+            elseif p.kind == "closure" then
+                pr.sets = {}
+                for wi,inp in ipairs(p.sets) do pr.sets[wi] = inp.value end
             elseif p.kind == "regexp" then
                 pr.expr = p.expr.value
             end
@@ -537,9 +637,13 @@ local function restore_local()
                     for wi,sel in ipairs(p.ans) do
                         sel.value = (pr.ans or {})[wi] or ""
                     end
-                elseif p.kind == "table" then
+                elseif p.kind == "table" or p.kind == "stable" then
                     for k,c in pairs(p.cells) do
                         c.input.value = (pr.cells or {})[k] or ""
+                    end
+                elseif p.kind == "closure" then
+                    for wi,inp in ipairs(p.sets) do
+                        inp.value = (pr.sets or {})[wi] or ""
                     end
                 elseif p.kind == "regexp" then
                     if pr.expr then p.expr.value = pr.expr end
@@ -734,10 +838,15 @@ local function send_check()
                 for wi,sel in ipairs(p.ans) do
                     pd.ans[wi] = sel.value
                 end
-            elseif p.kind == "table" then
+            elseif p.kind == "table" or p.kind == "stable" then
                 pd.cells = {}
                 for k,c in pairs(p.cells) do
                     pd.cells[k] = c.input.value
+                end
+            elseif p.kind == "closure" then
+                pd.sets = {}
+                for wi,inp in ipairs(p.sets) do
+                    pd.sets[wi] = inp.value
                 end
             elseif p.kind == "regexp" then
                 pd.expr = p.expr.value

@@ -59,6 +59,15 @@ local function parse_label(label)
     return syms
 end
 
+-- nondeterministic types: "nfa" rejects lambda steps, "nfa-eps"
+-- (a.k.a. "nfa-lambda") accepts the explicit λ label
+local function is_nfa_type(t)
+    return t == "nfa" or t == "nfa-eps" or t == "nfa-lambda"
+end
+local function eps_type(t)
+    return t == "nfa-eps" or t == "nfa-lambda"
+end
+
 -- decoded editor model -> dfa, problems | nil, problems (unusable)
 local function model_to_dfa(m, expect_type)
     local problems = {}
@@ -130,13 +139,16 @@ local function model_to_dfa(m, expect_type)
                     .. to .. ": " .. perr
             else
                 for _, sym in ipairs(syms) do
-                    if alpha_set and not alpha_set[sym] then
+                    if sym == "λ" then
+                        problems[#problems + 1] = "epsilon (λ) transition "
+                            .. "on a DFA"
+                    elseif alpha_set and not alpha_set[sym] then
                         problems[#problems + 1] = "'" .. sym
                             .. "' is not in the alphabet"
                     else
                         if not alpha_set then dfa:add_symbol(sym) end
                         local key = from .. "\0" .. sym
-                        if expect_type ~= "nfa" and seen[key] then
+                        if not is_nfa_type(expect_type) and seen[key] then
                             problems[#problems + 1] = "nondeterministic: "
                                 .. "two " .. sym .. "-transitions leave "
                                 .. from
@@ -150,7 +162,7 @@ local function model_to_dfa(m, expect_type)
         end
     end
     -- totality (DFA only)
-    if expect_type ~= "nfa" and expect_type ~= "nfa-eps" then
+    if not is_nfa_type(expect_type) then
         local syms = {}
         for s, _ in pairs(dfa:get_symbols() or {}) do
             syms[#syms + 1] = s
@@ -165,6 +177,130 @@ local function model_to_dfa(m, expect_type)
         end
     end
     return dfa, problems
+end
+
+-- decoded editor model -> nfa/nfa-lambda, problems | nil, problems
+-- Same structure as model_to_dfa but parallel transitions are legal
+-- (the NFA stores target SETS per (from,label)), λ labels become
+-- epsilon transitions for eps types, and there is no totality check.
+local function model_to_nfa(m, expect_type)
+    local problems = {}
+    if type(m) ~= "table" or not m.states or #m.states == 0 then
+        return nil, {"no automaton drawn yet"}
+    end
+    local nfa = automata.make_nfa(eps_type(expect_type))
+    local alpha_list, alpha_set = parse_alphabet(m.alphabet)
+    if alpha_list then
+        for _,s in ipairs(alpha_list) do nfa:add_symbol(s) end
+    end
+    local names, by_name, initial = {}, {}, nil
+    for _, s in ipairs(m.states) do
+        local nm = tostring(s.name or s.id)
+        if by_name[nm] then
+            problems[#problems + 1] = "duplicate state name '" .. nm .. "'"
+        else
+            by_name[nm] = s
+            names[#names + 1] = nm
+            nfa:add_state(nm)
+            if s.initial then
+                if initial then
+                    problems[#problems + 1] = "more than one initial state"
+                else
+                    initial = nm
+                    nfa:set_initial(nm, true)
+                end
+            end
+            if s.accepting then nfa:set_accepting(nm, true) end
+        end
+    end
+    if not initial then problems[#problems + 1] = "no initial state" end
+    for i = 1, #m.states - 1 do
+        for j = i + 1, #m.states do
+            local a, b = m.states[i], m.states[j]
+            if type(a.x) == "number" and type(a.y) == "number"
+                    and type(b.x) == "number" and type(b.y) == "number" then
+                local dx = a.x - b.x
+                local dy = a.y - b.y
+                if dx * dx + dy * dy < 35 * 35 then
+                    problems[#problems + 1] = "states "
+                        .. tostring(a.name or a.id) .. " and "
+                        .. tostring(b.name or b.id)
+                        .. " overlap — drag them apart"
+                end
+            end
+        end
+    end
+    local name_of = {}
+    for _, s in ipairs(m.states) do
+        name_of[s.id] = s.name or tostring(s.id)
+        name_of[s.name] = name_of[s.id]
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local from, to = name_of[e.from], name_of[e.to]
+        if not (from and to) then
+            problems[#problems + 1] = "transition with unknown endpoint"
+        else
+            local syms, perr = parse_label(e.label)
+            if not syms then
+                problems[#problems + 1] = "transition " .. from .. "→"
+                    .. to .. ": " .. perr
+            else
+                for _, sym in ipairs(syms) do
+                    if sym == "λ" then
+                        if eps_type(expect_type) then
+                            nfa:add_transition(from, "λ", to)
+                        else
+                            problems[#problems + 1] = "epsilon (λ) "
+                                .. "transition on an NFA"
+                        end
+                    elseif alpha_set and not alpha_set[sym] then
+                        problems[#problems + 1] = "'" .. sym
+                            .. "' is not in the alphabet"
+                    else
+                        if not alpha_set then nfa:add_symbol(sym) end
+                        nfa:add_transition(from, sym, to)
+                    end
+                end
+            end
+        end
+    end
+    return nfa, problems
+end
+
+-- reference for aut parts: an automaton tuple ("({q0,...},...)") is
+-- parsed as an NFA-λ (DFA tuples are just deterministic NFAs); anything
+-- else is a regular expression converted by the Thompson construction.
+-- Returns (automaton, is_tuple) — the flag gates the state-count
+-- warning, which is meaningless against a generated Thompson machine.
+-- Separate cache: ref_dfa stores bare automata under the same keys.
+local ref_any_cache = {}
+local function ref_any(reference)
+    local hit = ref_any_cache[reference]
+    if hit then return hit.aut, hit.tuple end
+    local aut, is_tuple
+    if (reference or ""):match("^%s*%({") then
+        aut = automata.parse_nfa_lambda(reference)
+        is_tuple = true
+    else
+        aut = automata.regexp_to_nfa_lambda(
+            automata.parse_regexp_string(reference))
+    end
+    ref_any_cache[reference] = { aut = aut, tuple = is_tuple }
+    return aut, is_tuple
+end
+
+-- the complement machine: determinise (NFAs included), complete, then
+-- flip acceptance — only on a TOTAL dfa is flipping sound
+local function complemented(ref)
+    local d = ref
+    if not automata.is_finished_dfa(d) then
+        d = automata.nfa_to_dfa(d)
+    end
+    d = automata.complete_dfa(d)
+    for s, _ in pairs(d:get_states()) do
+        d:set_accepting(s, not d:is_accepting(s))
+    end
+    return d
 end
 
 -- ---------------- the DFA run ----------------
@@ -225,16 +361,22 @@ function M.check_aut(part, model_json, expect_type)
         return { ok=false, kind="empty",
                  msg="no automaton — draw the state diagram" }
     end
-    local dfa, problems = model_to_dfa(m, part.aut_type)
-    if not dfa then
+    local aut, problems
+    if is_nfa_type(part.aut_type) then
+        aut, problems = model_to_nfa(m, part.aut_type)
+    else
+        aut, problems = model_to_dfa(m, part.aut_type)
+    end
+    if not aut then
         return { ok=false, kind="fail", msg=table.concat(problems,"; ") }
     end
     if #problems > 0 then
         return { ok=false, kind="fail",
                  msg=table.concat(problems, ";  ") }
     end
-    local ref = ref_dfa(part.reference)
-    local cmp, cex_s, cex_r = automata.compare_dfa(dfa, ref)
+    local ref, is_tuple = ref_any(part.reference)
+    if part.complement then ref = complemented(ref) end
+    local cmp, cex_s, cex_r = automata.compare_languages(aut, ref)
     if cmp ~= "=" then
         local parts = {}
         if cex_s then parts[#parts+1] = "'" .. word_or_lam(cex_s)
@@ -244,8 +386,11 @@ function M.check_aut(part, model_json, expect_type)
         return { ok=false, kind="mismatch",
                  msg=table.concat(parts, ";  ") }
     end
+    if not is_tuple or is_nfa_type(part.aut_type) then
+        return { ok=true }
+    end
     local n_student, n_ref = 0, 0
-    for _ in pairs(dfa:get_states()) do n_student = n_student + 1 end
+    for _ in pairs(aut:get_states()) do n_student = n_student + 1 end
     for _ in pairs(ref:get_states()) do n_ref = n_ref + 1 end
     if n_student ~= n_ref then
         return { ok=false, kind="warn",
@@ -378,6 +523,102 @@ function M.check_regexp(part, expr)
     return RC.check(part, expr)
 end
 
+-- ---------------- state-set answers ----------------
+-- tolerant set syntax: "{q0,q2}", "q0,q2", "q0 q2", "∅", "{}" all work;
+-- returns the name->true table
+local function parse_state_set(s)
+    local set = {}
+    s = (s or ""):gsub("[{}%(%)]", "")
+    for tok in s:gmatch("[%w_]+") do set[tok] = true end
+    return set
+end
+
+-- "{q0,q2}" | "∅" for messages
+local function set_string(set)
+    local names = {}
+    for s, _ in pairs(set) do names[#names + 1] = tostring(s) end
+    table.sort(names)
+    if #names == 0 then return "∅" end
+    return "{" .. table.concat(names, ",") .. "}"
+end
+
+-- want/got are name->true tables; returns nil if equal, else a
+-- diff message ("missing q1; extra q3")
+local function set_diff(want, got)
+    local missing, extra = {}, {}
+    for s, _ in pairs(want) do
+        if not got[s] then missing[#missing + 1] = s end
+    end
+    for s, _ in pairs(got) do
+        if not want[s] then extra[#extra + 1] = s end
+    end
+    if #missing == 0 and #extra == 0 then return nil end
+    local parts = {}
+    if #missing > 0 then
+        parts[#parts + 1] = "missing " .. table.concat(missing, ",")
+    end
+    if #extra > 0 then
+        parts[#parts + 1] = "extra " .. table.concat(extra, ",")
+    end
+    return table.concat(parts, ";  ")
+end
+
+-- part.kind == "closure": λ-closure(qi) per state of the reference NFA
+function M.check_closure(part, sets)
+    local nfa = ref_any(part.reference)
+    local rows, all_ok = {}, true
+    for i, q in ipairs(part.states or {}) do
+        local want = automata.lambda_closure(nfa, q)
+        local got_s = sets and sets[i]
+        if not (got_s and got_s:match("%S")) then
+            all_ok = false
+            rows[i] = { kind="empty", msg="(unanswered)" }
+        else
+            local diff = set_diff(want, parse_state_set(got_s))
+            if diff then
+                all_ok = false
+                rows[i] = { kind="mismatch",
+                    msg="should be " .. set_string(want)
+                        .. "  (" .. diff .. ")" }
+            else
+                rows[i] = { kind="ok" }
+            end
+        end
+    end
+    return { ok=all_ok, rows=rows }
+end
+
+-- part.kind == "stable": the input transition function t(q,a) of the
+-- reference NFA(-λ) — cells are state SETS, evaluated through
+-- state_set_step_lambda (λ-closure before and after the step)
+function M.check_stable(part, cells)
+    local nfa = ref_any(part.reference)
+    local cellres, all_ok = {}, true
+    for i, q in ipairs(part.states or {}) do
+        for _, sym in ipairs(part.alphabet or {}) do
+            local qset = nfa:make_state_set()
+            qset[q] = true
+            local want = automata.state_set_step_lambda(nfa, qset, sym)
+            local got = cells and cells[i .. "|" .. sym]
+            if not (got and got:match("%S")) then
+                all_ok = false
+                cellres[i .. "|" .. sym] = { kind="empty", msg="" }
+            else
+                local diff = set_diff(want, parse_state_set(got))
+                if diff then
+                    all_ok = false
+                    cellres[i .. "|" .. sym] = { kind="mismatch",
+                        msg=set_string(want) }
+                else
+                    cellres[i .. "|" .. sym] = { kind="ok" }
+                end
+            end
+        end
+    end
+    return { ok=all_ok, cells=cellres }
+end
+
 M._model_to_dfa = model_to_dfa   -- exposed for tests
+M._model_to_nfa = model_to_nfa
 
 return M

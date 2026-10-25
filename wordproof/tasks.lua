@@ -512,6 +512,240 @@ parts_task{
 }
 
 -- ======================================================================
+-- 2.2  RE -> NFA-lambda, STEPWISE: each part is an NFA-λ construction
+--      checked against its own sub-expression; `seeds` lists earlier
+--      parts whose automaton can be inserted into this part's editor,
+--      so composition happens visibly on the canvas (insert dropdown).
+-- ======================================================================
+
+local function nfa_step(label, reference, seeds, alphabet)
+    return { kind="aut", aut_type="nfa-eps",
+             alphabet=alphabet or "a,b",
+             label=label, reference=reference, seeds=seeds }
+end
+
+parts_task{
+    id = "2.2n", letter = "N",
+    title = "From RE to NFA-λ: (ab)* ∪ a*",
+    desc = "Use the construction from the lecture to derive the state "
+        .. "diagram of an NFA-λ that accepts L(E), where "
+        .. "E = (ab)* ∪ a*.  Build it step by step: each part asks for "
+        .. "an intermediate automaton, and the 'insert' dropdown of a "
+        .. "part lets you place a copy of an earlier part's automaton "
+        .. "on the canvas to compose it further.  You may omit "
+        .. "obviously unnecessary λ-steps.",
+    parts = {
+        nfa_step("E = a", "a"),
+        nfa_step("E = b", "b"),
+        nfa_step("E = ab — from the NFAs for a and b "
+            .. "(insert both, then connect)", "ab", {1,2}),
+        nfa_step("E = (ab)* — from the NFA for ab", "(ab)*", {3}),
+        nfa_step("E = a* — from the NFA for a", "a*", {1}),
+        nfa_step("E = (ab)* ∪ a* — from the NFAs for (ab)* and a*",
+                 "(ab)*|a*", {4,5}),
+    },
+}
+
+parts_task{
+    id = "2.2o", letter = "O",
+    title = "From RE to NFA-λ: (abc)*a*",
+    desc = "The same stepwise construction for "
+        .. "E = (abc)* ∪ a* over {a, b, c}.",
+    parts = {
+        nfa_step("E = a", "a", nil, "a,b,c"),
+        nfa_step("E = b", "b", nil, "a,b,c"),
+        nfa_step("E = c", "c", nil, "a,b,c"),
+        nfa_step("E = ab — from the NFAs for a and b", "ab",
+                 {1,2}, "a,b,c"),
+        nfa_step("E = abc — from the NFAs for ab and c", "abc",
+                 {4,3}, "a,b,c"),
+        nfa_step("E = (abc)* — from the NFA for abc", "(abc)*",
+                 {5}, "a,b,c"),
+        nfa_step("E = a* — from the NFA for a", "a*",
+                 {1}, "a,b,c"),
+        nfa_step("E = (abc)* ∪ a* — from the NFAs for (abc)* and a*",
+                 "(abc)*|a*", {6,7}, "a,b,c"),
+    },
+}
+
+parts_task{
+    id = "2.2p", letter = "P",
+    title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
+    desc = "(extra) The same stepwise construction for "
+        .. "E = (ba ∪ bb)* ∪ (ab ∪ aa)*.",
+    parts = {
+        nfa_step("E = a", "a"),
+        nfa_step("E = b", "b"),
+        nfa_step("E = ba — from the NFAs for b and a", "ba", {2,1}),
+        nfa_step("E = bb — from the NFA for b (insert twice)", "bb", {2}),
+        nfa_step("E = ba ∪ bb — from the NFAs for ba and bb",
+                 "ba|bb", {3,4}),
+        nfa_step("E = (ba ∪ bb)* — from the NFA for ba ∪ bb",
+                 "(ba|bb)*", {5}),
+        nfa_step("E = ab — from the NFAs for a and b", "ab", {1,2}),
+        nfa_step("E = aa — from the NFA for a (insert twice)", "aa", {1}),
+        nfa_step("E = ab ∪ aa — from the NFAs for ab and aa",
+                 "ab|aa", {7,8}),
+        nfa_step("E = (ab ∪ aa)* — from the NFA for ab ∪ aa",
+                 "(ab|aa)*", {9}),
+        nfa_step("E = (ba ∪ bb)* ∪ (ab ∪ aa)* — from the two "
+            .. "*-constructions", "(ba|bb)*|(ab|aa)*", {6,10}),
+    },
+}
+
+-- ======================================================================
+-- 2.3  NFA -> DFA (Sudkamp 5.36): lambda-closures, input transition
+--      function t (set-valued table), DFA diagram, regexp
+-- ======================================================================
+local Q_NFA = "({q0,q1,q2},{a,b,c},"
+    .. "{(q0,a,q0),(q0,c,q1),(q0,λ,q2),(q1,c,q1),"
+    .. "(q2,b,q2),(q2,b,q1)},q0,{q1,q2})"
+local Q_MODEL = {
+    type="nfa-eps", alphabet="a,b,c",
+    states = {
+        {id=1, name="q0", x=70,  y=130, initial=true},
+        {id=2, name="q1", x=370, y=130, accepting=true},
+        {id=3, name="q2", x=300, y=330, accepting=true},
+    },
+    transitions = {
+        {id=1, from=1, to=1, label="a"},
+        {id=2, from=1, to=2, label="c"},
+        {id=3, from=1, to=3, label="λ"},
+        {id=4, from=2, to=2, label="c"},
+        {id=5, from=3, to=3, label="b"},
+        {id=6, from=3, to=2, label="b"},
+    },
+}
+-- subset-construction DFA (sets named S0={q0,q2}, S1={q1}, S12={q1,q2},
+-- SE=∅); checked by language, so names do not matter
+local Q_DFA = "({S0,S1,S12,SE},{a,b,c},"
+    .. "{(S0,a,S0),(S0,b,S12),(S0,c,S1),"
+    .. "(S1,a,SE),(S1,b,SE),(S1,c,S1),"
+    .. "(S12,a,SE),(S12,b,S12),(S12,c,S1),"
+    .. "(SE,a,SE),(SE,b,SE),(SE,c,SE)},S0,{S0,S1,S12})"
+
+parts_task{
+    id = "2.3q", letter = "Q",
+    title = "Determinise an NFA-λ",
+    desc = "Let M be the following NFA-λ.  Determinise it following "
+        .. "the algorithm from the lecture (or Algorithm 5.6.3 in the "
+        .. "Sudkamp book).",
+    given = { kind="aut", model=Q_MODEL, readonly=true,
+              alphabet="a,b,c", aut_type="nfa-eps" },
+    parts = {
+        { kind="closure",
+          label="Compute the λ-closure(qi) for i = 0,1,2.",
+          states={"q0","q1","q2"}, reference=Q_NFA },
+        { kind="stable",
+          label="Give the input transition function t for M "
+             .. "(cells are state sets; ∅ for the empty set).",
+          states={"q0","q1","q2"}, alphabet={"a","b","c"},
+          reference=Q_NFA },
+        { kind="aut", aut_type="dfa", alphabet="a,b,c",
+          label="Construct a state diagram of a DFA equivalent to M.",
+          reference=Q_DFA },
+        { kind="regexp", label="Give a regular expression for L(M).",
+          reference="a*b*c*" },
+    },
+}
+
+-- (extra) the "aa twice, separately" problem: RE -> NFA -> DFA
+parts_task{
+    id = "2.3u", letter = "U",
+    title = "(extra) aa twice, separately",
+    desc = "(extra) Let L be the language of words over {a, b} in "
+        .. "which the substring aa occurs at least twice separately "
+        .. "(aaa ∉ L).",
+    parts = {
+        { kind="regexp",
+          label="Give a regular expression E with L(E) = L.",
+          reference="(a|b)*aa(a|b)*aa(a|b)*" },
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          label="Draw the state diagram of an NFA (with or without "
+             .. "λ-steps) that accepts L.",
+          reference="(a|b)*aa(a|b)*aa(a|b)*" },
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="Determinise your automaton: draw a DFA for L.",
+          reference="(a|b)*aa(a|b)*aa(a|b)*" },
+    },
+}
+
+-- ======================================================================
+-- 2.4  Complement: flip on a DFA (easy) vs determinise-then-flip (NFA)
+-- ======================================================================
+-- the 2.4a machine is Exercise 5.3 again — K_DFA/K_MODEL from sheet 1
+parts_task{
+    id = "2.4r", letter = "R",
+    title = "Complement of a DFA",
+    desc = "Construct a finite automaton that accepts the complement "
+        .. "of the language accepted by the finite automaton M below "
+        .. "(this is very easy).",
+    given = { kind="aut", model=K_MODEL, readonly=true,
+              alphabet="a,b", aut_type="dfa" },
+    parts = {
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="Draw an automaton for L(M)ᶜ.",
+          reference=K_DFA, complement=true },
+    },
+}
+
+-- 5.23 NFA: parallel a-edges out of q0 — determinisation first
+local S_NFA = "({q0,q1,q2},{a,b},"
+    .. "{(q0,a,q0),(q0,a,q1),(q1,b,q1),(q1,b,q2),"
+    .. "(q2,a,q1),(q2,a,q0)},q0,{q2})"
+local S_MODEL = {
+    type="nfa", alphabet="a,b",
+    states = {
+        {id=1, name="q0", x=70,  y=130, initial=true},
+        {id=2, name="q1", x=370, y=130},
+        {id=3, name="q2", x=300, y=330, accepting=true},
+    },
+    transitions = {
+        {id=1, from=1, to=1, label="a"},
+        {id=2, from=1, to=2, label="a"},
+        {id=3, from=2, to=2, label="b"},
+        {id=4, from=2, to=3, label="b"},
+        {id=5, from=3, to=2, label="a"},
+        {id=6, from=3, to=1, label="a"},
+    },
+}
+
+parts_task{
+    id = "2.4s", letter = "S",
+    title = "Complement of an NFA",
+    desc = "Construct a finite automaton that accepts the complement "
+        .. "of the language accepted by the finite automaton M below.  "
+        .. "Hint: this is not so easy — M is nondeterministic, so "
+        .. "determinise first.  (Any automaton for the complement "
+        .. "language is accepted.)",
+    given = { kind="aut", model=S_MODEL, readonly=true,
+              alphabet="a,b", aut_type="nfa" },
+    parts = {
+        { kind="aut", aut_type="nfa", alphabet="a,b",
+          label="Draw an automaton for L(M)ᶜ.",
+          reference=S_NFA, complement=true },
+    },
+}
+
+-- ======================================================================
+-- 2.5  NFA -> RE (state elimination): the 5.23 machine again
+-- ======================================================================
+parts_task{
+    id = "2.5t", letter = "T",
+    title = "From NFA to regular expression",
+    desc = "Use the algorithm from the lecture (state elimination) to "
+        .. "obtain a regular expression for the language accepted by "
+        .. "the following automaton.",
+    given = { kind="aut", model=S_MODEL, readonly=true,
+              alphabet="a,b", aut_type="nfa" },
+    parts = {
+        { kind="regexp",
+          label="Give a regular expression for L(M).",
+          reference="a*ab*b(aa*ab*b|ab*b)*" },
+    },
+}
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -550,6 +784,14 @@ M.sheets = {
       groups = {
         { id="2.1", title="Exercise 2.1",
           subtasks = {"2.1m"} },
+        { id="2.2", title="Exercise 2.2",
+          subtasks = {"2.2n","2.2o","2.2p"} },
+        { id="2.3", title="Exercise 2.3",
+          subtasks = {"2.3q","2.3u"} },
+        { id="2.4", title="Exercise 2.4",
+          subtasks = {"2.4r","2.4s"} },
+        { id="2.5", title="Exercise 2.5",
+          subtasks = {"2.5t"} },
       }},
 }
 
@@ -592,11 +834,14 @@ local function view_part(pd, pi)
         v.checks = pd.checks
         v.initial = pd.initial
         v.readonly = pd.readonly or false
+        v.seeds = pd.seeds
     elseif pd.kind == "trace" or pd.kind == "accept" then
         v.words = pd.words
-    elseif pd.kind == "table" then
+    elseif pd.kind == "table" or pd.kind == "stable" then
         v.states, v.alphabet = pd.states, pd.alphabet
         v.initial, v.accepting = pd.initial, pd.accepting
+    elseif pd.kind == "closure" then
+        v.states = pd.states
     end
     return v
 end
