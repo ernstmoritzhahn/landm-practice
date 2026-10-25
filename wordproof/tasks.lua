@@ -507,7 +507,7 @@ parts_task{
         { kind="aut", aut_type="dfa", alphabet="a,b",
           label="E = ((aa)+bb)*", reference=R21c_DFA },
         { kind="aut", aut_type="dfa", alphabet="a,b",
-          label="E = aa(a|b)+bb", reference=R21d_DFA },
+          label="E = aa(a∪b)+bb", reference=R21d_DFA },
     },
 }
 
