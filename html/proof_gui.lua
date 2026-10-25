@@ -751,12 +751,14 @@ end
 local function clear_pump_rows(p)
     if p.splitbox then clear(p.splitbox) end
     p.i_inps, p.row_st = {}, {}
+    p.gen_inp, p.gen_st, p.last_k = nil, nil, nil
 end
 local function request_splits(pi)
     local p = state.parts[pi]
     if not (p and p.z) then return end
     util.js_post_message(json.encode(
-        { what="pump_splits", id=state.id, pi=pi, z=p.z.value }))
+        { what="pump_splits", id=state.id, pi=pi, z=p.z.value,
+          k=p.ksel and tonumber(p.ksel.value) or nil }))
 end
 -- (re)build the distinguishing-word rows for the ticked pairs;
 -- values survive via the `old` stash
@@ -976,7 +978,20 @@ local function render_part(pv, pi)
         local btn = document:createElement("button")
         btn.className, btn.textContent = "seedbtn", "decompose"
         btn:addEventListener("click", function() request_splits(pi) end)
-        r:appendChild(btn); r:appendChild(zst)
+        r:appendChild(btn)
+        local ksel = document:createElement("select")
+        for kv = 2, 5 do
+            local o = document:createElement("option")
+            o.value, o.textContent = tostring(kv), "k = " .. kv
+            ksel:appendChild(o)
+        end
+        ksel.value = "3"
+        ksel:addEventListener("change", function()
+            dirty(zst)()
+            request_splits(pi)
+        end)
+        r:appendChild(ksel); r:appendChild(zst)
+        rec.ksel = ksel
         box:appendChild(r)
         local sp = el("div")
         box:appendChild(sp)
@@ -1080,6 +1095,8 @@ save_local = function()
                 for k, sel in pairs(p.sels) do pr.sel[k] = sel.value end
             elseif p.kind == "pumping" then
                 pr.z = p.z.value
+                pr.k = p.ksel and p.ksel.value or nil
+                pr.gen_i = p.gen_inp and p.gen_inp.value or nil
                 pr.is = {}
                 for ri, inp in ipairs(p.i_inps) do pr.is[ri] = inp.value end
             elseif p.kind == "min_table" then
@@ -1165,7 +1182,9 @@ local function restore_local()
                     end
                 elseif p.kind == "pumping" then
                     if pr.z then p.z.value = pr.z end
+                    if pr.k and p.ksel then p.ksel.value = pr.k end
                     p.pending_is = pr.is
+                    p.pending_gen = pr.gen_i
                     if pr.z and pr.z:match("%S") then
                         request_splits(tonumber(pi))
                     end
@@ -1460,8 +1479,11 @@ send_check = function(only_pi)
                 for k, sel in pairs(p.sels) do pd.sel[k] = sel.value end
             elseif p.kind == "pumping" then
                 pd.z = p.z.value
+                pd.k = p.last_k or
+                       (p.ksel and tonumber(p.ksel.value))
                 pd.is = {}
                 for ri, inp in ipairs(p.i_inps) do pd.is[ri] = inp.value end
+                pd.gen_i = p.gen_inp and p.gen_inp.value or nil
             elseif p.kind == "min_table" then
                 pd.marks = {}
                 for k, c in pairs(p.cells) do
@@ -1573,6 +1595,35 @@ local function render_splits(pi, res)
         p.splitbox:appendChild(r)
         p.i_inps[ri], p.row_st[ri] = inp, rst
     end
+    -- the general decomposition (all k): only available when the
+    -- first block of z(k) dominates the first-k window — then every
+    -- legal split has v = sym^q for some 1 ≤ q ≤ k
+    p.last_k = res.k
+    local gen = res.gen or {}
+    if gen.sym then
+        p.splitbox:appendChild(text("div",
+            "general decomposition (all k):  every legal split has "
+            .. "v = " .. gen.sym .. "^q for some 1 ≤ q ≤ k.",
+            "wlabel"))
+        local gr = el("div", "wordrow")
+        gr:appendChild(text("span", "i(k,q) =", "wlabel"))
+        local gst = el("span", "st")
+        local ginp = mk_input(nil, 8, dirty(gst))
+        ginp.placeholder = "e.g. 2, q+1, k+1"
+        if p.pending_gen then
+            ginp.value = p.pending_gen
+            p.pending_gen = nil
+        end
+        gr:appendChild(ginp); gr:appendChild(gst)
+        p.splitbox:appendChild(gr)
+        p.gen_inp, p.gen_st = ginp, gst
+    elseif gen.err then
+        p.splitbox:appendChild(text("div",
+            "general decomposition: " .. gen.err, "wlabel"))
+        p.gen_inp = nil
+    else
+        p.gen_inp = nil
+    end
     if p.pending_is then
         for ri, v in pairs(p.pending_is) do
             if p.i_inps[tonumber(ri)] then
@@ -1675,6 +1726,12 @@ local function paint(res)
                     if pres.re.ok then paint_st(p.re_st, "ok")
                     else paint_st(p.re_st, pres.re.kind or "mismatch",
                                   pres.re.msg) end
+                end
+                if pres.gen and p.gen_st then
+                    paint_st(p.gen_st,
+                             pres.gen.ok and "ok"
+                             or pres.gen.kind or "mismatch",
+                             pres.gen.msg)
                 end
             end
         end

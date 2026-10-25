@@ -88,7 +88,7 @@ return function(data)
         local pdef = task and task.parts and task.parts[data.pi]
         local res
         if pdef and pdef.kind == "pumping" then
-            res = DC.pump_splits(pdef, data.z)
+            res = DC.pump_splits(pdef, data.z, data.k)
         else
             res = { err = "not a pumping part" }
         end
@@ -154,7 +154,8 @@ return function(data)
                     elseif pdef.kind == "choice" then
                         return DC.check_choice(pdef, pd.sel)
                     elseif pdef.kind == "pumping" then
-                        return DC.check_pumping(pdef, pd.z, pd.is)
+                        return DC.check_pumping(pdef, pd.z, pd.is,
+                                                pd.k, pd.gen_i)
                     elseif pdef.kind == "min_table" then
                         return DC.check_min_table(pdef, pd.marks,
                                                   pd.classes, pd.wit)

@@ -912,10 +912,14 @@ parts_task{
         .. "for EVERY k (write e.g. a^k b^k — a^{k+1}, a^{2k}, a^3 "
         .. "work too).  'decompose' then lists every legal split "
         .. "z = uvw with |uv| ≤ k and |v| ≥ 1 for k = 3 — pick a "
-        .. "pumping index i for EACH split so that uv^iw leaves L. "
-        .. "NOTE: a real proof must do this for EVERY k — here you "
-        .. "only practise the mechanics on the instance k = 3 "
-        .. "(your z(k) itself is checked for all k ≥ 1).",
+        .. "pumping index i for EACH split so that uv^iw leaves L "
+        .. "(you can redo the example at other values of k).  Then do "
+        .. "the GENERAL decomposition: if z's first k letters lie in "
+        .. "one block, every legal split has v = sym^q for some "
+        .. "1 ≤ q ≤ k — give i(k,q) there (constants like 2 or 0 "
+        .. "work, or e.g. k+1) — the checker then verifies uv^iw ∉ L "
+        .. "for all k ≥ 1 symbolically when it can, and samples "
+        .. "k ≤ 8 otherwise.",
     parts = {
         pstep("a)", "eq_ab",
               "L = {w ∈ {a,b}* | #a(w) = #b(w)}"),
