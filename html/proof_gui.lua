@@ -507,6 +507,10 @@ local function upsert_component(m, tag, sm)
         if n then
             n.locked = true
             n.seed = tag
+            -- the component's own entry/exit markers follow the
+            -- stage automaton's flags on every refresh
+            n.seed_entry = s.initial and true or nil
+            n.seed_exit = s.accepting and true or nil
             name_of[tostring(s.id)] = n     -- keep position + flags
         end
     end
@@ -544,7 +548,9 @@ local function upsert_component(m, tag, sm)
                         name = prefix .. tostring(s.name or s.id),
                         x = (s.x or 0) + bx, y = (s.y or 0) + by,
                         initial = false, accepting = false,
-                        locked = true, seed = tag }
+                        locked = true, seed = tag,
+                        seed_entry = s.initial and true or nil,
+                        seed_exit = s.accepting and true or nil }
             m.states[#m.states + 1] = n
             name_of[tostring(s.id)] = n
             by_name[n.name] = n
@@ -636,7 +642,10 @@ local function takeover_simplify(pi)
         landm_call("aut_state", cp.app) or "")
     if not (ok and type(m) == "table" and m.states
             and #m.states > 0) then return end
-    for _, s in ipairs(m.states) do s.locked, s.seed = nil, nil end
+    for _, s in ipairs(m.states) do
+        s.locked, s.seed = nil, nil
+        s.seed_entry, s.seed_exit = nil, nil
+    end
     for _, t in ipairs(m.transitions or {}) do
         t.locked, t.seed = nil, nil
     end
