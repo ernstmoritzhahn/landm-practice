@@ -414,6 +414,193 @@ local function insert_seed(rec, spi)
     landm_call("aut_load", rec.app, json.encode(cm))
 end
 
+-- ---------- guided construction: locked components + simplify ----------
+-- a stage's effective automaton: its simplify output when that has
+-- content, else the compose editor's content.  Returns a decoded model
+-- table or nil for an empty stage.
+local function stage_aut_json(sid)
+    local e = state.stage_map and state.stage_map[sid]
+    if not e then return nil end
+    local function app_model(pi)
+        local p = state.parts[pi]
+        if not (p and p.app) then return nil end
+        local s = landm_call("aut_state", p.app)
+        if not s or s == "" then return nil end
+        local ok, m = pcall(json.decode, s)
+        if not (ok and type(m) == "table"
+                and m.states and #m.states > 0) then
+            return nil
+        end
+        return m
+    end
+    if e.simplify then
+        local m = app_model(e.simplify)
+        if m then return m end
+    end
+    return app_model(e.compose)
+end
+
+local GGRID = 66
+
+-- embed the stage's effective automaton as a locked, tagged component.
+-- Name-preserving merge: embedded nodes that still appear in the stage
+-- automaton keep position AND wiring flags (a refresh after the student
+-- already wired flags does not undo that work); stale tagged nodes are
+-- removed together with incident edges; missing nodes are placed right
+-- of the kept block (or of all content on first embed).  The stage's
+-- internal transitions are rebuilt to match — student edges to kept
+-- nodes are untouched.
+local function upsert_component(m, tag, sm)
+    -- tag names the embedded copy ("b", "b#2"); # is not name-safe so
+    -- node names use the #-stripped prefix while .seed keeps the tag
+    local prefix = tag:gsub("#", "_") .. "_"
+    m.states = m.states or {}
+    m.transitions = m.transitions or {}
+    local want_names = {}
+    for _, s in ipairs(sm.states or {}) do
+        want_names[prefix .. tostring(s.name or s.id)] = true
+    end
+    -- 1. drop stale embedded nodes (+ incident edges of any kind)
+    local dead = {}
+    local kept_states = {}
+    for _, s in ipairs(m.states) do
+        if s.seed == tag
+           and not want_names[tostring(s.name or s.id)] then
+            dead[s.id] = true
+        else
+            kept_states[#kept_states + 1] = s
+        end
+    end
+    m.states = kept_states
+    if next(dead) then
+        local kept_tr = {}
+        for _, e in ipairs(m.transitions) do
+            if not (dead[e.from] or dead[e.to]) then
+                kept_tr[#kept_tr + 1] = e
+            end
+        end
+        m.transitions = kept_tr
+    end
+    -- 2. indexes: by name, by seed-node id; keep-matched nodes stay put
+    local by_name, next_id = {}, 0
+    for _, s in ipairs(m.states) do
+        by_name[tostring(s.name or s.id)] = s
+        if type(s.id) == "number" and s.id > next_id then
+            next_id = s.id
+        end
+    end
+    for _, e in ipairs(m.transitions) do
+        if type(e.id) == "number" and e.id > next_id then
+            next_id = e.id
+        end
+    end
+    local name_of = {}              -- seed node id -> result node
+    for _, s in ipairs(sm.states or {}) do
+        local wn = prefix .. tostring(s.name or s.id)
+        local n = by_name[wn]
+        if n and n.seed == tag then
+            n.locked = true                  -- re-assert in case the
+            n.seed = tag                     --   model was hand-edited
+            name_of[tostring(s.id)] = n      -- keep position + flags
+        end
+    end
+    -- anchor for fresh nodes: keep the block's current min corner when
+    -- anything survived, else append right of the content bbox
+    local mnx, mny
+    for _, s in ipairs(sm.states or {}) do
+        local x, y = s.x or 0, s.y or 0
+        if not mnx or x < mnx then mnx = x end
+        if not mny or y < mny then mny = y end
+    end
+    if not mnx then return end   -- empty stage automaton
+    local bx, by
+    if next(name_of) then
+        for _, n in pairs(name_of) do
+            if not bx or n.x < bx then bx = n.x end
+            if not by or n.y < by then by = n.y end
+        end
+        bx, by = bx - mnx, by - mny
+    else
+        local maxx = nil
+        for _, s in ipairs(m.states) do
+            if type(s.x) == "number"
+               and (not maxx or s.x > maxx) then maxx = s.x end
+        end
+        bx = (maxx and (maxx + 3 * GGRID) or GGRID) - mnx
+        by = GGRID - mny
+    end
+    -- 3. add missing nodes (flags stripped: initial/accepting on a
+    -- component state is a wiring choice the student makes)
+    for _, s in ipairs(sm.states or {}) do
+        if not name_of[tostring(s.id)] then
+            next_id = next_id + 1
+            local n = { id = next_id,
+                        name = prefix .. tostring(s.name or s.id),
+                        x = (s.x or 0) + bx, y = (s.y or 0) + by,
+                        initial = false, accepting = false,
+                        locked = true, seed = tag }
+            m.states[#m.states + 1] = n
+            name_of[tostring(s.id)] = n
+            by_name[n.name] = n
+        end
+    end
+    -- 4. rebuild the stage's internal edges verbatim
+    local kept_tr = {}
+    for _, e in ipairs(m.transitions) do
+        if e.seed ~= tag then kept_tr[#kept_tr + 1] = e end
+    end
+    m.transitions = kept_tr
+    for _, e in ipairs(sm.transitions or {}) do
+        local f, t = name_of[tostring(e.from)], name_of[tostring(e.to)]
+        if f and t then
+            next_id = next_id + 1
+            m.transitions[#m.transitions + 1] = {
+                id = next_id, from = f.id, to = t.id,
+                label = e.label or "", locked = true, seed = tag }
+        end
+    end
+end
+
+local function refresh_components(pi)
+    local pv = state.view.parts[pi]
+    local p = state.parts[pi]
+    if not (pv and p and p.app) then return end
+    local ok, m = pcall(json.decode,
+        landm_call("aut_state", p.app) or "")
+    if not (ok and type(m) == "table" and m.states) then
+        m = { type = p.aut_type or "nfa-eps", alphabet = pv.alphabet,
+              states = {}, transitions = {} }
+    end
+    for _, tag in ipairs(pv.seeds_locked or {}) do
+        local stage = tag:match("^[^#]+") or tag
+        local sm = stage_aut_json(stage)
+        if sm then upsert_component(m, tag, sm) end
+    end
+    landm_call("aut_load", p.app, json.encode(m))
+end
+
+-- simplify slot: take over the stage's compose automaton as a plain,
+-- fully editable copy (locks/tags stripped — manual simplification
+-- must be able to remove anything)
+local function takeover_simplify(pi)
+    local pv = state.view.parts[pi]
+    local p = state.parts[pi]
+    local e = pv and state.stage_map
+              and state.stage_map[pv.takeover_from]
+    local cp = e and state.parts[e.compose]
+    if not (cp and cp.app and p and p.app) then return end
+    local ok, m = pcall(json.decode,
+        landm_call("aut_state", cp.app) or "")
+    if not (ok and type(m) == "table" and m.states
+            and #m.states > 0) then return end
+    for _, s in ipairs(m.states) do s.locked, s.seed = nil, nil end
+    for _, t in ipairs(m.transitions or {}) do
+        t.locked, t.seed = nil, nil
+    end
+    landm_call("aut_load", p.app, json.encode(m))
+    dirty(nil)()
+end
+
 local function render_part(pv, pi)
     local box = el("div", "part")
     local lab = el("div", "partlabel")
@@ -450,6 +637,40 @@ local function render_part(pv, pi)
                 insert_seed(rec, tonumber(sel.value))
             end)
             sr:appendChild(sel); sr:appendChild(btn)
+            box:appendChild(sr)
+        end
+        if pv.seeds_locked and #pv.seeds_locked > 0 then
+            -- guided composition: the previous steps' automata are
+            -- given as locked components; refresh re-syncs them with
+            -- the (possibly simplified) current content of those steps
+            local sr = el("div", "wordrow")
+            local labels = {}
+            for _, s in ipairs(pv.seeds_locked) do
+                labels[#labels + 1] = s .. ")"
+            end
+            sr:appendChild(text("span",
+                "given components: " .. table.concat(labels, ", "),
+                "wlabel"))
+            local btn = el("button", "seedbtn")
+            btn.textContent = "refresh components"
+            btn:addEventListener("click", function()
+                refresh_components(pi)
+            end)
+            sr:appendChild(btn)
+            box:appendChild(sr)
+        end
+        if pv.takeover_from then
+            local sr = el("div", "wordrow")
+            sr:appendChild(text("span",
+                "simplify (optional): take over, then reduce — "
+                .. "if used, this becomes the next step's component",
+                "wlabel"))
+            local btn = el("button", "seedbtn")
+            btn.textContent = "take over the automaton"
+            btn:addEventListener("click", function()
+                takeover_simplify(pi)
+            end)
+            sr:appendChild(btn)
             box:appendChild(sr)
         end
         if pv.with_regexp then
@@ -632,6 +853,7 @@ local function restore_local()
                     if p.app and type(pr.aut) == "string"
                        and pr.aut ~= "" then
                         landm_call("aut_load", p.app, pr.aut)
+                        p.restored = true
                     end
                     if p.re and pr.re then p.re.value = pr.re end
                 elseif p.kind == "trace" then
@@ -751,11 +973,45 @@ local function render(view)
         if view.given then
             proof_el:appendChild(render_given(view.given))
         end
+        -- guided construction: stage id -> compose/simplify part
+        -- indices, so seeds pull the stage's effective automaton and
+        -- takeover finds its compose editor
+        state.stage_map = {}
+        for pi,pv in ipairs(view.parts or {}) do
+            if pv.sid then
+                local e = state.stage_map[pv.sid] or {}
+                e.compose = pi
+                state.stage_map[pv.sid] = e
+            end
+            if pv.takeover_from then
+                local e = state.stage_map[pv.takeover_from] or {}
+                e.simplify = pi
+                state.stage_map[pv.takeover_from] = e
+            end
+        end
         for pi,pv in ipairs(view.parts or {}) do
             proof_el:appendChild(render_part(pv, pi))
         end
         boot_pending_aut()
         restore_local()
+        -- first visit to a guided task: pre-place the locked given
+        -- components so the canvas never starts bare; a non-empty
+        -- (restored) model keeps the student's work instead
+        for pi,pv in ipairs(view.parts or {}) do
+            if pv.seeds_locked and #pv.seeds_locked > 0 then
+                local p = state.parts[pi]
+                -- restored work may still be in the app's pending
+                -- queue when aut_state reads ""; never clobber it
+                if p and not p.restored then
+                    local s = p.app and landm_call("aut_state", p.app)
+                    local ok, m = pcall(json.decode, s or "")
+                    if not (ok and type(m) == "table"
+                            and m.states and #m.states > 0) then
+                        refresh_components(pi)
+                    end
+                end
+            end
+        end
         return
     end
     if view.type == "regexp" then
@@ -834,6 +1090,25 @@ send_check = function(only_pi)
                 pd.aut = p.app
                     and landm_call("aut_state", p.app) or ""
                 if p.re then pd.re = p.re.value end
+                local pvd = state.view.parts and state.view.parts[pi]
+                if pvd and pvd.seeds_locked then
+                    pd.seeds = {}
+                    for _, t in ipairs(pvd.seeds_locked) do
+                        local st = t:match("^[^#]+") or t
+                        if not pd.seeds[st] then
+                            local m = stage_aut_json(st)
+                            if m then
+                                pd.seeds[st] = json.encode(m)
+                            end
+                        end
+                    end
+                end
+                if pvd and pvd.takeover_from then
+                    local e = state.stage_map[pvd.takeover_from]
+                    local cp = e and state.parts[e.compose]
+                    pd.src = cp and cp.app
+                        and landm_call("aut_state", cp.app) or ""
+                end
             elseif p.kind == "trace" then
                 pd.seqs = {}
                 for wi,inp in ipairs(p.seqs) do
@@ -906,6 +1181,9 @@ local KIND = {
     missing_ih     = { "fail",   "✗" },
     parse          = { "fail",   "✗" },
     too_large      = { "fail",   "✗" },
+    comp_missing   = { "fail",   "✗" },
+    stale          = { "fail",   "✗" },
+    disconnected   = { "fail",   "✗" },
     empty          = { "pending","□" },
 }
 
@@ -1088,6 +1366,10 @@ local function current_task_id()
     local g = sh and sh.groups[state.group_i]
     local sub = g and g.subtasks[state.sub_i]
     if not sub then return nil end
+    if sub.variants then
+        local v = sub.variants[state.variant_i or 1]
+        if v then return v.id end
+    end
     if state.free and sub.free_id then return sub.free_id end
     return sub.id
 end
@@ -1107,6 +1389,7 @@ local function render_tabs()
             gi==state.group_i and "tab active" or "tab")
         t:addEventListener("click", function()
             state.group_i, state.sub_i = gi, 1
+            state.variant_i = 1
             render_tabs(); select_task()
         end)
         tabs_el:appendChild(t)
@@ -1120,6 +1403,7 @@ local function render_tabs()
         else t.textContent = label end
         t:addEventListener("click", function()
             state.sub_i = si
+            state.variant_i = 1
             render_tabs(); select_task()
         end)
         subtabs_el:appendChild(t)
@@ -1127,7 +1411,21 @@ local function render_tabs()
     -- variant toggle: guided vs free (per subtask, student chooses)
     clear(variant_el)
     local sub = g.subtasks[state.sub_i]
-    if sub and sub.free_id then
+    if sub and sub.variants then
+        variant_el:appendChild(text("span", "variant: ", "varlabel"))
+        for vi,v in ipairs(sub.variants) do
+            local b = text("button", v.label,
+                (state.variant_i or 1)==vi and "vartab active"
+                                           or "vartab")
+            b:addEventListener("click", function()
+                if (state.variant_i or 1) ~= vi then
+                    state.variant_i = vi
+                    render_tabs(); select_task()
+                end
+            end)
+            variant_el:appendChild(b)
+        end
+    elseif sub and sub.free_id then
         variant_el:appendChild(text("span", "variant: ", "varlabel"))
         for _,v in ipairs{{free=false,label="guided"},{free=true,label="free proof"}} do
             local b = text("button", v.label,

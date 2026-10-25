@@ -526,6 +526,8 @@ end
 
 parts_task{
     id = "2.2n", letter = "N",
+    variants = { {id="2.2n", label="free form"},
+                 {id="2.2n-g", label="guided"} },
     title = "From RE to NFA-λ: (ab)* ∪ a*",
     desc = "Use the construction from the lecture to derive the state "
         .. "diagram of an NFA-λ that accepts L(E), where "
@@ -548,6 +550,8 @@ parts_task{
 
 parts_task{
     id = "2.2o", letter = "O",
+    variants = { {id="2.2o", label="free form"},
+                 {id="2.2o-g", label="guided"} },
     title = "From RE to NFA-λ: (abc)*a*",
     desc = "The same stepwise construction for "
         .. "E = (abc)* ∪ a* over {a, b, c}.",
@@ -570,6 +574,8 @@ parts_task{
 
 parts_task{
     id = "2.2p", letter = "P",
+    variants = { {id="2.2p", label="free form"},
+                 {id="2.2p-g", label="guided"} },
     title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
     desc = "(extra) The same stepwise construction for "
         .. "E = (ba ∪ bb)* ∪ (ab ∪ aa)*.",
@@ -590,6 +596,124 @@ parts_task{
                  "(ab|aa)*", {9}),
         nfa_step("E = (ba ∪ bb)* ∪ (ab ∪ aa)* — from the two "
             .. "*-constructions", "(ba|bb)*|(ab|aa)*", {6,10}),
+    },
+}
+
+-- ----------------------------------------------------------------------
+-- guided variants: same construction chain, but the components from
+-- previous steps are GIVEN — embedded as locked, visually distinct
+-- subgraphs (refresh-components button re-syncs them).  Composition is
+-- checked structurally: the embedded parts must be present verbatim
+-- and wired into the automaton (check="compose").  Each composition
+-- step is followed by an optional simplify slot whose content — taken
+-- over from the compose editor, then reduced by hand — becomes the
+-- effective automaton the next step embeds.
+
+local function gstep(sid, label, reference, seeds, alphabet)
+    return { kind="aut", aut_type="nfa-eps",
+             alphabet=alphabet or "a,b",
+             label=label, reference=reference, sub=sid .. ")",
+             sid=sid, seeds_locked=seeds,
+             check = seeds and "compose" or nil }
+end
+
+local function sstep(sid, reference, alphabet)
+    return { kind="aut", aut_type="nfa-eps",
+             alphabet=alphabet or "a,b",
+             label="optional: simplify — 'take over' adopts the "
+                .. "automaton above; simplify it by hand",
+             sub=sid .. "')",
+             takeover_from=sid, reference=reference, optional=true }
+end
+
+parts_task{
+    id = "2.2n-g", letter = "N",
+    title = "From RE to NFA-λ: (ab)* ∪ a*",
+    desc = "Guided variant: each composition step embeds the automata "
+        .. "of the earlier steps as locked components (the navy "
+        .. "parts) — wire them together with your own states and "
+        .. "transitions.  'refresh components' re-syncs them with your "
+        .. "current earlier-step automata; an optional simplify slot "
+        .. "lets you reduce a step's automaton, and the simplified "
+        .. "version is what the next step embeds.",
+    parts = {
+        gstep("a", "E = a", "a"),
+        gstep("b", "E = b", "b"),
+        gstep("ab", "E = ab — compose the given components", "ab",
+              {"a","b"}),
+        sstep("ab", "ab"),
+        gstep("abS", "E = (ab)* — compose on the given component",
+              "(ab)*", {"ab"}),
+        sstep("abS", "(ab)*"),
+        gstep("aS", "E = a* — compose on the given component", "a*",
+              {"a"}),
+        sstep("aS", "a*"),
+        gstep("u", "E = (ab)* ∪ a* — compose the two components",
+              "(ab)*|a*", {"abS","aS"}),
+        sstep("u", "(ab)*|a*"),
+    },
+}
+
+parts_task{
+    id = "2.2o-g", letter = "O",
+    title = "From RE to NFA-λ: (abc)*a*",
+    desc = "Guided variant for E = (abc)* ∪ a* over {a, b, c} — "
+        .. "locked components from the previous steps; optional "
+        .. "simplify slots feed the next step.",
+    parts = {
+        gstep("a", "E = a", "a", nil, "a,b,c"),
+        gstep("b", "E = b", "b", nil, "a,b,c"),
+        gstep("c", "E = c", "c", nil, "a,b,c"),
+        gstep("ab", "E = ab — compose the given components", "ab",
+              {"a","b"}, "a,b,c"),
+        sstep("ab", "ab", "a,b,c"),
+        gstep("abc", "E = abc — compose the given components", "abc",
+              {"ab","c"}, "a,b,c"),
+        sstep("abc", "abc", "a,b,c"),
+        gstep("abcS", "E = (abc)* — compose on the given component",
+              "(abc)*", {"abc"}, "a,b,c"),
+        sstep("abcS", "(abc)*", "a,b,c"),
+        gstep("aS", "E = a* — compose on the given component", "a*",
+              {"a"}, "a,b,c"),
+        sstep("aS", "a*", "a,b,c"),
+        gstep("u", "E = (abc)* ∪ a* — compose the two components",
+              "(abc)*|a*", {"abcS","aS"}, "a,b,c"),
+        sstep("u", "(abc)*|a*", "a,b,c"),
+    },
+}
+
+parts_task{
+    id = "2.2p-g", letter = "P",
+    title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
+    desc = "(extra) Guided variant for E = (ba ∪ bb)* ∪ (ab ∪ aa)*.",
+    parts = {
+        gstep("a", "E = a", "a"),
+        gstep("b", "E = b", "b"),
+        gstep("ba", "E = ba — compose the given components", "ba",
+              {"b","a"}),
+        sstep("ba", "ba"),
+        gstep("bb", "E = bb — compose on the given component "
+              .. "(embedded twice)", "bb", {"b","b#2"}),
+        gstep("bab", "E = ba ∪ bb — compose the given components",
+              "ba|bb", {"ba","bb"}),
+        sstep("bab", "ba|bb"),
+        gstep("babS", "E = (ba ∪ bb)* — compose on the given component",
+              "(ba|bb)*", {"bab"}),
+        sstep("babS", "(ba|bb)*"),
+        gstep("ab", "E = ab — compose the given components", "ab",
+              {"a","b"}),
+        sstep("ab", "ab"),
+        gstep("aa", "E = aa — compose on the given component "
+              .. "(embedded twice)", "aa", {"a","a#2"}),
+        gstep("aba", "E = ab ∪ aa — compose the given components",
+              "ab|aa", {"ab","aa"}),
+        sstep("aba", "ab|aa"),
+        gstep("abaS", "E = (ab ∪ aa)* — compose on the given component",
+              "(ab|aa)*", {"aba"}),
+        sstep("abaS", "(ab|aa)*"),
+        gstep("u", "E = (ba ∪ bb)* ∪ (ab ∪ aa)* — compose the two "
+              .. "components", "(ba|bb)*|(ab|aa)*", {"babS","abaS"}),
+        sstep("u", "(ba|bb)*|(ab|aa)*"),
     },
 }
 
@@ -808,6 +932,7 @@ function M.sheet_structure()
                 subs[#subs+1] = {
                     id = sid,
                     free_id = free and free.id or nil,
+                    variants = t and t.variants or nil,
                     sub = (t and t.letter)
                           or (sid:match("(%a)$") or sid):upper(),
                     title = t and t.title or sid,
@@ -826,7 +951,7 @@ end
 -- ============ serializable view for the GUI ============
 local function view_part(pd, pi)
     local v = { kind=pd.kind, label=pd.label,
-                sub=string.char(96 + pi) .. ")",
+                sub=pd.sub or string.char(96 + pi) .. ")",
                 optional = pd.optional or false }
     if pd.kind == "aut" then
         v.aut_type, v.alphabet = pd.aut_type, pd.alphabet
@@ -835,6 +960,12 @@ local function view_part(pd, pi)
         v.initial = pd.initial
         v.readonly = pd.readonly or false
         v.seeds = pd.seeds
+        -- guided construction: stage id, locked-component list,
+        -- simplify-source, checker override
+        v.sid = pd.sid
+        v.seeds_locked = pd.seeds_locked
+        v.takeover_from = pd.takeover_from
+        v.check = pd.check
     elseif pd.kind == "trace" or pd.kind == "accept" then
         v.words = pd.words
     elseif pd.kind == "table" or pd.kind == "stable" then

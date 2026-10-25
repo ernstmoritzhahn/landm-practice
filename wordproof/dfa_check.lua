@@ -400,6 +400,230 @@ function M.check_aut(part, model_json, expect_type)
     return { ok=true }
 end
 
+-- part.check == "compose" (guided construction): the student wires
+-- given component automata together.  part.seeds_locked lists the stage
+-- labels; pd.seeds[stage] carries the LIVE effective automaton of that
+-- stage as JSON (the stage's simplify output when present, else its
+-- compose output).  The embedded copy inside the result is identified
+-- by seed tags / the "<stage>_" name prefix.  Checks, in order:
+--   1. freshness — embedded component still equals the live stage
+--      automaton (else: "refresh components")
+--   2. containment — every embedded state/transition present verbatim
+--      (locked in the editor; catches hand-edited JSON)
+--   3. integration — every embedded state reachable from the initial
+--      state AND able to reach an accepting state (parking the given
+--      component in a corner fails)
+--   4. language equivalence, as for plain aut parts
+local function name_index(m)
+    local by_name = {}
+    for _, s in ipairs(m.states or {}) do
+        by_name[tostring(s.name or s.id)] = s
+    end
+    return by_name
+end
+
+-- label multiset per (from,to) name pair, lambda included
+local function edge_sets(m)
+    local id_name = {}
+    for _, s in ipairs(m.states or {}) do
+        id_name[tostring(s.id)] = tostring(s.name or s.id)
+    end
+    local sets = {}
+    for _, e in ipairs(m.transitions or {}) do
+        local f, t = id_name[tostring(e.from)], id_name[tostring(e.to)]
+        if f and t then
+            local key = f .. "\1" .. t
+            local s = sets[key]
+            if not s then s = {}; sets[key] = s end
+            local lbl = tostring(e.label or "")
+            if lbl == "" then lbl = "λ" end
+            s[lbl] = (s[lbl] or 0) + 1
+        end
+    end
+    return sets
+end
+
+function M.check_compose(part, model_json, seeds)
+    local ok, m = pcall(json.decode, model_json or "")
+    if not ok or type(m) ~= "table"
+       or not m.states or #m.states == 0 then
+        return { ok=false, kind="empty",
+                 msg="no automaton — draw the state diagram" }
+    end
+    local res_edges = edge_sets(m)
+    -- embedded[tag] collects the states of one embedded component;
+    -- entry "b#2" is a second copy of stage "b" (tag != stage)
+    local embedded = {}
+    for _, tag in ipairs(part.seeds_locked or {}) do
+        local prefix = tag:gsub("#", "_") .. "_"
+        for _, s in ipairs(m.states) do
+            local nm = tostring(s.name or s.id)
+            if s.seed == tag or nm:sub(1, #prefix) == prefix then
+                local e = embedded[tag]
+                if not e then e = {}; embedded[tag] = e end
+                e[#e + 1] = nm
+            end
+        end
+    end
+    for _, tag in ipairs(part.seeds_locked or {}) do
+        local stage = tag:match("^[^#]+") or tag
+        local prefix = tag:gsub("#", "_") .. "_"
+        local shown = stage .. (tag ~= stage and " #" .. tag:sub(#stage + 2) or "")
+        local seed_json = seeds and seeds[stage]
+        local ok2, sm = pcall(json.decode, seed_json or "")
+        if not (ok2 and type(sm) == "table"
+                and sm.states and #sm.states > 0) then
+            return { ok=false, kind="empty",
+                     msg="component " .. shown .. ") is still empty "
+                      .. "— finish that step first" }
+        end
+        local emb = embedded[tag]
+        if not emb or #emb == 0 then
+            return { ok=false, kind="comp_missing",
+                     msg="the automaton for " .. shown .. ") is not "
+                      .. "embedded — click 'refresh components'" }
+        end
+        -- freshness + containment: prefixed seed names and seed edges
+        -- must appear verbatim in the result
+        local emb_set = {}
+        for _, nm in ipairs(emb) do emb_set[nm] = true end
+        local seed_edges = edge_sets(sm)
+        for _, s in ipairs(sm.states) do
+            local want = prefix .. tostring(s.name or s.id)
+            if not emb_set[want] then
+                return { ok=false, kind="stale",
+                         msg="component " .. shown .. ") changed since "
+                          .. "it was embedded — click "
+                          .. "'refresh components'" }
+            end
+        end
+        for key, lbls in pairs(seed_edges) do
+            local f, t = key:match("^(.-)\1(.*)$")
+            local rk = prefix .. f .. "\1" .. prefix .. t
+            local rs = res_edges[rk] or {}
+            for lbl, cnt in pairs(lbls) do
+                if (rs[lbl] or 0) < cnt then
+                    return { ok=false, kind="comp_missing",
+                             msg="component " .. shown .. ") was "
+                              .. "altered — its states and transitions "
+                              .. "must stay as given" }
+                end
+            end
+        end
+        -- integration: every embedded state must lie on a path from
+        -- the initial state to an accepting state (lambda steps count)
+        local adj, radj = {}, {}
+        for _, s in ipairs(m.states) do
+            adj[tostring(s.name or s.id)] = {}
+            radj[tostring(s.name or s.id)] = {}
+        end
+        local id_name = {}
+        for _, s in ipairs(m.states) do
+            id_name[tostring(s.id)] = tostring(s.name or s.id)
+        end
+        for _, e in ipairs(m.transitions or {}) do
+            local f, t = id_name[tostring(e.from)],
+                         id_name[tostring(e.to)]
+            if f and t then
+                adj[f][t] = true
+                radj[t][f] = true
+            end
+        end
+        local start, accs = nil, {}
+        for _, s in ipairs(m.states) do
+            local nm = tostring(s.name or s.id)
+            if s.initial then start = nm end
+            if s.accepting then accs[nm] = true end
+        end
+        local function bfs(from, g)
+            local seen, q = {}, {from}
+            if not from then return seen end
+            seen[from] = true
+            while #q > 0 do
+                local u = table.remove(q, 1)
+                for v,_ in pairs(g[u] or {}) do
+                    if not seen[v] then seen[v] = true; q[#q+1] = v end
+                end
+            end
+            return seen
+        end
+        local fwd = bfs(start, adj)
+        local back = {}
+        for a,_ in pairs(accs) do
+            for v,_ in pairs(bfs(a, radj)) do back[v] = true end
+        end
+        for _, nm in ipairs(emb) do
+            if not fwd[nm] or not back[nm] then
+                return { ok=false, kind="disconnected",
+                         msg="component " .. shown .. ") is not wired "
+                          .. "into the automaton — state " .. nm
+                          .. " lies on no accepting path" }
+            end
+        end
+    end
+    -- components check out: now the language, like a plain aut part
+    local aut, problems = model_to_nfa(m, part.aut_type)
+    if not aut then
+        return { ok=false, kind="fail",
+                 msg=table.concat(problems, "; ") }
+    end
+    if #problems > 0 then
+        return { ok=false, kind="fail",
+                 msg=table.concat(problems, ";  ") }
+    end
+    local ref = ref_any(part.reference)
+    if part.complement then ref = complemented(ref) end
+    local cmp, cex_s, cex_r = automata.compare_languages(aut, ref)
+    if cmp ~= "=" then
+        local parts = {}
+        if cex_s then parts[#parts+1] = "'" .. word_or_lam(cex_s)
+            .. "' is accepted but not in L" end
+        if cex_r then parts[#parts+1] = "'" .. word_or_lam(cex_r)
+            .. "' is in L but not accepted" end
+        return { ok=false, kind="mismatch",
+                 msg=table.concat(parts, ";  ") }
+    end
+    return { ok=true }
+end
+
+-- optional simplify slot: empty means "not attempted" (not a failure);
+-- otherwise the language must match and the automaton should actually
+-- be smaller than the composed one it was taken over from
+function M.check_simplify(part, model_json, src_json)
+    local ok, m = pcall(json.decode, model_json or "")
+    if not ok or type(m) ~= "table"
+       or not m.states or #m.states == 0 then
+        return { ok=true, kind="empty",
+                 msg="optional — 'take over' to simplify the automaton" }
+    end
+    local aut, problems = model_to_nfa(m, part.aut_type)
+    if not aut then
+        return { ok=false, kind="fail",
+                 msg=table.concat(problems, "; ") }
+    end
+    if #problems > 0 then
+        return { ok=false, kind="fail",
+                 msg=table.concat(problems, ";  ") }
+    end
+    local ref = ref_any(part.reference)
+    local cmp = automata.compare_languages(aut, ref)
+    if cmp ~= "=" then
+        return { ok=false, kind="mismatch",
+                 msg="the simplified automaton changed the language" }
+    end
+    local ok2, src = pcall(json.decode, src_json or "")
+    if ok2 and type(src) == "table" and src.states then
+        local n_new = #(m.states or {}) + #(m.transitions or {})
+        local n_old = #(src.states or {}) + #(src.transitions or {})
+        if n_new >= n_old then
+            return { ok=true, kind="warn",
+                     msg="correct language, but not simpler "
+                      .. "than the composed automaton" }
+        end
+    end
+    return { ok=true }
+end
+
 -- part.kind == "trace": the state sequence of the run on each word
 function M.check_trace(part, traces)
     local ref = ref_dfa(part.reference)

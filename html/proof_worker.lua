@@ -107,8 +107,15 @@ return function(data)
                 local pd = by_pi[pi] or {}
                 local okp, pres = pcall(function()
                     if pdef.kind == "aut" then
-                        local r = DC.check_aut(pdef, pd.aut,
-                                               pdef.aut_type)
+                        local r
+                        if pdef.check == "compose" then
+                            r = DC.check_compose(pdef, pd.aut, pd.seeds)
+                        elseif pdef.takeover_from then
+                            r = DC.check_simplify(pdef, pd.aut, pd.src)
+                        else
+                            r = DC.check_aut(pdef, pd.aut,
+                                             pdef.aut_type)
+                        end
                         if pdef.with_regexp
                            and (pd.re or ""):match("%S") then
                             local redef = { reference =
