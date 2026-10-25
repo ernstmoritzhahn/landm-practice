@@ -282,14 +282,14 @@ local aut_id_seq = 0
 local pending_aut = {}      -- editor boots only once the host is in the DOM
 local send_check            -- forward decl: per-part buttons call it
 
-local function mount_aut(host, cfg_tbl, readonly)
+local function mount_aut(host, cfg_tbl, readonly, pi)
     -- ids, not element handles, cross the Lua<->JS bridge
     aut_id_seq = aut_id_seq + 1
     local host_id = "authost-" .. aut_id_seq
     local app_id  = "autapp-" .. aut_id_seq
     host.id = host_id
     pending_aut[#pending_aut + 1] =
-        { host_id = host_id, app_id = app_id,
+        { host_id = host_id, app_id = app_id, pi = pi,
           cfg = json.encode(cfg_tbl), readonly = readonly }
     return app_id
 end
@@ -300,8 +300,11 @@ local function boot_pending_aut()
         if p.readonly then
             landm_call("aut_readonly", p.app_id, true)
         else
-            landm_call("aut_on_edit", p.app_id,
-                       function() dirty(nil)() end)
+            local pi = p.pi
+            landm_call("aut_on_edit", p.app_id, function()
+                dirty(nil)()
+                if pi then refresh_dependents_of(pi) end
+            end)
         end
     end
     pending_aut = {}
@@ -498,10 +501,13 @@ local function upsert_component(m, tag, sm)
     for _, s in ipairs(sm.states or {}) do
         local wn = prefix .. tostring(s.name or s.id)
         local n = by_name[wn]
-        if n and n.seed == tag then
-            n.locked = true                  -- re-assert in case the
-            n.seed = tag                     --   model was hand-edited
-            name_of[tostring(s.id)] = n      -- keep position + flags
+        -- a node carrying the component's reserved name IS that
+        -- component state — regardless of a lost seed tag (hand-edited
+        -- JSON, stale bundle); claim it instead of duplicating
+        if n then
+            n.locked = true
+            n.seed = tag
+            name_of[tostring(s.id)] = n     -- keep position + flags
         end
     end
     -- anchor for fresh nodes: keep the block's current min corner when
@@ -579,6 +585,43 @@ local function refresh_components(pi)
     landm_call("aut_load", p.app, json.encode(m))
 end
 
+-- auto-sync: an edit in a part that DEFINES a stage (its compose
+-- editor via pv.sid, its simplify slot via pv.takeover_from)
+-- re-embeds that stage's effective automaton in every part that lists
+-- it among seeds_locked.  aut_load is suppressed by the editor's dirty
+-- counter, so refreshed canvases do NOT re-fire the edit hook — the
+-- cascade down the stage chain is walked explicitly instead (parts
+-- only embed earlier stages, so the walk terminates).
+function refresh_dependents_of(pi)
+    local parts = state.view and state.view.parts
+    if not parts then return end
+    local pv = parts[pi]
+    if not pv then return end
+    local queue, done = {}, {}
+    if pv.sid then queue[#queue + 1] = pv.sid end
+    if pv.takeover_from then queue[#queue + 1] = pv.takeover_from end
+    while #queue > 0 do
+        local sid = table.remove(queue, 1)
+        for dpi, dpv in ipairs(parts) do
+            if not done[dpi] and dpv.seeds_locked then
+                local hit = false
+                for _, tag in ipairs(dpv.seeds_locked) do
+                    if (tag:match("^[^#]+") or tag) == sid then
+                        hit = true break
+                    end
+                end
+                if hit then
+                    done[dpi] = true
+                    refresh_components(dpi)
+                    -- the refreshed part may itself define a stage —
+                    -- its dependents follow
+                    if dpv.sid then queue[#queue + 1] = dpv.sid end
+                end
+            end
+        end
+    end
+end
+
 -- simplify slot: take over the stage's compose automaton as a plain,
 -- fully editable copy (locks/tags stripped — manual simplification
 -- must be able to remove anything)
@@ -618,7 +661,7 @@ local function render_part(pv, pi)
     if pv.kind == "aut" then
         local host = el("div", "authost")
         box:appendChild(host)
-        rec.app = mount_aut(host, aut_cfg(pv), false)
+        rec.app = mount_aut(host, aut_cfg(pv), false, pi)
         rec.aut_type = pv.aut_type
         if pv.seeds and #pv.seeds > 0 then
             local sr = el("div", "wordrow")
@@ -649,10 +692,11 @@ local function render_part(pv, pi)
                 labels[#labels + 1] = s .. ")"
             end
             sr:appendChild(text("span",
-                "given components: " .. table.concat(labels, ", "),
+                "given components: " .. table.concat(labels, ", ")
+                .. "  (kept in sync automatically)",
                 "wlabel"))
             local btn = el("button", "seedbtn")
-            btn.textContent = "refresh components"
+            btn.textContent = "refresh now"
             btn:addEventListener("click", function()
                 refresh_components(pi)
             end)

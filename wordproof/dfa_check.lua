@@ -452,16 +452,28 @@ function M.check_compose(part, model_json, seeds)
     end
     local res_edges = edge_sets(m)
     -- embedded[tag] collects the states of one embedded component;
-    -- entry "b#2" is a second copy of stage "b" (tag != stage)
+    -- entry "b#2" is a second copy of stage "b" (tag != stage).
+    -- seed tags are authoritative; the name prefix is the fallback for
+    -- models that lost their tags (without it tag "b" would wrongly
+    -- swallow "b#2"'s "b_2_*" states through the "b_" prefix)
     local embedded = {}
     for _, tag in ipairs(part.seeds_locked or {}) do
         local prefix = tag:gsub("#", "_") .. "_"
         for _, s in ipairs(m.states) do
-            local nm = tostring(s.name or s.id)
-            if s.seed == tag or nm:sub(1, #prefix) == prefix then
+            if s.seed == tag then
                 local e = embedded[tag]
                 if not e then e = {}; embedded[tag] = e end
-                e[#e + 1] = nm
+                e[#e + 1] = tostring(s.name or s.id)
+            end
+        end
+        if not embedded[tag] then
+            for _, s in ipairs(m.states) do
+                local nm = tostring(s.name or s.id)
+                if nm:sub(1, #prefix) == prefix then
+                    local e = embedded[tag]
+                    if not e then e = {}; embedded[tag] = e end
+                    e[#e + 1] = nm
+                end
             end
         end
     end

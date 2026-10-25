@@ -20,6 +20,14 @@
 (function () {
     "use strict";
     var BASE = "";
+    /* deploy token — stage_proof_site.py stamps 8dc3d3ce53b5 with a
+     * hash over the whole bundle; every asset URL carries it so a
+     * redeploy can never serve a stale mix.  Unstaged (literal
+     * placeholder) URLs stay clean so local serving keeps working. */
+    var AUT_V = "8dc3d3ce53b5";
+    function vurl(u) {
+        return (AUT_V.charAt(0) === "_") ? u : u + "?v=" + AUT_V;
+    }
     try {
         /* document.currentScript is null when the host injects us as a
          * module or via eval (Anubis does exactly that), so also look up
@@ -94,10 +102,10 @@
             // globals.  plugin-data.js carries every non-JS byte as
             // base64 — the only path past asset hosts that whitelist
             // extensions (Anubis serves .js/.css only, 403 otherwise).
-            await loadScript(BASE + "ui-data.js");
+            await loadScript(vurl(BASE + "ui-data.js"));
             stage(el, "uidata");
             res.uiData = window.UI_DATA;
-            try { await loadScript(BASE + "plugin-data.js"); }
+            try { await loadScript(vurl(BASE + "plugin-data.js")); }
             catch (e) { /* standalone/mock: no bundle, plain fetches */ }
             var blob = window.AUT_BLOB || null;
             res.blob = blob;
@@ -107,12 +115,12 @@
                 catch (e) { res.wasm = null; }
             }
             if (!res.wasm) {
-                var r = await fetch(BASE + "unified.wasm");
+                var r = await fetch(vurl(BASE + "unified.wasm"));
                 if (!r.ok) throw new Error("unified.wasm: HTTP " + r.status);
                 res.wasm = await r.arrayBuffer();
             }
             stage(el, "wasm");
-            res.factory = (await import(BASE + "unified.js")).default;
+            res.factory = (await import(vurl(BASE + "unified.js"))).default;
             stage(el, "factory");
             return res;
         })();
@@ -330,7 +338,8 @@
                     var p;
                     if (A.blob && A.blob[f.url]) {
                         p = blobBytes(f.url).catch(function () {
-                            return fetch(BASE + f.url).then(function (r) {
+                            return fetch(vurl(BASE + f.url))
+                                .then(function (r) {
                                 if (!r.ok)
                                     throw new Error(f.url + ": HTTP "
                                                     + r.status);
@@ -338,7 +347,7 @@
                             });
                         });
                     } else {
-                        p = fetch(BASE + f.url).then(function (r) {
+                        p = fetch(vurl(BASE + f.url)).then(function (r) {
                             if (!r.ok)
                                 throw new Error(f.url + ": HTTP " + r.status);
                             return r.arrayBuffer();

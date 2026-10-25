@@ -632,8 +632,8 @@ parts_task{
     desc = "Guided variant: each composition step embeds the automata "
         .. "of the earlier steps as locked components (the navy "
         .. "parts) — wire them together with your own states and "
-        .. "transitions.  'refresh components' re-syncs them with your "
-        .. "current earlier-step automata; an optional simplify slot "
+        .. "transitions.  The components stay in sync with the "
+        .. "earlier steps automatically; an optional simplify slot "
         .. "lets you reduce a step's automaton, and the simplified "
         .. "version is what the next step embeds.",
     parts = {
