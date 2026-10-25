@@ -55,8 +55,15 @@ local function exp_ge0_k(r)   -- e(k) ≥ 0 for all k ≥ 1 when p,q = 0
     return r.k >= 0 and r.k + r.c >= 0 and r.p == 0 and r.q == 0
 end
 
-function M.parse_pattern(s)
+-- shared block scanner: sym [^ exponent] where the exponent is
+--  ^{expr}, ^(expr) or ^expr (chars from [0-9kpq+-]).
+--  Unicode dashes are normalised to '-' so keyboard-composed
+--  input does not break parsing.
+local function scan_blocks(s, check)
     s = (s or ""):gsub("λ", " ")
+        :gsub("\xe2\x88\x92", "-")   -- −  minus sign
+        :gsub("\xe2\x80\x93", "-")   -- –  en dash
+        :gsub("\xe2\x80\x94", "-")   -- —  em dash
     local blocks, i, n = {}, 1, #s
     while i <= n do
         local c = s:sub(i, i)
@@ -70,9 +77,13 @@ function M.parse_pattern(s)
             if s:sub(i, i) == "^" then
                 i = i + 1
                 local body
-                if s:sub(i, i) == "{" then
-                    local j = s:find("}", i + 1, true)
-                    if not j then return nil, "missing '}'" end
+                local open = s:sub(i, i)
+                if open == "{" or open == "(" then
+                    local close = open == "{" and "}" or ")"
+                    local j = s:find(close, i + 1, true)
+                    if not j then
+                        return nil, "missing '" .. close .. "'"
+                    end
                     body, i = s:sub(i + 1, j - 1), j + 1
                 else
                     local j = i
@@ -83,6 +94,7 @@ function M.parse_pattern(s)
                     body, i = s:sub(i, j - 1), j
                     if body == "" then
                         return nil, "empty exponent after '^'"
+                            .. " (got '" .. s:sub(i, i) .. "')"
                     end
                 end
                 e = parse_exp(body)
@@ -90,17 +102,12 @@ function M.parse_pattern(s)
                     return nil, "bad exponent '" .. body
                         .. "' (linear in k, p, q plus a constant)"
                 end
-                if e.p ~= 0 or e.q ~= 0 then
-                    return nil,
-                        "parameters p, q may only appear in the "
-                        .. "decomposition u, v, w — not in z(k)"
-                end
-                if not exp_ge0_k(e) then
-                    return nil, "'" .. sym .. "^" .. body
-                        .. "' is empty for some k ≥ 1"
+                if check then
+                    local cerr = check(sym, e, body)
+                    if cerr then return nil, cerr end
                 end
             end
-            if e.k == 0 and e.c == 0 then
+            if e.k == 0 and e.p == 0 and e.q == 0 and e.c == 0 then
                 return nil, "'" .. sym .. "^0' is always empty"
             end
             blocks[#blocks + 1] = { sym = sym, k = e.k,
@@ -111,50 +118,23 @@ function M.parse_pattern(s)
     return blocks
 end
 
+function M.parse_pattern(s)
+    return scan_blocks(s, function(sym, e, body)
+        if e.p ~= 0 or e.q ~= 0 then
+            return "parameters p, q may only appear in the "
+                .. "decomposition u, v, w — not in z(k)"
+        end
+        if not exp_ge0_k(e) then
+            return "'" .. sym .. "^" .. body
+                .. "' is empty for some k ≥ 1"
+        end
+    end)
+end
+
 -- same grammar, but p and q allowed (for the student-written
 -- decomposition u(k,p,q) · v(k,q) · w(k,p,q))
 function M.parse_pattern_pq(s)
-    s = (s or ""):gsub("λ", " ")
-    local blocks, i, n = {}, 1, #s
-    while i <= n do
-        local c = s:sub(i, i)
-        if c:match("%s") then
-            i = i + 1
-        elseif c == "^" or c == "{" or c == "}" then
-            return nil, "unexpected '" .. c .. "'"
-        else
-            local sym, e = c, { k = 0, p = 0, q = 0, c = 1 }
-            i = i + 1
-            if s:sub(i, i) == "^" then
-                i = i + 1
-                local body
-                if s:sub(i, i) == "{" then
-                    local j = s:find("}", i + 1, true)
-                    if not j then return nil, "missing '}'" end
-                    body, i = s:sub(i + 1, j - 1), j + 1
-                else
-                    local j = i
-                    while j <= n
-                        and s:sub(j, j):match("[0-9kpq+%-]") do
-                        j = j + 1
-                    end
-                    body, i = s:sub(i, j - 1), j
-                    if body == "" then
-                        return nil, "empty exponent after '^'"
-                    end
-                end
-                e = parse_exp(body)
-                if not e then
-                    return nil, "bad exponent '" .. body
-                        .. "' (linear in k, p, q plus a constant)"
-                end
-            end
-            blocks[#blocks + 1] = { sym = sym, k = e.k,
-                                    p = e.p, q = e.q, c = e.c }
-        end
-    end
-    if #blocks == 0 then return nil, "empty pattern" end
-    return blocks
+    return scan_blocks(s)
 end
 
 -- merge adjacent same-symbol blocks (needed for the symbolic checks:
