@@ -389,13 +389,21 @@ function M.check_aut(part, model_json, expect_type)
     if not is_tuple or is_nfa_type(part.aut_type) then
         return { ok=true }
     end
-    local n_student, n_ref = 0, 0
+    local n_student, want = 0, part.exact_states
     for _ in pairs(aut:get_states()) do n_student = n_student + 1 end
-    for _ in pairs(ref:get_states()) do n_ref = n_ref + 1 end
-    if n_student ~= n_ref then
+    if not want then
+        want = 0
+        for _ in pairs(ref:get_states()) do want = want + 1 end
+        if n_student ~= want then
+            return { ok=false, kind="warn",
+                     msg="accepts the right language, but M has "
+                      .. want .. " states — yours has " .. n_student }
+        end
+    elseif n_student ~= want then
         return { ok=false, kind="warn",
-                 msg="accepts the right language, but M has " .. n_ref
-                  .. " states — yours has " .. n_student }
+                 msg="accepts the right language, but it must have "
+                  .. "exactly " .. want .. " states — yours has "
+                  .. n_student }
     end
     return { ok=true }
 end
@@ -950,6 +958,234 @@ function M.check_stable(part, cells)
         end
     end
     return { ok=all_ok, cells=cellres }
+end
+
+-- ==================== sheet 3 part kinds ====================
+
+-- part.kind == "choice": one <select> per declared slot; the task
+-- supplies part.sel_check(sel) -> result (sel[slotkey] = option id)
+function M.check_choice(part, sel)
+    if type(part.sel_check) ~= "function" then
+        return { ok=false, kind="fail", msg="no checker configured" }
+    end
+    sel = sel or {}
+    for _, slot in ipairs(part.slots or {}) do
+        local v = sel[slot.key]
+        if v == nil or v == "" then
+            return { ok=false, kind="empty",
+                     msg="make a choice for " .. slot.label }
+        end
+    end
+    return part.sel_check(sel)
+end
+
+-- part.kind == "pumping": the adversary game — see wordproof/pumping.lua
+local PUMP = require "wordproof.pumping"
+function M.check_pumping(part, z, is_tbl)
+    return PUMP.check(part.lang, z, is_tbl, part.pump_k)
+end
+function M.pump_splits(part, z)
+    return PUMP.instantiate(part.lang, z, part.pump_k)
+end
+
+-- ---------------- DFA minimisation ----------------
+
+-- distinguishable unordered state pairs of the reference DFA.
+-- returns D ("qi|qj" -> true, i<j order via key()) and the key fn
+function M.dfa_distinguishable(reference, states)
+    local dfa = ref_dfa(reference)
+    local alpha = {}
+    for s, _ in pairs(dfa:get_symbols()) do alpha[#alpha + 1] = s end
+    table.sort(alpha)
+    local function key(a, b)
+        return (a < b) and (a .. "|" .. b) or (b .. "|" .. a)
+    end
+    local D = {}
+    for i = 1, #states do
+        for j = i + 1, #states do
+            if dfa:is_accepting(states[i])
+               ~= dfa:is_accepting(states[j]) then
+                D[key(states[i], states[j])] = true
+            end
+        end
+    end
+    local grew = true
+    while grew do
+        grew = false
+        for i = 1, #states do
+            for j = i + 1, #states do
+                local p, q = states[i], states[j]
+                if not D[key(p, q)] then
+                    for _, sym in ipairs(alpha) do
+                        local a = dfa:get_to_states(p, sym)
+                        local b = dfa:get_to_states(q, sym)
+                        if a and b and a ~= b and D[key(a, b)] then
+                            D[key(p, q)] = true
+                            grew = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return D, key
+end
+
+-- equivalence classes: states grouped by ~ (not distinguishable)
+function M.dfa_equiv_classes(reference, states)
+    local D, key = M.dfa_distinguishable(reference, states)
+    local cls = {}
+    for _, s in ipairs(states) do
+        local hit
+        for _, c in ipairs(cls) do
+            if not D[key(c[1], s)] then hit = c break end
+        end
+        if hit then hit[#hit + 1] = s else cls[#cls + 1] = { s } end
+    end
+    return cls
+end
+
+local function run_from(dfa, s, w)
+    local cur = s
+    for i = 1, #w do
+        cur = dfa:get_to_states(cur, w:sub(i, i))
+        if not cur then return nil end
+    end
+    return cur
+end
+
+-- part.kind == "min_table": mark the distinguishable pairs, give a
+-- distinguishing word for each marked pair, and list the
+-- equivalence classes.  marks = {"i|j",...}, wit = {"i|j" -> word},
+-- classes_str = "{q0,q3} {q1,q4} ..." (groups may also be /-separated)
+function M.check_min_table(part, marks, classes_str, wit)
+    local dfa = ref_dfa(part.reference)
+    local states = part.states or {}
+    local D, key = M.dfa_distinguishable(part.reference, states)
+    local smark = {}
+    for _, k in ipairs(marks or {}) do smark[k] = true end
+    local cells, rows, all_ok = {}, {}, true
+    -- verdict per pair cell (enumeration index = row key)
+    local wi = 0
+    for i = 1, #states do
+        for j = i + 1, #states do
+            wi = wi + 1
+            local a, b = states[i], states[j]
+            local k = key(a, b)
+            local truth, said = D[k] and true or false,
+                                smark[k] and true or false
+            if truth and not said then
+                all_ok = false
+                cells[k] = { kind = "mismatch",
+                             msg = "distinguishable — mark it" }
+            elseif said and not truth then
+                all_ok = false
+                cells[k] = { kind = "mismatch",
+                             msg = "these states are equivalent" }
+            else
+                cells[k] = { kind = "ok" }
+            end
+            -- a distinguishing word is required for every marked pair
+            if said then
+                local w = wit and wit[k]
+                if not truth then
+                    all_ok = false
+                    rows[wi] = { kind = "mismatch",
+                        msg = "no word can distinguish " .. a .. ","
+                            .. b .. " — they are equivalent" }
+                elseif w == nil then
+                    all_ok = false
+                    rows[wi] = { kind = "empty",
+                                 msg = "distinguishing word?" }
+                else
+                    -- "λ"/"ε"/spaces may stand for the empty word,
+                    -- which is a legal witness for acc/non-acc pairs
+                    w = w:gsub("%s", ""):gsub("λ", ""):gsub("ε", "")
+                    local ea = run_from(dfa, a, w)
+                    local eb = run_from(dfa, b, w)
+                    local acca = ea and dfa:is_accepting(ea) or false
+                    local accb = eb and dfa:is_accepting(eb) or false
+                    if acca ~= accb then
+                        rows[wi] = { kind = "ok" }
+                    else
+                        all_ok = false
+                        rows[wi] = { kind = "mismatch",
+                            msg = "'" .. w .. "' does not distinguish "
+                                .. a .. " and " .. b }
+                    end
+                end
+            end
+        end
+    end
+    -- equivalence classes as a partition of the state set
+    local groups = {}
+    local gs = (classes_str or ""):gsub("[%(%)]", "")
+    if gs:find("{") then
+        for g in gs:gmatch("{([^{}]*)}") do
+            groups[#groups + 1] = parse_state_set(g)
+        end
+    else
+        for g in gs:gmatch("[^/;]+") do
+            local st = parse_state_set(g)
+            if next(st) then groups[#groups + 1] = st end
+        end
+    end
+    if #groups == 0 then
+        all_ok = false
+        cells.classes = { kind = "mismatch",
+                          msg = "list the classes, e.g. {q0,q3} {q1}" }
+    else
+        local seen, class_of = {}, {}
+        local perr
+        for _, g in ipairs(groups) do
+            for s in pairs(g) do
+                if seen[s] then
+                    perr = s .. " appears in two classes"
+                end
+                seen[s] = true
+                class_of[s] = g
+            end
+        end
+        if not perr then
+            for _, s in ipairs(states) do
+                if not seen[s] then
+                    perr = s .. " is missing"
+                    break
+                end
+            end
+        end
+        if not perr then
+            for i = 1, #states do
+                for j = i + 1, #states do
+                    local a, b = states[i], states[j]
+                    if class_of[a] == class_of[b] and D[key(a, b)] then
+                        perr = a .. " and " .. b
+                            .. " are distinguishable but in one class"
+                        break
+                    elseif class_of[a] ~= class_of[b]
+                           and not D[key(a, b)] then
+                        perr = a .. " and " .. b
+                            .. " are equivalent but split apart"
+                        break
+                    end
+                end
+                if perr then break end
+            end
+        end
+        if perr then
+            all_ok = false
+            cells.classes = { kind = "mismatch", msg = perr }
+        else
+            cells.classes = { kind = "ok" }
+        end
+    end
+    if all_ok then
+        return { ok = true, kind = "ok", cells = cells, rows = rows }
+    end
+    return { ok = false, kind = "fail", cells = cells, rows = rows,
+             msg = "mark the distinguishable pairs, justify each "
+                .. "with a word, and give the equivalence classes" }
 end
 
 M._model_to_dfa = model_to_dfa   -- exposed for tests

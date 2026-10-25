@@ -83,6 +83,18 @@ return function(data)
             util.js_post_message(json.encode(
                 { what="view", id=data.id, view=tasks.view(task) }))
         end
+    elseif data.what == "pump_splits" then
+        local task = tasks.tasks[data.id]
+        local pdef = task and task.parts and task.parts[data.pi]
+        local res
+        if pdef and pdef.kind == "pumping" then
+            res = DC.pump_splits(pdef, data.z)
+        else
+            res = { err = "not a pumping part" }
+        end
+        util.js_post_message(json.encode(
+            { what="splits", id=data.id, pi=data.pi, res=res }))
+        return
     elseif data.what == "check" then
         local task = tasks.tasks[data.id]
         if not task then return end
@@ -139,6 +151,13 @@ return function(data)
                     elseif pdef.kind == "regexp" then
                         return RC.check({reference=pdef.reference},
                                         pd.expr)
+                    elseif pdef.kind == "choice" then
+                        return DC.check_choice(pdef, pd.sel)
+                    elseif pdef.kind == "pumping" then
+                        return DC.check_pumping(pdef, pd.z, pd.is)
+                    elseif pdef.kind == "min_table" then
+                        return DC.check_min_table(pdef, pd.marks,
+                                                  pd.classes, pd.wit)
                     end
                     return { ok=false, msg="unknown part kind" }
                 end)

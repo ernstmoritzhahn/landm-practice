@@ -892,6 +892,425 @@ parts_task{
 }
 
 -- ======================================================================
+-- SHEET 3 — pumping lemma, closure properties, DFA minimisation
+-- ======================================================================
+
+-- ---------- 3.1: the pumping adversary game ----------
+-- kind="pumping": the student picks z(k) as a k-pattern, the system
+-- instantiates at k=3 and enumerates all decompositions |uv|≤k,
+-- |v|≥1; each split needs an i with uv^iw ∉ L.
+
+local function pstep(sub, lang, label)
+    return { kind="pumping", sub=sub, lang=lang, label=label }
+end
+
+parts_task{
+    id = "3.1p", letter = "P",
+    title = "Pumping lemma: proving non-regularity",
+    desc = "Play the adversary role of the pumping proof yourself: "
+        .. "first give a word z(k) that is in L and at least k long "
+        .. "for EVERY k (write e.g. a^k b^k — a^{k+1}, a^{2k}, a^3 "
+        .. "work too).  'decompose' then lists every legal split "
+        .. "z = uvw with |uv| ≤ k and |v| ≥ 1 for k = 3 — pick a "
+        .. "pumping index i for EACH split so that uv^iw leaves L.",
+    parts = {
+        pstep("a)", "eq_ab",
+              "L = {w ∈ {a,b}* | #a(w) = #b(w)}"),
+        pstep("b)", "parens",
+              "L = matched parentheses over {(,)}"),
+        pstep("c)", "pal",
+              "L = palindromes over {a,b}"),
+        pstep("d)", "ww",
+              "L = {ww | w ∈ {a,b}*}"),
+        pstep("e)", "anbm_lt",
+              "L = {aⁿbᵐ | n < m}   (extra)"),
+        pstep("f)", "aibjc",
+              "L = {aⁱbʲc²ʲ | i,j ≥ 0}   (extra)"),
+        { kind="choice", sub="g)",
+          label="L = {w ∈ {a,b}* | w ≠ w^R} (non-palindromes): "
+             .. "which argument proves L non-regular?",
+          slots = {
+            { key="arg", label="proof idea",
+              options = {
+                { id="comp",  label="Suppose L regular. Then "
+                    .. "L̄ is regular (closure under complement), "
+                    .. "but L̄ is the palindromes — contradiction "
+                    .. "with part c)." },
+                { id="pump",  label="Direct pumping: choose "
+                    .. "z = a^k b a^{k+1} ∈ L and pump with i = 2." },
+                { id="incl",  label="L ⊆ {a,b}* and {a,b}* is "
+                    .. "regular, so L is regular." },
+                { id="fin",   label="Pumping cannot apply because "
+                    .. "L is infinite." } } } },
+          sel_check = function(sel)
+              if sel.arg == "comp" then
+                  return { ok=true, kind="ok",
+                           msg="closure under complement + the "
+                            .. "palindrome result — correct" }
+              elseif sel.arg == "pump" then
+                  return { ok=false, kind="fail",
+                    msg="z = a^k b a^{k+1} cannot be beaten: pumping "
+                     .. "the a-block keeps a non-palindrome "
+                     .. "(#a-parts stay different) — that z does "
+                     .. "not work" }
+              elseif sel.arg == "incl" then
+                  return { ok=false, kind="fail",
+                    msg="subsets of regular languages need not be "
+                     .. "regular — this proves nothing" }
+              end
+              return { ok=false, kind="fail",
+                       msg="infinitude does not stop the pumping "
+                        .. "lemma" }
+          end },
+    },
+}
+
+-- ---------- 3.2: closure properties ----------
+
+-- palette of example languages with known regularity flags; used by
+-- the "give examples L1, L2" questions below
+local PAL = {
+    sigmastar  = { label="Σ* = {a,b}*",              reg=true  },
+    empty      = { label="∅",                        reg=true  },
+    lam        = { label="{λ}",                      reg=true  },
+    astarbstar = { label="a*b* = {aⁿbᵐ}",            reg=true  },
+    abs        = { label="(ab)* = {(ab)ⁿ}",          reg=true  },
+    finab      = { label="{ab, ba}",                 reg=true  },
+    aorb       = { label="a* ∪ b*",                  reg=true  },
+    anbn       = { label="{aⁿbⁿ | n≥0}",             reg=false },
+    anbm_ne    = { label="{aⁿbᵐ | n≠m}",             reg=false },
+    anbm_lt    = { label="{aⁿbᵐ | n<m}",             reg=false },
+    pal        = { label="palindromes",              reg=false },
+    nonpal     = { label="non-palindromes",          reg=false },
+    ww         = { label="{ww}",                     reg=false },
+    comp_anbn  = { label="Σ* ∖ {aⁿbⁿ}",              reg=false },
+    an2        = { label="{aⁿ²}",                    reg=false },
+    a2n        = { label="{a^2ⁿ}",                   reg=false },
+    aprime     = { label="{a^p | p prime}",          reg=false },
+    an3        = { label="{aⁿ³}",                    reg=false },
+}
+local PAL_ORDER = { "sigmastar","empty","lam","astarbstar","abs",
+                    "finab","aorb",
+                    "anbn","anbm_ne","anbm_lt","pal","nonpal","ww",
+                    "comp_anbn","an2","a2n","aprime","an3" }
+
+local function pal_options()
+    local o = {}
+    for _,id in ipairs(PAL_ORDER) do
+        o[#o+1] = { id=id, label=PAL[id].label }
+    end
+    return o
+end
+local function pal_slot(key, label)
+    return { key=key, label=label, options=pal_options() }
+end
+
+-- regular L1 ∪ non-regular L2 stays regular only in these cases
+local UNION_REG = {
+    sigmastar  = "all",   -- Σ* ∪ X = Σ*
+    astarbstar = { anbn=true, anbm_ne=true, anbm_lt=true },
+}
+-- regular L1 ∩ non-regular L2 is regular in these cases
+local INTER_REG = {
+    empty="all", lam="all", finab="all", abs="all",
+    aorb       = { anbn=true, anbm_ne=true, anbm_lt=true,
+                   pal=true, nonpal=true, ww=true,
+                   comp_anbn=true },
+    astarbstar = { pal=true, nonpal=true, ww=true },
+}
+-- non-regular ∪ non-regular can be regular (both directions listed)
+local UNION_REG_NN = {
+    anbn      = { anbm_ne=true, comp_anbn=true },
+    anbm_ne   = { anbn=true },
+    comp_anbn = { anbn=true },
+    pal       = { nonpal=true },
+    nonpal    = { pal=true },
+}
+-- non-regular L with regular L*
+local STAR_REG = { an2="a* (every n is a sum of squares)",
+                   a2n="a* (binary representations)",
+                   aprime="a* ∖ {a} (cofinite)",
+                   an3="a* (a = a^1³ ∈ L)",
+                   pal="Σ* (every single letter is a palindrome)" }
+
+local function sel_flags(sel)
+    local a, b = PAL[sel.l1], PAL[sel.l2]
+    if not a or not b then
+        return nil, { ok=false, kind="fail",
+                      msg="choose from the list" }
+    end
+    return a, b
+end
+local function in_tab(tab, x, y)
+    local t = tab[x]
+    if t == "all" then return true end
+    return type(t) == "table" and t[y] and true or false
+end
+
+local function sc_pair(goal)
+    return function(sel)
+        local a, b = sel_flags(sel)
+        if not a then return b end
+        if goal == "ureg" then
+            if not a.reg then return { ok=false, kind="fail",
+                msg="L1 must be regular — " .. a.label
+                 .. " is not regular" } end
+            if b.reg then return { ok=false, kind="fail",
+                msg="L2 must be NON-regular — " .. b.label
+                 .. " is regular" } end
+            if in_tab(UNION_REG, sel.l1, sel.l2) then
+                return { ok=true, kind="ok",
+                         msg="L1 ∪ L2 = " .. a.label
+                          .. " is regular ✓" }
+            end
+            return { ok=false, kind="fail",
+                     msg="this union is NON-regular — L1 must "
+                      .. "cover the gap (hint: think big)" }
+        elseif goal == "unon" then
+            if not a.reg then return { ok=false, kind="fail",
+                msg="L1 must be regular — " .. a.label
+                 .. " is not regular" } end
+            if b.reg then return { ok=false, kind="fail",
+                msg="L2 must be NON-regular — " .. b.label
+                 .. " is regular" } end
+            if in_tab(UNION_REG, sel.l1, sel.l2) then
+                return { ok=false, kind="fail",
+                     msg="this union is regular — violates the "
+                      .. "condition" }
+            end
+            return { ok=true, kind="ok",
+                     msg="L1 ∪ L2 stays non-regular ✓" }
+        elseif goal == "ireg" then
+            if not a.reg then return { ok=false, kind="fail",
+                msg="L1 must be regular — " .. a.label
+                 .. " is not regular" } end
+            if b.reg then return { ok=false, kind="fail",
+                msg="L2 must be NON-regular — " .. b.label
+                 .. " is regular" } end
+            if in_tab(INTER_REG, sel.l1, sel.l2) then
+                return { ok=true, kind="ok",
+                         msg="L1 ∩ L2 is regular ✓" }
+            end
+            return { ok=false, kind="fail",
+                     msg="this intersection is NON-regular — "
+                      .. "pick an L1 that cuts L2 down to "
+                      .. "something regular" }
+        elseif goal == "nnureg" then
+            if a.reg or b.reg then return { ok=false, kind="fail",
+                msg="BOTH must be non-regular" } end
+            if in_tab(UNION_REG_NN, sel.l1, sel.l2) then
+                return { ok=true, kind="ok",
+                         msg="L1 ∪ L2 is regular ✓" }
+            end
+            return { ok=false, kind="fail",
+                     msg="this union stays non-regular — look for "
+                      .. "two non-regular languages that "
+                      .. "complement each other" }
+        end
+    end
+end
+
+parts_task{
+    id = "3.2c", letter = "C",
+    title = "Closure properties",
+    desc = "Two closure arguments, then the constructions carried "
+        .. "out on a concrete machine.",
+    parts = {
+        { kind="regexp", sub="a)",
+          label="L' = {w ∈ L | w ends with aa}.  Give a regular "
+             .. "expression Ê over {a,b,c} for the CONDITION, i.e. "
+             .. "L(Ê) = Σ*aa (then L' = L ∩ L(Ê))",
+          reference="(a|b|c)*aa" },
+        { kind="regexp", sub="b)",
+          label="L' = {w ∉ L | w has no a}.  Give Ê over {a,b,c} "
+             .. "with L(Ê) = {words without a} (then L' = L̄ ∩ L(Ê))",
+          reference="(b|c)*" },
+        { kind="choice", sub="c)",
+          label="Which closure properties prove parts a) and b)?",
+          slots = {
+            { key="c", label="used properties",
+              options = {
+                { id="inter",   label="a): ∩;  b): complement + ∩" },
+                { id="un",      label="a): ∪;  b): complement + ∪" },
+                { id="concat",  label="a): concatenation;  b): ∩" },
+                { id="star",    label="a): star;  b): complement" } } } },
+          sel_check = function(sel)
+              if sel.c == "inter" then
+                  return { ok=true, kind="ok",
+                    msg="∩ (a) and complement + ∩ (b) — right" }
+              end
+              return { ok=false, kind="fail",
+                       msg="think again: a) intersects L with a "
+                        .. "regular condition; b) needs the "
+                        .. "complement too" }
+          end },
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="d)", reference="(ab)*(λ|a)",
+          label="prefixes of L(M): build an NFA-λ accepting "
+             .. "{u | ∃v: uv ∈ L(M)} for the given M" },
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="e)", reference="(ba)*",
+          label="reversals: build an NFA-λ accepting "
+             .. "{w^R | w ∈ L(M)}   (extra)" },
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="f)", reference="(a|b)*(ab)*",
+          label="words having a suffix in L(M): build an NFA-λ "
+             .. "accepting {uv | v ∈ L(M)} = Σ*·L(M)   (extra)" },
+    },
+    given = { kind="aut", model={
+        type="dfa", alphabet="a,b",
+        states={ {id=1,name="q0",x=120,y=140,initial=true,accepting=true},
+                 {id=2,name="q1",x=300,y=140},
+                 {id=3,name="q2",x=210,y=320} },
+        transitions={ {id=1,from=1,to=2,label="a"},
+                      {id=2,from=1,to=3,label="b"},
+                      {id=3,from=2,to=3,label="a"},
+                      {id=4,from=2,to=1,label="b"},
+                      {id=5,from=3,to=3,label="a,b"} } },
+        readonly=true, alphabet="a,b", aut_type="dfa" },
+}
+
+parts_task{
+    id = "3.2e", letter = "E",
+    title = "Regular and non-regular languages can mix",
+    desc = "Give example languages L1, L2 over {a,b} satisfying "
+        .. "each combination of conditions (choose from the "
+        .. "palette).",
+    parts = {
+        { kind="choice", sub="a)",
+          label="L1 regular, L2 non-regular, L1 ∪ L2 regular",
+          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
+          sel_check = sc_pair("ureg") },
+        { kind="choice", sub="b)",
+          label="L1 regular, L2 non-regular, L1 ∪ L2 non-regular",
+          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
+          sel_check = sc_pair("unon") },
+        { kind="choice", sub="c)",
+          label="L1 regular, L2 non-regular, L1 ∩ L2 regular",
+          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
+          sel_check = sc_pair("ireg") },
+        { kind="choice", sub="d)",
+          label="L1, L2 both non-regular, L1 ∪ L2 regular",
+          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
+          sel_check = sc_pair("nnureg") },
+        { kind="choice", sub="e)",
+          label="L1 non-regular but L1* regular   (extra)",
+          slots = { pal_slot("l1","L1") },
+          sel_check = function(sel)
+              local a = PAL[sel.l1]
+              if not a then
+                  return { ok=false, kind="fail",
+                           msg="choose from the list" }
+              end
+              if a.reg then
+                  return { ok=false, kind="fail",
+                           msg="L1 must be NON-regular — "
+                            .. a.label .. " is regular" }
+              end
+              local why = STAR_REG[sel.l1]
+              if why then
+                  return { ok=true, kind="ok",
+                           msg="L1* = " .. why .. " — regular ✓" }
+              end
+              return { ok=false, kind="fail",
+                       msg="L1* is still non-regular "
+                        .. "(Kleene-star does not smooth out "
+                        .. "this language)" }
+          end },
+    },
+}
+
+-- ---------- 3.3: DFA minimisation ----------
+
+local Q6 = { "q0","q1","q2","q3","q4","q5" }
+local Q7 = { "q0","q1","q2","q3","q4","q5","q6" }
+
+local D1 = "({q0,q1,q2,q3,q4,q5},{a,b},"
+    .. "{(q0,a,q1),(q0,b,q3),(q1,a,q1),(q1,b,q2),"
+    .. "(q2,a,q2),(q2,b,q5),(q3,a,q3),(q3,b,q4),"
+    .. "(q4,a,q4),(q4,b,q5),(q5,a,q5),(q5,b,q5)},"
+    .. "q0,{q5})"
+
+local D2 = "({q0,q1,q2,q3,q4,q5},{a,b},"
+    .. "{(q0,a,q1),(q0,b,q3),(q1,a,q2),(q1,b,q3),"
+    .. "(q2,a,q5),(q2,b,q2),(q3,a,q4),(q3,b,q1),"
+    .. "(q4,a,q5),(q4,b,q4),(q5,a,q5),(q5,b,q5)},"
+    .. "q0,{q0,q2,q4})"
+
+local D3 = "({q0,q1,q2,q3,q4,q5,q6},{a,b},"
+    .. "{(q0,a,q1),(q0,b,q3),(q1,a,q2),(q1,b,q4),"
+    .. "(q2,a,q5),(q2,b,q5),(q3,a,q4),(q3,b,q2),"
+    .. "(q4,a,q5),(q4,b,q5),(q5,a,q6),(q5,b,q5),"
+    .. "(q6,a,q6),(q6,b,q6)},"
+    .. "q0,{q1,q3,q5,q6})"
+
+local DC = require "wordproof.dfa_check"
+
+-- the lemma as a multiple-argument choice
+local LEMMA_PART = {
+    kind="choice", sub="★)",
+    label="Lemma: if q_i ~ q_j are equivalent states and "
+       .. "δ̂(q_i,u)=q_m, δ̂(q_j,u)=q_n — why are q_m, q_n "
+       .. "equivalent?",
+    slots = {
+        { key="arg", label="argument",
+          options = {
+            { id="uw", label="If a word w distinguished q_m,q_n "
+                .. "then uw would distinguish q_i,q_j — "
+                .. "contradiction" },
+            { id="det", label="Because the DFA is deterministic "
+                .. "the successors are identical" },
+            { id="len", label="Because |u| is at most the number "
+                .. "of states" },
+            { id="same", label="Because q_i and q_j have the same "
+                .. "successor on every letter" } } } },
+    sel_check = function(sel)
+        if sel.arg == "uw" then
+            return { ok=true, kind="ok",
+                     msg="the distinguishing word lifts through u "
+                      .. "— correct" }
+        elseif sel.arg == "det" then
+            return { ok=false, kind="fail",
+                     msg="equivalent states need not have "
+                      .. "identical successors — that is what "
+                      .. "merging exploits" }
+        end
+        return { ok=false, kind="fail",
+                 msg="that does not prove it — think about what "
+                  .. "a distinguishing word for q_m,q_n would "
+                  .. "imply for q_i,q_j" }
+    end,
+}
+
+local function mtask(id, letter, dfa_str, states, extra_part)
+    local ncls = #DC.dfa_equiv_classes(dfa_str, states)
+    local ps = {}
+    if extra_part then ps[#ps+1] = extra_part end
+    ps[#ps+1] = { kind="min_table", reference=dfa_str, states=states,
+        sub="a)", label="Mark every distinguishable pair "
+         .. "(tick the box), give a distinguishing word for each "
+         .. "marked pair, and write the equivalence classes as "
+         .. "{q0,q3} {q1,q4} …" }
+    ps[#ps+1] = { kind="aut", aut_type="dfa", alphabet="a,b",
+        reference=dfa_str, exact_states=ncls,
+        sub="b)", label="Draw the minimised DFA (it has " .. ncls
+         .. " states)" }
+    parts_task{
+        id = id, letter = letter,
+        title = "DFA minimisation",
+        desc = "Algorithm 5.7.2: a pair {p,q} is distinguishable "
+            .. "when exactly one of p,q is final, or when some "
+            .. "letter moves it into a distinguishable pair.",
+        given = { kind="table", dfa=dfa_str },
+        parts = ps,
+    }
+end
+
+mtask("3.3a", "A", D1, Q6, LEMMA_PART)
+mtask("3.3b", "B", D2, Q6)
+mtask("3.3c", "C", D3, Q7)
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -938,6 +1357,15 @@ M.sheets = {
           subtasks = {"2.4r","2.4s"} },
         { id="2.5", title="Exercise 2.5",
           subtasks = {"2.5t"} },
+      }},
+    { id="sheet3", title="Sheet 3",
+      groups = {
+        { id="3.1", title="Exercise 3.1",
+          subtasks = {"3.1p"} },
+        { id="3.2", title="Exercise 3.2",
+          subtasks = {"3.2c","3.2e"} },
+        { id="3.3", title="Exercise 3.3",
+          subtasks = {"3.3a","3.3b","3.3c"} },
       }},
 }
 
@@ -988,6 +1416,12 @@ local function view_part(pd, pi)
         v.seeds_locked = pd.seeds_locked
         v.takeover_from = pd.takeover_from
         v.check = pd.check
+    elseif pd.kind == "choice" then
+        v.slots = pd.slots
+    elseif pd.kind == "pumping" then
+        v.lang = pd.lang
+    elseif pd.kind == "min_table" then
+        v.states = pd.states
     elseif pd.kind == "trace" or pd.kind == "accept" then
         v.words = pd.words
     elseif pd.kind == "table" or pd.kind == "stable" then

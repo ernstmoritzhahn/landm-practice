@@ -734,6 +734,55 @@ local function takeover_simplify(pi)
     refresh_dependents_of(pi)
 end
 
+-- ---------- sheet-3 helpers: pumping splits, min_table ----------
+local function pairkey(a, b)
+    return (a < b) and (a .. "|" .. b) or (b .. "|" .. a)
+end
+local function pair_enum(states)
+    local out = {}
+    for i = 1, #states do
+        for j = i + 1, #states do
+            out[#out + 1] = { a = states[i], b = states[j],
+                              key = pairkey(states[i], states[j]) }
+        end
+    end
+    return out
+end
+local function clear_pump_rows(p)
+    if p.splitbox then clear(p.splitbox) end
+    p.i_inps, p.row_st = {}, {}
+end
+local function request_splits(pi)
+    local p = state.parts[pi]
+    if not (p and p.z) then return end
+    util.js_post_message(json.encode(
+        { what="pump_splits", id=state.id, pi=pi, z=p.z.value }))
+end
+-- (re)build the distinguishing-word rows for the ticked pairs;
+-- values survive via the `old` stash
+local function rebuild_wit(pi)
+    local p = state.parts[pi]
+    if not (p and p.witbox) then return end
+    local old = {}
+    for k, inp in pairs(p.wit or {}) do old[k] = inp.value end
+    clear(p.witbox)
+    p.wit, p.row_st = {}, {}
+    for idx, pr in ipairs(p.pairs) do
+        local c = p.cells[pr.key]
+        if c and c.cb and c.cb.checked then
+            local r = el("div", "wordrow")
+            r:appendChild(text("span",
+                "w for {" .. pr.a .. "," .. pr.b .. "}:", "wlabel"))
+            local rst = el("span", "st")
+            local inp = mk_input(nil, 12, dirty(rst))
+            inp.value = old[pr.key] or ""
+            r:appendChild(inp); r:appendChild(rst)
+            p.witbox:appendChild(r)
+            p.wit[pr.key], p.row_st[idx] = inp, rst
+        end
+    end
+end
+
 local function render_part(pv, pi)
     local box = el("div", "part")
     local lab = el("div", "partlabel")
@@ -892,6 +941,93 @@ local function render_part(pv, pi)
         r:appendChild(inp); r:appendChild(rst)
         box:appendChild(r)
         rec.expr, rec.expr_st = inp, rst
+    elseif pv.kind == "choice" then
+        rec.sels = {}
+        rec.cells = {}
+        for _, slot in ipairs(pv.slots or {}) do
+            local r = el("div", "wordrow")
+            r:appendChild(text("span", (slot.label or slot.key) .. ":", "wlabel"))
+            local sel = document:createElement("select")
+            local o0 = document:createElement("option")
+            o0.value, o0.textContent = "", "(choose)"
+            sel:appendChild(o0)
+            for _, o in ipairs(slot.options or {}) do
+                local op = document:createElement("option")
+                op.value, op.textContent = o.id, o.label
+                sel:appendChild(op)
+            end
+            local rst = el("span", "st")
+            sel:addEventListener("change", dirty(rst))
+            r:appendChild(sel); r:appendChild(rst)
+            box:appendChild(r)
+            rec.sels[slot.key] = sel
+            rec.cells["sel_" .. slot.key] = { td = rst }
+        end
+    elseif pv.kind == "pumping" then
+        local r = el("div", "wordrow")
+        r:appendChild(text("span", "z(k) =", "wlabel"))
+        local zst = el("span", "st")
+        local zinp = mk_input("expr", 26, function()
+            dirty(zst)()
+            clear_pump_rows(rec)
+        end)
+        zinp.placeholder = "e.g. a^k b^k  (^k )^k"
+        r:appendChild(zinp)
+        local btn = document:createElement("button")
+        btn.className, btn.textContent = "seedbtn", "decompose"
+        btn:addEventListener("click", function() request_splits(pi) end)
+        r:appendChild(btn); r:appendChild(zst)
+        box:appendChild(r)
+        local sp = el("div")
+        box:appendChild(sp)
+        rec.z, rec.z_st, rec.splitbox = zinp, zst, sp
+        rec.i_inps, rec.row_st = {}, {}
+        rec.cells = { z = { td = zst } }
+    elseif pv.kind == "min_table" then
+        local states = pv.states or {}
+        rec.pairs = pair_enum(states)
+        rec.cells, rec.row_st = {}, {}
+        local tb = el("table", "trtable")
+        local hr = el("tr")
+        hr:appendChild(text("th", "D[i,j]"))
+        for j = 2, #states do
+            hr:appendChild(text("th", states[j]))
+        end
+        tb:appendChild(hr)
+        for i = 1, #states - 1 do
+            local tr = el("tr")
+            tr:appendChild(text("td", states[i]))
+            for j = 2, #states do
+                local td = el("td")
+                if j > i then
+                    local k = pairkey(states[i], states[j])
+                    local cb = document:createElement("input")
+                    cb.type = "checkbox"
+                    cb:addEventListener("change", function()
+                        dirty(nil)()
+                        rebuild_wit(pi)
+                    end)
+                    td:appendChild(cb)
+                    rec.cells[k] = { td = td, cb = cb }
+                end
+                tr:appendChild(td)
+            end
+            tb:appendChild(tr)
+        end
+        box:appendChild(tb)
+        box:appendChild(text("div", "distinguishing words:", "wlabel"))
+        local wl = el("div")
+        box:appendChild(wl)
+        rec.witbox, rec.wit = wl, {}
+        local r = el("div", "wordrow")
+        r:appendChild(text("span", "equivalence classes:", "wlabel"))
+        local cst = el("span", "st")
+        local cinp = mk_input("expr", 40, dirty(cst))
+        cinp.placeholder = "{q0,q3} {q1,q4} {q2} {q5}"
+        r:appendChild(cinp); r:appendChild(cst)
+        box:appendChild(r)
+        rec.classes = cinp
+        rec.cells["classes"] = { td = cst }
     end
     return box
 end
@@ -939,6 +1075,21 @@ save_local = function()
                 for wi,inp in ipairs(p.sets) do pr.sets[wi] = inp.value end
             elseif p.kind == "regexp" then
                 pr.expr = p.expr.value
+            elseif p.kind == "choice" then
+                pr.sel = {}
+                for k, sel in pairs(p.sels) do pr.sel[k] = sel.value end
+            elseif p.kind == "pumping" then
+                pr.z = p.z.value
+                pr.is = {}
+                for ri, inp in ipairs(p.i_inps) do pr.is[ri] = inp.value end
+            elseif p.kind == "min_table" then
+                pr.marks = {}
+                for k, c in pairs(p.cells) do
+                    if c.cb and c.cb.checked then pr.marks[#pr.marks+1] = k end
+                end
+                pr.classes = p.classes.value
+                pr.wit = {}
+                for k, inp in pairs(p.wit or {}) do pr.wit[k] = inp.value end
             end
             rec.parts[pi] = pr
         end
@@ -1008,6 +1159,27 @@ local function restore_local()
                     end
                 elseif p.kind == "regexp" then
                     if pr.expr then p.expr.value = pr.expr end
+                elseif p.kind == "choice" then
+                    for k, sel in pairs(p.sels) do
+                        sel.value = (pr.sel or {})[k] or ""
+                    end
+                elseif p.kind == "pumping" then
+                    if pr.z then p.z.value = pr.z end
+                    p.pending_is = pr.is
+                    if pr.z and pr.z:match("%S") then
+                        request_splits(tonumber(pi))
+                    end
+                elseif p.kind == "min_table" then
+                    local mk = {}
+                    for _, k in ipairs(pr.marks or {}) do mk[k] = true end
+                    for k, c in pairs(p.cells) do
+                        if c.cb then c.cb.checked = mk[k] and true or false end
+                    end
+                    rebuild_wit(tonumber(pi))
+                    for k, inp in pairs(p.wit) do
+                        inp.value = (pr.wit or {})[k] or ""
+                    end
+                    if pr.classes then p.classes.value = pr.classes end
                 end
             end
         end
@@ -1283,6 +1455,23 @@ send_check = function(only_pi)
                 end
             elseif p.kind == "regexp" then
                 pd.expr = p.expr.value
+            elseif p.kind == "choice" then
+                pd.sel = {}
+                for k, sel in pairs(p.sels) do pd.sel[k] = sel.value end
+            elseif p.kind == "pumping" then
+                pd.z = p.z.value
+                pd.is = {}
+                for ri, inp in ipairs(p.i_inps) do pd.is[ri] = inp.value end
+            elseif p.kind == "min_table" then
+                pd.marks = {}
+                for k, c in pairs(p.cells) do
+                    if c.cb and c.cb.checked then
+                        pd.marks[#pd.marks+1] = k
+                    end
+                end
+                pd.classes = p.classes.value
+                pd.wit = {}
+                for k, inp in pairs(p.wit or {}) do pd.wit[k] = inp.value end
             end
             parts[#parts+1] = pd
             end
@@ -1347,6 +1536,51 @@ local function paint_st(st, kind, extra)
     st.innerHTML = ""
     st:appendChild(text("span", k[2], "stmark"))
     if extra then st:appendChild(text("span", "  " .. extra)) end
+end
+
+-- worker answered a "pump_splits" request: build the i-table
+local function render_splits(pi, res)
+    local p = state.parts[pi]
+    if not (p and p.splitbox) then return end
+    clear(p.splitbox)
+    p.i_inps, p.row_st = {}, {}
+    if res.err then
+        paint_st(p.z_st, "fail", res.err)
+        return
+    end
+    paint_st(p.z_st, "ok")
+    p.splitbox:appendChild(text("div",
+        "z(" .. tostring(res.k) .. ") = " .. res.word ..
+        "  —  pick i ≠ 1 for every decomposition:", "wlabel"))
+    local function lam(s) return s == "" and "λ" or s end
+    for ri, s in ipairs(res.splits or {}) do
+        local r = el("div", "wordrow")
+        r:appendChild(text("span",
+            "u = " .. lam(s.u) .. ",  v = " .. lam(s.v) ..
+            ",  w = " .. lam(s.w), "wlabel"))
+        local rst = el("span", "st")
+        local inp = mk_input(nil, 4, dirty(rst))
+        inp.placeholder = "i"
+        r:appendChild(text("span", "i =", "wlabel"))
+        r:appendChild(inp)
+        local pv = el("span", "wlabel")
+        inp:addEventListener("input", function()
+            local n = tonumber(inp.value)
+            pv.textContent = (n and n >= 0 and n == math.floor(n))
+                and ("  →  " .. lam(s.u .. s.v:rep(n) .. s.w)) or ""
+        end)
+        r:appendChild(pv); r:appendChild(rst)
+        p.splitbox:appendChild(r)
+        p.i_inps[ri], p.row_st[ri] = inp, rst
+    end
+    if p.pending_is then
+        for ri, v in pairs(p.pending_is) do
+            if p.i_inps[tonumber(ri)] then
+                p.i_inps[tonumber(ri)].value = v
+            end
+        end
+        p.pending_is = nil
+    end
 end
 
 local function row_st_el(si, ri)
@@ -1657,6 +1891,10 @@ return function(data)
         select_task()
     elseif data.what == "view" then
         if data.id == state.id then render(data.view) end
+    elseif data.what == "splits" then
+        if data.id == state.id then
+            render_splits(data.pi, data.res or {})
+        end
     elseif data.what == "result" then
         if data.id == state.id then paint(data.res) end
     end
