@@ -280,6 +280,7 @@ end
 
 local aut_id_seq = 0
 local pending_aut = {}      -- editor boots only once the host is in the DOM
+local send_check            -- forward decl: per-part buttons call it
 
 local function mount_aut(host, cfg_tbl, readonly)
     -- ids, not element handles, cross the Lua<->JS bridge
@@ -420,6 +421,10 @@ local function render_part(pv, pi)
     lab:appendChild(text("span", pv.label or ""))
     local st = el("span", "st")
     lab:appendChild(st)
+    local chk = el("button", "pcheck")
+    chk.textContent = "Check"
+    chk:addEventListener("click", function() send_check(pi) end)
+    lab:appendChild(chk)
     box:appendChild(lab)
     local rec = { kind = pv.kind, st = st }
     state.parts[pi] = rec
@@ -738,7 +743,7 @@ local function render(view)
     checkbtn.textContent = "Check proof"
     if syntaxhint_el then syntaxhint_el.innerHTML = PROOF_SYNTAX_HINT end
     if view.type == "parts" then
-        checkbtn.textContent = "Check"
+        checkbtn.textContent = "Check all"
         rulesbox_el.style.display = "none"
         if syntaxhint_el then
             syntaxhint_el.innerHTML = PARTS_SYNTAX_HINT
@@ -811,7 +816,7 @@ local function request_view(id)
     util.js_post_message(json.encode({ what="view", id=id }))
 end
 
-local function send_check()
+send_check = function(only_pi)
     local view = state.view
     if not view then return end
     local data = { what="check", id=state.id, sections={} }
@@ -823,6 +828,7 @@ local function send_check()
     if view.type == "parts" then
         local parts = {}
         for pi,p in pairs(state.parts) do
+            if not only_pi or pi == only_pi then
             local pd = { pi = pi }
             if p.kind == "aut" then
                 pd.aut = p.app
@@ -852,8 +858,10 @@ local function send_check()
                 pd.expr = p.expr.value
             end
             parts[#parts+1] = pd
+            end
         end
         data.parts = parts
+        data.part = only_pi
         util.js_post_message(json.encode(data))
         return
     end
@@ -917,6 +925,18 @@ local function row_st_el(si, ri)
     return state.st[si] and state.st[si][ri]
 end
 
+local function clear_part_st(p)
+    if p.st then p.st.textContent=""; p.st.className="st" end
+    for _,rst in pairs(p.row_st or {}) do
+        rst.textContent=""; rst.className="st"
+    end
+    for _,c in pairs(p.cells or {}) do c.td.className = "" end
+    if p.re_st then p.re_st.textContent=""; p.re_st.className="st" end
+    if p.expr_st then
+        p.expr_st.textContent=""; p.expr_st.className="st"
+    end
+end
+
 local function clear_all_st()
     for _,sec in pairs(state.st) do
         for _,st in pairs(sec) do st.textContent=""; st.className="st" end
@@ -929,21 +949,18 @@ local function clear_all_st()
     end
     if state.ih_st then state.ih_st.textContent=""; state.ih_st.className="st" end
     if state.regexp_st then state.regexp_st.textContent=""; state.regexp_st.className="st" end
-    for _,p in pairs(state.parts or {}) do
-        if p.st then p.st.textContent=""; p.st.className="st" end
-        for _,rst in pairs(p.row_st or {}) do
-            rst.textContent=""; rst.className="st"
-        end
-        for _,c in pairs(p.cells or {}) do c.td.className = "" end
-        if p.re_st then p.re_st.textContent=""; p.re_st.className="st" end
-        if p.expr_st then
-            p.expr_st.textContent=""; p.expr_st.className="st"
-        end
-    end
+    for _,p in pairs(state.parts or {}) do clear_part_st(p) end
 end
 
 local function paint(res)
-    clear_all_st()
+    if res.partial then
+        for _,pres in ipairs(res.parts or {}) do
+            local p = state.parts[pres.pi]
+            if p then clear_part_st(p) end
+        end
+    else
+        clear_all_st()
+    end
     if state.view and state.view.type == "regexp" then
         if state.regexp_st then
             if res.ok then
@@ -995,13 +1012,15 @@ local function paint(res)
                 end
             end
         end
-        clear(summary_el)
-        if res.ok then
-            summary_el:appendChild(text("span",
-                "all parts verified ✓", "st ok"))
-        else
-            summary_el:appendChild(text("span",
-                res.msg or "not yet fully verified.", "st fail"))
+        if not res.partial then
+            clear(summary_el)
+            if res.ok then
+                summary_el:appendChild(text("span",
+                    "all parts verified ✓", "st ok"))
+            else
+                summary_el:appendChild(text("span",
+                    res.msg or "not yet fully verified.", "st fail"))
+            end
         end
         return
     end
@@ -1125,7 +1144,7 @@ local function render_tabs()
 end
 
 -- ---------- events ----------
-checkbtn:addEventListener("click", send_check)
+checkbtn:addEventListener("click", function() send_check() end)
 
 local function import_and_reload(text)
     local n, err = import_all(text)

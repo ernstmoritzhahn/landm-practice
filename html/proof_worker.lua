@@ -103,6 +103,7 @@ return function(data)
             end
             local parts, all_ok = {}, true
             for pi,pdef in ipairs(task.parts or {}) do
+              if not data.part or pi == data.part then
                 local pd = by_pi[pi] or {}
                 local okp, pres = pcall(function()
                     if pdef.kind == "aut" then
@@ -141,10 +142,12 @@ return function(data)
                 pres.pi = pi
                 if not pres.ok then all_ok = false end
                 parts[#parts+1] = pres
+              end
             end
             util.js_post_message(json.encode(
                 { what="result", id=data.id,
-                  res={ ok=all_ok, parts=parts } }))
+                  res={ ok=all_ok, parts=parts,
+                        partial=(data.part ~= nil) } }))
             return
         end
         local ok2,input = pcall(build_input, task, data)
