@@ -365,6 +365,20 @@ regexp_task{
 
 local function parts_task(t)
     t.type = "parts"
+    -- a simplify slot whose stage is never embedded as a component by
+    -- a later step is the last step: its result needs no composable
+    -- form (nothing consumes it), so non-composable only warns
+    local consumed = {}
+    for _,p in ipairs(t.parts or {}) do
+        for _,s in ipairs(p.seeds_locked or {}) do
+            consumed[s:gsub("#.*","")] = true
+        end
+    end
+    for _,p in ipairs(t.parts or {}) do
+        if p.takeover_from then
+            p.last_step = not consumed[p.takeover_from]
+        end
+    end
     def_task(t)
 end
 

@@ -706,9 +706,17 @@ function M.check_simplify(part, model_json, src_json)
     end
     -- the result becomes the next stage's component, so it must keep
     -- the composable form (1 initial without incoming, 1 final
-    -- without outgoing transitions)
+    -- without outgoing transitions) — except on the last step, where
+    -- nothing embeds it: there a non-composable result is only a
+    -- clear warning
     local cp = composable_problems(m)
     if cp then
+        if part.last_step then
+            return { ok=true, kind="warn",
+                     msg="correct language — but NOT composable: " .. cp
+                      .. ".  Fine as a final answer; only automata "
+                      .. "that feed a later step must stay composable." }
+        end
         return { ok=false, kind="composable",
                  msg="correct language, but not composable: " .. cp
                   .. " — it becomes the next step's component" }
