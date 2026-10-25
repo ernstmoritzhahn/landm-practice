@@ -912,9 +912,9 @@ local KIND = {
 local function paint_st(st, kind, extra)
     local k = KIND[kind] or KIND.pending
     st.className = "st " .. k[1]
-    local s = k[2]
-    if extra then s = s .. "  " .. extra end
-    st.textContent = s
+    st.innerHTML = ""
+    st:appendChild(text("span", k[2], "stmark"))
+    if extra then st:appendChild(text("span", "  " .. extra)) end
 end
 
 local function row_st_el(si, ri)
@@ -1031,7 +1031,7 @@ local function paint(res)
         if sres.msg then
             local blk = state.free_blocks[si]
             local st = (blk and blk.bind_st) or row_st_el(si, 1)
-            if st then st.className="st fail"; st.textContent="✗ "..sres.msg end
+            if st then paint_st(st, "fail", sres.msg) end
         end
         for j,link in pairs(sres.links or {}) do
             local st = row_st_el(si, j+1)
