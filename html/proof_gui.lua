@@ -451,9 +451,13 @@ local GGRID = 66
 -- already wired flags does not undo that work); stale tagged nodes are
 -- removed — student edges incident to them are retargeted by role
 -- (the old entry's successors attach to the new entry, likewise the
--- old exit); missing nodes are placed right of the kept block (or of
--- all content on first embed).  The stage's internal transitions are
--- rebuilt to match — student edges to kept nodes are untouched.
+-- old exit).  The same retargeting applies when a kept node LOSES its
+-- entry/exit role to a different state (e.g. a newly added state takes
+-- over as final): connections to the special states stay, re-pointed
+-- at their successors; missing nodes are placed right of the kept
+-- block (or of all content on first embed).  The stage's internal
+-- transitions are rebuilt to match — other student edges are
+-- untouched.
 local function upsert_component(m, tag, sm)
     -- tag names the embedded copy ("b", "b#2"); # is not name-safe so
     -- node names use the #-stripped prefix while .seed keeps the tag
@@ -508,6 +512,7 @@ local function upsert_component(m, tag, sm)
         end
     end
     local name_of = {}              -- seed node id -> result node
+    local demoted = {}              -- kept node id -> roles it lost
     for _, s in ipairs(sm.states or {}) do
         local wn = prefix .. tostring(s.name or s.id)
         local n = by_name[wn]
@@ -515,12 +520,22 @@ local function upsert_component(m, tag, sm)
         -- component state — regardless of a lost seed tag (hand-edited
         -- JSON, stale bundle); claim it instead of duplicating
         if n then
+            -- record the roles this node held BEFORE the refresh:
+            -- a kept node that loses entry/exit to a new state gets
+            -- its student edges retargeted just like a deleted one
+            local was_entry = n.seed_entry and true or false
+            local was_exit = n.seed_exit and true or false
             n.locked = true
             n.seed = tag
             -- the component's own entry/exit markers follow the
             -- stage automaton's flags on every refresh
             n.seed_entry = s.initial and true or nil
             n.seed_exit = s.accepting and true or nil
+            local l_entry = was_entry and not n.seed_entry
+            local l_exit = was_exit and not n.seed_exit
+            if l_entry or l_exit then
+                demoted[n.id] = { entry = l_entry, exit = l_exit }
+            end
             name_of[tostring(s.id)] = n     -- keep position + flags
         end
     end
@@ -566,18 +581,43 @@ local function upsert_component(m, tag, sm)
             by_name[n.name] = n
         end
     end
-    -- 3b. retarget student edges that were severed by step 1: an edge
-    -- that left a dead node reconnects from the NEW exit state, one
+    -- 3b. retarget student edges that touched a boundary state whose
+    -- role moved on: either the node was dropped in step 1, or it
+    -- survived but is no longer the component's entry/exit.  An edge
+    -- that left such a node reconnects from the NEW exit state, one
     -- that entered it reconnects to the NEW entry state (composable
     -- components have exactly one of each); edges touching a vanished
     -- interior state are dropped
-    if #dropped > 0 then
+    if #dropped > 0 or next(demoted) then
         local new_entry, new_exit
         for _, s in ipairs(sm.states or {}) do
             local n = name_of[tostring(s.id)]
             if s.initial then new_entry = n end
             if s.accepting then new_exit = n end
         end
+        -- kept nodes that lost their role: rewrite live edges in place
+        local live = {}
+        for _, e in ipairs(m.transitions) do
+            if e.seed ~= tag then
+                local fd, td = demoted[e.from], demoted[e.to]
+                if fd then
+                    local f = (fd.exit and new_exit)
+                              or (fd.entry and new_entry)
+                    if f then e.from = f.id else fd = "drop" end
+                end
+                if td then
+                    local t = (td.entry and new_entry)
+                              or (td.exit and new_exit)
+                    if t then e.to = t.id else td = "drop" end
+                end
+                if fd ~= "drop" and td ~= "drop" then
+                    live[#live + 1] = e
+                end
+            else
+                live[#live + 1] = e
+            end
+        end
+        m.transitions = live
         for _, e in ipairs(dropped) do
             local fd, td = dead[e.from], dead[e.to]
             local f = fd and ((fd.exit and new_exit)
