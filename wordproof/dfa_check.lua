@@ -93,6 +93,22 @@ local function model_to_dfa(m, expect_type)
         end
     end
     if not initial then problems[#problems + 1] = "no initial state" end
+    -- overlapping states hide each other on the canvas (grid snap can
+    -- stack them exactly); the resulting "missing transition from q3"
+    -- complaints read as nonsense, so flag the overlap explicitly first
+    for i = 1, #m.states - 1 do
+        for j = i + 1, #m.states do
+            local a, b = m.states[i], m.states[j]
+            local dx = (a.x or 0) - (b.x or 0)
+            local dy = (a.y or 0) - (b.y or 0)
+            if dx * dx + dy * dy < 35 * 35 then
+                problems[#problems + 1] = "states "
+                    .. tostring(a.name or a.id) .. " and "
+                    .. tostring(b.name or b.id)
+                    .. " overlap — drag them apart"
+            end
+        end
+    end
     -- transitions: model ids are editor ids, resolve to names first
     local name_of = {}
     for _, s in ipairs(m.states) do
