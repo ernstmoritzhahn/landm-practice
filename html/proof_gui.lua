@@ -46,6 +46,7 @@ local PARTS_SYNTAX_HINT =
 
 local state = {
     sheets = nil,          -- tab structure from the worker
+    sheet_i = 1,           -- selected sheet (only ?exercise= switches)
     group_i = 1,           -- selected exercise-group tab
     sub_i   = 1,           -- selected subtask tab
     free    = false,       -- variant toggle
@@ -54,6 +55,12 @@ local state = {
     holes = {}, st = {}, free_blocks = {},
     parts = {},
 }
+
+-- the current sheet; everywhere the UI said sheets[1] it now means
+-- the sheet that holds the selected group
+local function cur_sheet()
+    return state.sheets and state.sheets[state.sheet_i]
+end
 
 -- ?exercise=<group-id> embeds one exercise per page (Canvas gets one
 -- iframe per Aufgabe); absent -> fall back to a group tab bar.
@@ -435,7 +442,7 @@ end
 -- ---------- persistence (localStorage, keys "landm:<sheet>:<task>") ----------
 local STORE_PREFIX = "landm:"
 local function storage_key()
-    local sh = state.sheets and state.sheets[1]
+    local sh = cur_sheet()
     return STORE_PREFIX .. (sh and sh.id or "sheet") .. ":" .. tostring(state.id)
 end
 local function ls_set(k, v)
@@ -949,8 +956,8 @@ end
 
 -- ---------- tab bar ----------
 local function current_task_id()
-    local g = state.sheets
-        and state.sheets[1] and state.sheets[1].groups[state.group_i]
+    local sh = cur_sheet()
+    local g = sh and sh.groups[state.group_i]
     local sub = g and g.subtasks[state.sub_i]
     if not sub then return nil end
     if state.free and sub.free_id then return sub.free_id end
@@ -964,7 +971,7 @@ end
 
 local function render_tabs()
     clear(tabs_el); clear(subtabs_el)
-    local sh = state.sheets and state.sheets[1]
+    local sh = cur_sheet()
     if not sh then return end
     if not state.pinned and #sh.groups > 1 then
     for gi,g in ipairs(sh.groups) do
@@ -1049,15 +1056,19 @@ return function(data)
     if data.what == "tasks" then
         state.sheets = data.sheets
         if ex_param then
-            for gi,g in ipairs(state.sheets[1].groups) do
-                if g.id == ex_param then
-                    state.group_i, state.pinned = gi, true
-                    break
+            for si,sh in ipairs(state.sheets) do
+                for gi,g in ipairs(sh.groups) do
+                    if g.id == ex_param then
+                        state.sheet_i, state.group_i = si, gi
+                        state.pinned = true
+                        break
+                    end
                 end
+                if state.pinned then break end
             end
         end
         if sub_param then
-            local g = state.sheets[1].groups[state.group_i]
+            local g = cur_sheet().groups[state.group_i]
             for si,sub in ipairs(g.subtasks) do
                 if sub.sub == sub_param then state.sub_i = si break end
             end

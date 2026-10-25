@@ -474,6 +474,44 @@ parts_task{
 }
 
 -- ======================================================================
+-- Sheet 2
+-- ======================================================================
+
+-- 2.1  RE -> DFA by hand: the reference DFAs are the model solutions
+--      from the exercise sheet (dead state qe included; the checker
+--      reports a warning for extra states, not an error)
+local R21a_DFA = "({q0,q1,q2,q3,qe},{a,b},"
+    .. "{(q0,a,q1),(q0,b,q2),(q1,a,qe),(q1,b,q0),(q2,a,q3),(q2,b,qe),"
+    .. "(q3,a,qe),(q3,b,qe),(qe,a,qe),(qe,b,qe)},q0,{q3})"      -- (ab)*ba
+local R21b_DFA = "({q0,q1,qe},{a,b},"
+    .. "{(q0,a,q1),(q0,b,qe),(q1,a,q0),(q1,b,q1),"
+    .. "(qe,a,qe),(qe,b,qe)},q0,{q0})"                          -- (ab*a)*
+local R21c_DFA = "({q0,q1,q2,q3,qe},{a,b},"
+    .. "{(q0,a,q1),(q0,b,qe),(q1,a,q2),(q1,b,qe),(q2,a,q1),(q2,b,q3),"
+    .. "(q3,a,qe),(q3,b,q0),(qe,a,qe),(qe,b,qe)},q0,{q0})"      -- ((aa)+bb)*
+local R21d_DFA = "({q0,q1,q2,q3,q4,q5,qe},{a,b},"
+    .. "{(q0,a,q1),(q0,b,qe),(q1,a,q2),(q1,b,qe),(q2,a,q3),(q2,b,q3),"
+    .. "(q3,a,q3),(q3,b,q4),(q4,a,q3),(q4,b,q5),(q5,a,q3),(q5,b,q5),"
+    .. "(qe,a,qe),(qe,b,qe)},q0,{q5})"                          -- aa(a|b)+bb
+
+parts_task{
+    id = "2.1m", letter = "M",
+    title = "Construct DFA from RE",
+    desc = "For each of the following regular expressions E, draw the "
+        .. "state diagram of a DFA that accepts L(E).",
+    parts = {
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="E = (ab)*ba", reference=R21a_DFA },
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="E = (ab*a)*", reference=R21b_DFA },
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="E = ((aa)+bb)*", reference=R21c_DFA },
+        { kind="aut", aut_type="dfa", alphabet="a,b",
+          label="E = aa(a|b)+bb", reference=R21d_DFA },
+    },
+}
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -507,6 +545,11 @@ M.sheets = {
           subtasks = {"1.2a","1.2b","1.2c","1.2d","1.2e","1.2f"} },
         { id="1.3", title="Exercise 1.3",
           subtasks = {"1.3j","1.3k","1.3l"} },
+      }},
+    { id="sheet2", title="Sheet 2",
+      groups = {
+        { id="2.1", title="Exercise 2.1",
+          subtasks = {"2.1m"} },
       }},
 }
 
