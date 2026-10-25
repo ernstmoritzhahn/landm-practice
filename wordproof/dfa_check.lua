@@ -99,13 +99,16 @@ local function model_to_dfa(m, expect_type)
     for i = 1, #m.states - 1 do
         for j = i + 1, #m.states do
             local a, b = m.states[i], m.states[j]
-            local dx = (a.x or 0) - (b.x or 0)
-            local dy = (a.y or 0) - (b.y or 0)
-            if dx * dx + dy * dy < 35 * 35 then
-                problems[#problems + 1] = "states "
-                    .. tostring(a.name or a.id) .. " and "
-                    .. tostring(b.name or b.id)
-                    .. " overlap — drag them apart"
+            if type(a.x) == "number" and type(a.y) == "number"
+                    and type(b.x) == "number" and type(b.y) == "number" then
+                local dx = a.x - b.x
+                local dy = a.y - b.y
+                if dx * dx + dy * dy < 35 * 35 then
+                    problems[#problems + 1] = "states "
+                        .. tostring(a.name or a.id) .. " and "
+                        .. tostring(b.name or b.id)
+                        .. " overlap — drag them apart"
+                end
             end
         end
     end
@@ -265,20 +268,38 @@ function M.check_trace(part, traces)
             rows[i] = { kind="empty", msg="(empty)" }
         else
             local true_seq = run_states(ref, word)
-            -- strip the student's leading start state OR tolerate its
-            -- absence: rows may give |w|+1 or |w| entries
-            local st_seq = seq
-            if #st_seq == #true_seq - 1 then
-                -- student omitted the leading start state: prepend it
-                local with_start = { true_seq[1] }
-                for _, s in ipairs(st_seq) do
-                    with_start[#with_start + 1] = s
+            -- rows may give the full |w|+1-state run or omit the start
+            -- state (|w| entries).  A dropped REPEAT mid-run also
+            -- shortens the row by one — indistinguishable by length
+            -- alone when the first symbol loops back to the start —
+            -- so compare both alignments and keep the diagnosis that
+            -- explains the longest prefix of the student's input
+            local function diverge_at(sq)
+                for j = 1, #true_seq do
+                    if sq[j] ~= true_seq[j] then return j end
                 end
-                st_seq = with_start
             end
-            local diverge
-            for j = 1, #true_seq do
-                if st_seq[j] ~= true_seq[j] then diverge = j; break end
+            local cands = { seq }
+            if #seq == #true_seq - 1 then
+                local ws = { true_seq[1] }
+                for _, s in ipairs(seq) do ws[#ws + 1] = s end
+                cands[2] = ws
+            end
+            local st_seq, diverge
+            for _, sq in ipairs(cands) do
+                if not diverge_at(sq) and #sq == #true_seq then
+                    st_seq = sq; break
+                end
+            end
+            if not st_seq then
+                local best_d
+                for _, sq in ipairs(cands) do
+                    local d = diverge_at(sq)
+                    if not d then st_seq = sq; diverge = nil; break end
+                    if not best_d or d > best_d then
+                        st_seq, diverge, best_d = sq, d, d
+                    end
+                end
             end
             if diverge then
                 all_ok = false
