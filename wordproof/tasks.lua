@@ -614,7 +614,10 @@ local function gstep(sid, label, reference, seeds, alphabet)
              alphabet=alphabet or "a,b",
              label=label, reference=reference, sub=sid .. ")",
              sid=sid, seeds_locked=seeds,
-             check = seeds and "compose" or nil }
+             -- atoms have no components to embed, but compose still
+             -- runs the composable-form check: a stage only counts
+             -- when it can serve as a later component
+             check = "compose" }
 end
 
 local function sstep(sid, reference, alphabet)

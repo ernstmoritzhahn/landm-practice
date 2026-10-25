@@ -449,10 +449,11 @@ local GGRID = 66
 -- Name-preserving merge: embedded nodes that still appear in the stage
 -- automaton keep position AND wiring flags (a refresh after the student
 -- already wired flags does not undo that work); stale tagged nodes are
--- removed together with incident edges; missing nodes are placed right
--- of the kept block (or of all content on first embed).  The stage's
--- internal transitions are rebuilt to match — student edges to kept
--- nodes are untouched.
+-- removed — student edges incident to them are retargeted by role
+-- (the old entry's successors attach to the new entry, likewise the
+-- old exit); missing nodes are placed right of the kept block (or of
+-- all content on first embed).  The stage's internal transitions are
+-- rebuilt to match — student edges to kept nodes are untouched.
 local function upsert_component(m, tag, sm)
     -- tag names the embedded copy ("b", "b#2"); # is not name-safe so
     -- node names use the #-stripped prefix while .seed keeps the tag
@@ -463,13 +464,18 @@ local function upsert_component(m, tag, sm)
     for _, s in ipairs(sm.states or {}) do
         want_names[prefix .. tostring(s.name or s.id)] = true
     end
-    -- 1. drop stale embedded nodes (+ incident edges of any kind)
+    -- 1. drop stale embedded nodes (+ incident edges); student edges
+    -- that ran to a stale node are kept aside for retargeting — the
+    -- role it played (entry/exit) names its successor under the new
+    -- component version
     local dead = {}
+    local dropped = {}
     local kept_states = {}
     for _, s in ipairs(m.states) do
         if s.seed == tag
            and not want_names[tostring(s.name or s.id)] then
-            dead[s.id] = true
+            dead[s.id] = { entry = s.seed_entry and true or false,
+                           exit = s.seed_exit and true or false }
         else
             kept_states[#kept_states + 1] = s
         end
@@ -478,7 +484,11 @@ local function upsert_component(m, tag, sm)
     if next(dead) then
         local kept_tr = {}
         for _, e in ipairs(m.transitions) do
-            if not (dead[e.from] or dead[e.to]) then
+            if dead[e.from] or dead[e.to] then
+                if e.seed ~= tag then
+                    dropped[#dropped + 1] = e
+                end
+            else
                 kept_tr[#kept_tr + 1] = e
             end
         end
@@ -554,6 +564,34 @@ local function upsert_component(m, tag, sm)
             m.states[#m.states + 1] = n
             name_of[tostring(s.id)] = n
             by_name[n.name] = n
+        end
+    end
+    -- 3b. retarget student edges that were severed by step 1: an edge
+    -- that left a dead node reconnects from the NEW exit state, one
+    -- that entered it reconnects to the NEW entry state (composable
+    -- components have exactly one of each); edges touching a vanished
+    -- interior state are dropped
+    if #dropped > 0 then
+        local new_entry, new_exit
+        for _, s in ipairs(sm.states or {}) do
+            local n = name_of[tostring(s.id)]
+            if s.initial then new_entry = n end
+            if s.accepting then new_exit = n end
+        end
+        for _, e in ipairs(dropped) do
+            local fd, td = dead[e.from], dead[e.to]
+            local f = fd and ((fd.exit and new_exit)
+                              or (fd.entry and new_entry)) or nil
+            local t = td and ((td.entry and new_entry)
+                              or (td.exit and new_exit)) or nil
+            local fi = f and f.id or (not fd and e.from)
+            local ti = t and t.id or (not td and e.to)
+            if fi and ti then
+                next_id = next_id + 1
+                m.transitions[#m.transitions + 1] = {
+                    id = next_id, from = fi, to = ti,
+                    label = e.label or "" }
+            end
         end
     end
     -- 4. rebuild the stage's internal edges verbatim

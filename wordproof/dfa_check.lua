@@ -443,6 +443,43 @@ local function edge_sets(m)
     return sets
 end
 
+-- the lecture's "composable" normal form: exactly one initial state
+-- with in-degree 0 and exactly one final state with out-degree 0;
+-- returns a short problem description or nil when the form holds
+local function composable_problems(m)
+    local id_name, adj, radj = {}, {}, {}
+    for _, s in ipairs(m.states or {}) do
+        id_name[tostring(s.id)] = tostring(s.name or s.id)
+    end
+    local n_init, n_fin, init, fin = 0, 0, nil, nil
+    for _, s in ipairs(m.states or {}) do
+        local nm = tostring(s.name or s.id)
+        adj[nm], radj[nm] = {}, {}
+        if s.initial then n_init = n_init + 1; init = nm end
+        if s.accepting then n_fin = n_fin + 1; fin = nm end
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local f = id_name[tostring(e.from)]
+        local t = id_name[tostring(e.to)]
+        if f and t then adj[f][t] = true; radj[t][f] = true end
+    end
+    if n_init ~= 1 then
+        return "exactly one initial state expected (found "
+            .. n_init .. ")"
+    end
+    if next(radj[init] or {}) then
+        return "the initial state must have no incoming transitions"
+    end
+    if n_fin ~= 1 then
+        return "exactly one final state expected (found "
+            .. n_fin .. ")"
+    end
+    if next(adj[fin] or {}) then
+        return "the final state must have no outgoing transitions"
+    end
+    return nil
+end
+
 function M.check_compose(part, model_json, seeds)
     local ok, m = pcall(json.decode, model_json or "")
     if not ok or type(m) ~= "table"
@@ -506,6 +543,13 @@ function M.check_compose(part, model_json, seeds)
             return { ok=false, kind="empty",
                      msg="component " .. shown .. ") is still empty "
                       .. "— finish that step first" }
+        end
+        -- a stage is a usable component only in composable form
+        local cp = composable_problems(sm)
+        if cp then
+            return { ok=false, kind="composable",
+                     msg="component " .. shown .. ") is not composable"
+                      .. " — " .. cp .. " — fix that step first" }
         end
         local emb = embedded[tag]
         if not emb or #emb == 0 then
@@ -605,31 +649,10 @@ function M.check_compose(part, model_json, seeds)
     -- the composed automaton must itself be composable again — the
     -- lecture's invariant: exactly one initial state without incoming
     -- arrows, exactly one final state without outgoing arrows
-    local n_init, n_fin, init, fin = 0, 0, nil, nil
-    for _, s in ipairs(m.states) do
-        local nm = tostring(s.name or s.id)
-        if s.initial then n_init = n_init + 1; init = nm end
-        if s.accepting then n_fin = n_fin + 1; fin = nm end
-    end
-    if n_init ~= 1 then
+    local cp = composable_problems(m)
+    if cp then
         return { ok=false, kind="composable",
-                 msg="not composable: a composable NFA-λ has exactly "
-                  .. "one initial state (found " .. n_init .. ")" }
-    end
-    if next(radj[init] or {}) then
-        return { ok=false, kind="composable",
-                 msg="not composable: the initial state must have no "
-                  .. "incoming transitions" }
-    end
-    if n_fin ~= 1 then
-        return { ok=false, kind="composable",
-                 msg="not composable: a composable NFA-λ has exactly "
-                  .. "one final state (found " .. n_fin .. ")" }
-    end
-    if next(adj[fin] or {}) then
-        return { ok=false, kind="composable",
-                 msg="not composable: the final state must have no "
-                  .. "outgoing transitions" }
+                 msg="not composable: " .. cp }
     end
     -- components check out: now the language, like a plain aut part
     local aut, problems = model_to_nfa(m, part.aut_type)
@@ -681,31 +704,14 @@ function M.check_simplify(part, model_json, src_json)
         return { ok=false, kind="mismatch",
                  msg="the simplified automaton changed the language" }
     end
-    -- the result becomes the next stage's component: warn when it is
-    -- not composable (1 initial without incoming, 1 final without
-    -- outgoing transitions)
-    local n_init, n_fin, init, fin = 0, 0, nil, nil
-    local adj, radj = {}, {}
-    for _, s in ipairs(m.states) do
-        local nm = tostring(s.name or s.id)
-        adj[nm], radj[nm] = {}, {}
-        if s.initial then n_init = n_init + 1; init = nm end
-        if s.accepting then n_fin = n_fin + 1; fin = nm end
-    end
-    local id_name = {}
-    for _, s in ipairs(m.states) do
-        id_name[tostring(s.id)] = tostring(s.name or s.id)
-    end
-    for _, e in ipairs(m.transitions or {}) do
-        local f, t = id_name[tostring(e.from)], id_name[tostring(e.to)]
-        if f and t then adj[f][t] = true; radj[t][f] = true end
-    end
-    if n_init ~= 1 or n_fin ~= 1
-       or next(radj[init] or {}) or next(adj[fin] or {}) then
-        return { ok=true, kind="warn",
-                 msg="correct language, but not composable — the next "
-                  .. "step can only enter it via its initial state and "
-                  .. "leave it via its final state" }
+    -- the result becomes the next stage's component, so it must keep
+    -- the composable form (1 initial without incoming, 1 final
+    -- without outgoing transitions)
+    local cp = composable_problems(m)
+    if cp then
+        return { ok=false, kind="composable",
+                 msg="correct language, but not composable: " .. cp
+                  .. " — it becomes the next step's component" }
     end
     local ok2, src = pcall(json.decode, src_json or "")
     if ok2 and type(src) == "table" and src.states then
