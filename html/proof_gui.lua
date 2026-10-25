@@ -689,6 +689,9 @@ local function takeover_simplify(pi)
     end
     landm_call("aut_load", p.app, json.encode(m))
     dirty(nil)()
+    -- aut_load is dirty-suppressed, so the new stage content would
+    -- not propagate by itself — refresh dependent parts explicitly
+    refresh_dependents_of(pi)
 end
 
 local function render_part(pv, pi)
@@ -1088,9 +1091,13 @@ local function render(view)
         -- first visit to a guided task: pre-place the locked given
         -- components so the canvas never starts bare; a non-empty
         -- (restored) model keeps the student's work instead
+        local appids = {}
         for pi,pv in ipairs(view.parts or {}) do
+            local p = state.parts[pi]
+            if p and p.kind == "aut" and p.app then
+                appids[#appids + 1] = p.app
+            end
             if pv.seeds_locked and #pv.seeds_locked > 0 then
-                local p = state.parts[pi]
                 -- restored work may still be in the app's pending
                 -- queue when aut_state reads ""; never clobber it
                 if p and not p.restored then
@@ -1102,6 +1109,20 @@ local function render(view)
                     end
                 end
             end
+        end
+        -- a restore can leave embedded components stale vs. the stage
+        -- they came from: once every editor has applied its pending
+        -- state, re-sync all guided components in stage order (upsert
+        -- keeps positions, flags and student wiring — entry/exit
+        -- edges retarget onto renamed successors)
+        if #appids > 0 then
+            landm_call("aut_when_ready", json.encode(appids), function()
+                for pi,pv in ipairs(view.parts or {}) do
+                    if pv.seeds_locked and #pv.seeds_locked > 0 then
+                        refresh_components(pi)
+                    end
+                end
+            end)
         end
         return
     end

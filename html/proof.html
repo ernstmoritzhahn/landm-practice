@@ -415,6 +415,25 @@
                     if (app) app.addEventListener("sendDataToExternal",
                                                   function() { cb(); });
                 });
+            },
+            /* cb once every listed <automata-app> carries 'ready',
+               i.e. its queued task/data/ro calls were applied — used
+               to re-sync guided components only after restored models
+               have actually landed (aut_state reads "" earlier) */
+            aut_when_ready: function(appIdsJson, cb) {
+                landm._aut_script().then(function() {
+                    var left = JSON.parse(appIdsJson).slice();
+                    var tries = 0;
+                    var t = setInterval(function() {
+                        left = left.filter(function(id) {
+                            var a = document.getElementById(id);
+                            return !(a && a.hasAttribute("ready"));
+                        });
+                        if (left.length === 0 || ++tries > 100) {
+                            clearInterval(t); cb();
+                        }
+                    }, 120);
+                });
             }
         };
 
