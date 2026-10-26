@@ -16,6 +16,7 @@
 --   tm    -> {r=sym, w=sym|nil (keep), d="L"|"R"|"S"}
 --   tm-N  -> { {r,w,d}, ... } with exactly N clauses
 local lpeg = require "lpeg"
+local util = require "lib.util"
 local M = {}
 
 local P, S, C, Ct = lpeg.P, lpeg.S, lpeg.C, lpeg.Ct
@@ -45,7 +46,9 @@ local pda_patt =
     SEP1 *
     (LAMC + ID) *                       -- pop
     (ARR + SLASH) *
-    C(P(1)^0) * sp * EOL                -- push = rest
+    -- push = symbol string; must not swallow a following clause —
+    -- ',' and ';' start the next label on the same edge
+    C((1 - S" \t,;/|")^0) * sp * EOL
 
 local function parse_pda(label)
     local i, p, u = pda_patt:match(label or "")
@@ -84,6 +87,45 @@ local function parse_tm(label, ntapes)
     return ts
 end
 
+-- one edge may carry several comma- or semicolon-separated labels
+-- (the book draws "b A/λ; b λ/λ" on a single edge).  ';' always
+-- separates; a bare ',' separates too when the unsplit segment does
+-- not parse as one clause (so "a, A -> AA" stays a single clause).
+local function parse_many(atype, label)
+    local segs = {}
+    for _, s in ipairs(util.split(label or "", ";")) do
+        s = util.trim(s)
+        if s ~= "" then segs[#segs + 1] = s end
+    end
+    if #segs == 0 then
+        return nil, "want 'input pop/push' — one or more "
+            .. "comma/semicolon-separated clauses"
+    end
+    local out = {}
+    for _, seg in ipairs(segs) do
+        local t, why = M.parse(atype, seg)
+        if t then
+            out[#out + 1] = t
+        elseif seg:find(",") then
+            -- comma-separated space-form clauses ("b A/λ,b λ/λ"):
+            -- every piece must parse as a full clause
+            for _, cs in ipairs(util.split(seg, ",")) do
+                if util.trim(cs) ~= "" then
+                    local ct, cw = M.parse(atype, cs)
+                    if not ct then
+                        return nil, "'" .. util.trim(cs)
+                            .. "': " .. tostring(cw)
+                    end
+                    out[#out + 1] = ct
+                end
+            end
+        else
+            return nil, "'" .. seg .. "': " .. tostring(why)
+        end
+    end
+    return out
+end
+
 -- ---------- registry ----------
 function M.tapes(atype)
     local n = (atype or ""):match("^tm%-(%d+)$")
@@ -104,6 +146,10 @@ function M.parse(atype, label)
     if n then return parse_tm(label, n) end
     return nil, "no label grammar for type '" .. tostring(atype) .. "'"
 end
+
+-- parse_many(type, label) -> {tuple,...} | nil, reason — one edge
+-- may carry several ','/';'-separated transition labels
+M.parse_many = parse_many
 
 -- canonical "input pop/push" string for pda:add_transition
 function M.pda_label(t)

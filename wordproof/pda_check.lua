@@ -261,16 +261,30 @@ function M.check_pda_model(part, model_json)
             problems[#problems + 1] = "transition with a dangling "
                 .. "endpoint"
         else
-            local t, why = label_lang.parse("pda", e.label)
-            if not t then
+            local ts, why = label_lang.parse_many("pda", e.label)
+            if not ts then
                 problems[#problems + 1] = "label '" .. tostring(e.label)
                     .. "': " .. why
             else
-                local pok, perr = pcall(pda.add_transition, pda, a,
-                                        label_lang.pda_label(t), b)
-                if not pok then
-                    problems[#problems + 1] = "label '"
-                        .. tostring(e.label) .. "': " .. tostring(perr)
+                for _, t in ipairs(ts) do
+                    local pok, perr = pcall(pda.add_transition, pda, a,
+                                            label_lang.pda_label(t), b)
+                    if not pok then
+                        -- drop the "[string "..."]:NN:" source prefix —
+                        -- internal chunk locations mean nothing here
+                        local msg = tostring(perr):gsub(
+                            '^%[string "[^"]*"%]:%d+:%s*', "")
+                        if msg:find("input character") then
+                            msg = "input must be a single "
+                                .. "symbol or λ"
+                        elseif msg:find("pop character") then
+                            msg = "pop must be a single stack "
+                                .. "symbol or λ (push may be "
+                                .. "longer)"
+                        end
+                        problems[#problems + 1] = "label '"
+                            .. label_lang.pda_label(t) .. "': " .. msg
+                    end
                 end
             end
         end

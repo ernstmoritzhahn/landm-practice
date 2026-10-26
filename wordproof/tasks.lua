@@ -1852,6 +1852,7 @@ end
 
 local PDA_FMT = "draw the state diagram — each transition label "
     .. "reads 'input pop/push' (e.g. \"a A/AA\" or \"λ Z/λ\"); "
+    .. "several transitions on one edge are separated by ';' or ','; "
     .. "λ = empty input/no pop/no push; a push may be a string "
     .. "(extended PDA); mark the initial and the final states"
 

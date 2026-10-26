@@ -218,19 +218,21 @@ function M.check_tm_model(part, model_json)
             problems[#problems + 1] = "transition with a dangling "
                 .. "endpoint"
         else
-            local ts, why = label_lang.parse(
+            local ts, why = label_lang.parse_many(
                 "tm" .. (ntapes > 1 and ("-" .. ntapes) or ""), e.label)
             if not ts then
                 problems[#problems + 1] = "label '" .. tostring(e.label)
                     .. "': " .. why
             else
-                local tapes = {}
-                for i, c in ipairs(ts) do
-                    tapes[i] = { r = c[1], w = c[2], d = c[3] }
+                for _, t in ipairs(ts) do
+                    local tapes = {}
+                    for i, c in ipairs(t) do
+                        tapes[i] = { r = c[1], w = c[2], d = c[3] }
+                    end
+                    local l = tm.trans[a] or {}
+                    tm.trans[a] = l
+                    l[#l + 1] = { from = a, tapes = tapes, to = b }
                 end
-                local l = tm.trans[a] or {}
-                tm.trans[a] = l
-                l[#l + 1] = { from = a, tapes = tapes, to = b }
             end
         end
     end
