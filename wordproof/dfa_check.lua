@@ -373,7 +373,7 @@ end
 -- drawn for completeness) do not fail the check: the sheet itself
 -- only draws the reachable product.
 local function norm_label(l)
-    if l == "" or l == "λ" or l == "eps" or l == "lambda" then
+    if l == "" or l == "λ" or l == "eps" or l == "lambda" or l == "lamda" then
         return "λ"
     end
     return tostring(l)

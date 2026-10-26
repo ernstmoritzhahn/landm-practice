@@ -23,7 +23,7 @@ local M = {}
 local P, S, C, Ct = lpeg.P, lpeg.S, lpeg.C, lpeg.Ct
 local sp   = S" \t"^0
 local EOL  = P(-1)
-local LAM  = P"λ" + P"ε" + P"eps" + P"\\lambda"
+local LAM  = P"λ" + P"ε" + P"eps" + P"\\lambda" + P"\\lamda"
 -- a symbol token: maximal run excluding separators/ws and "→"
 -- (multibyte: putting → into the S-set would ban every symbol whose
 -- UTF-8 shares a byte with it — ⊔ = E2 8A 94 vs → = E2 86 92)
@@ -37,7 +37,7 @@ local DIR  = C(S"LRS")
 local function unlam(s)
     if not s then return "" end
     s = s:gsub("λ+", ""):gsub("ε+", "")
-    if s == "eps" or s == "\\lambda" then return "" end
+    if s == "eps" or s == "\\lambda" or s == "\\lamda" then return "" end
     return s
 end
 
@@ -85,11 +85,13 @@ local function parse_tm(label, ntapes)
         if t[1] == "⊔" or t[1] == "B" then t[1] = "B" end
         if t[2] == "⊔" or t[2] == "B" then t[2] = "B" end
         if t[1] == "λ" or t[1] == "ε"
-           or t[1] == "eps" or t[1] == "\\lambda" then
+           or t[1] == "eps" or t[1] == "\\lambda"
+           or t[1] == "\\lamda" then
             return nil, "λ is not the blank — use ⊔"
         end
         if t[2] == "λ" or t[2] == "ε" or t[2] == "~"
-           or t[2] == "eps" or t[2] == "\\lambda" then
+           or t[2] == "eps" or t[2] == "\\lambda"
+           or t[2] == "\\lamda" then
             t[2] = nil                                     -- λ/~ keep
         end
     end

@@ -61,6 +61,8 @@ end
 --  input does not break parsing.
 local function scan_blocks(s, check)
     s = (s or ""):gsub("λ", " ")
+       :gsub("\\lambda", " "):gsub("\\lamda", " ")
+       :gsub("lambda", " "):gsub("lamda", " ")
         :gsub("\xe2\x88\x92", "-")   -- −  minus sign
         :gsub("\xe2\x80\x93", "-")   -- –  en dash
         :gsub("\xe2\x80\x94", "-")   -- —  em dash

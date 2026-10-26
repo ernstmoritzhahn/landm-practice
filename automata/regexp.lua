@@ -439,7 +439,8 @@ return function(automata)
                     * (tok("}") + tok(")") + expected("}"))
                     or P(false))
                  + (lenient and
-                    tok_word("\\lambda", "lambda_word")
+                    (tok_word("\\lambda", "lambda_word")
+                     + tok_word("\\lamda", "lambda_word"))
                     / function() return automata.make_regexp_blank() end
                     or P(false))
                  + primitive
