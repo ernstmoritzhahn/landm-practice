@@ -974,6 +974,44 @@ local function render_part(pv, pi)
                 sidehost():appendChild(btn)
             end
         end
+        -- "take over": adopt a task-level given automaton into this
+        -- editor — complement/prefix/conversion tasks are exactly
+        -- "load M, then modify".  Plain parts only (copy/show_given/
+        -- seeds have their own insert story) and only when the given
+        -- type fits the editor: a richer editor type may adopt a
+        -- stricter given (dfa/nfa model -> nfa-λ part), the reverse
+        -- would silently retype the canvas via aut_load.
+        if not (pv.copy or pv.show_given or pv.seeds
+                or pv.seeds_locked or pv.takeover_from) then
+            local items = gv and (gv[1] and gv or {gv}) or {}
+            for _, g in ipairs(items) do
+                local gt = g.kind == "aut" and g.model
+                       and (g.aut_type or g.model.type)
+                local pt = pv.aut_type
+                local fits = gt == pt
+                    or ((pt == "nfa" or pt == "nfa-eps")
+                        and (gt == "dfa" or gt == "dfa-part"
+                          or gt == "nfa"))
+                if fits then
+                    local btn = el("button", "seedbtn")
+                    btn.textContent = "take over "
+                        .. (g.label or "the given automaton")
+                    btn:addEventListener("click", function()
+                        local m = g.model
+                        if m.type ~= pt then
+                            local c = {}
+                            for k2, v2 in pairs(m) do c[k2] = v2 end
+                            c.type = pt
+                            m = c
+                        end
+                        landm_call("aut_load", rec.app,
+                                   json.encode(m))
+                        dirty(st)()
+                    end)
+                    sidehost():appendChild(btn)
+                end
+            end
+        end
         if pv.seeds and #pv.seeds > 0 then
             local sr = el("div", "wordrow")
             sr:appendChild(text("span",
