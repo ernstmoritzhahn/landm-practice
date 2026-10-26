@@ -24,26 +24,77 @@ local loadinput, stateta = get("loadinput"), get("stateta")
 local loadtext_btn = get("loadtext")
 local savedetails_el, savemsg_el = get("savedetails"), get("savemsg")
 local databtn, datadlg = get("databtn"), get("datadlg")
-local syntaxhint_el = get("syntaxhint")
 
+-- contextual input hints: rendered next to the field they describe,
+-- so every hint only mentions the syntax that widget actually accepts
 local PROOF_SYNTAX_HINT =
     'input: <code>\\lambda</code> → λ ·\n' ..
     '    concatenation = space or <code>·</code> ·\n' ..
     '    <code>w^R</code>, <code>w^(k+1)</code>, <code>w^k</code> ·\n' ..
     '    sum: <code>sum(i,0,n;k^i)</code> · <code>f(n)</code>'
 local REGEXP_SYNTAX_HINT =
-    'input: <code>\\lambda</code> → λ · union = <code>∪</code>' ..
-    ' or <code>|</code> or <code>U</code> ·\n' ..
-    '    concatenation = juxtaposition ·\n' ..
-    '    postfixes: <code>*</code> <code>+</code> <code>^n</code> ·\n' ..
-    '    <code>∅</code> = empty language · braces <code>{ }</code>' ..
-    ' group too'
-local PARTS_SYNTAX_HINT =
-    'runs: state sequence, e.g. <code>q0 q0 q1 q2</code>' ..
-    ' (start state optional) ·\n' ..
-    '    regex: <code>∪</code>/<code>|</code> union · juxtaposition' ..
-    ' concat · <code>*</code> <code>+</code> ·' ..
-    ' <code>\\lambda</code> → λ · <code>∅</code> = empty language'
+    'regex: <code>\\lambda</code> → λ · union = <code>∪</code>' ..
+    ' or <code>|</code> or <code>U</code> ·' ..
+    ' concatenation = juxtaposition ·' ..
+    ' postfixes <code>*</code> <code>+</code> <code>^n</code> ·' ..
+    ' <code>∅</code> = empty language · <code>{ }</code> groups'
+local PART_HINT = {
+    trace   = 'state sequence, e.g. <code>q0 q0 q1 q2</code>' ..
+              ' (start state optional)',
+    regexp  = REGEXP_SYNTAX_HINT,
+    stable  = 'state sets: <code>{q0,q2}</code> or <code>q0,q2</code>' ..
+              ' · <code>∅</code> = empty set',
+    closure = 'state set: <code>{q0,q2}</code> ·' ..
+              ' <code>∅</code> = empty set',
+    cyk     = 'cells: variable sets, e.g. <code>S,E</code> ·' ..
+              ' <code>-</code> = empty',
+    min_table = 'equivalence classes as brace sets:' ..
+              ' <code>{q0,q3} {q1}</code>',
+    pumping = 'powered word: <code>a^k</code>, <code>(ab)^k</code>,' ..
+              ' <code>u(k,p)</code> · <code>\\lambda</code> → λ',
+    cpump   = 'powered word: <code>a^k</code>, <code>(ab)^k</code>,' ..
+              ' <code>u(k,p)</code> · <code>\\lambda</code> → λ',
+    grammar = 'one rule per line: <code>S -&gt; aA | λ</code> ·' ..
+              ' <code>-&gt;</code>/<code>=&gt;</code> type as → ·' ..
+              ' <code>\\lambda</code> → λ',
+    normalise = 'one rule per line: <code>S -&gt; aA | λ</code> ·' ..
+              ' <code>-&gt;</code>/<code>=&gt;</code> type as → ·' ..
+              ' <code>\\lambda</code> → λ',
+    pda     = 'per line: <code>q, read pop/push, to</code> — e.g.' ..
+              ' <code>q0, a A/AA, q1</code> · <code>λ</code> = no' ..
+              ' read/pop/push',
+    tm      = 'per line: <code>q, read write move, to</code> — e.g.' ..
+              ' <code>q0, a A R, q1</code> · move ∈ {L,R,S} ·' ..
+              ' <code>⊔</code> = blank',
+    pattern = 'pattern terms like <code>(ab)^n c^m</code>,' ..
+              ' constraints after <code>|</code>',
+    derivation = 'one sentential form per line ·' ..
+              ' <code>-&gt;</code>/<code>=&gt;</code> type as ⇒',
+    tree    = 'parenthesised, e.g. <code>S(a b S(…) c c)</code>',
+}
+-- transition-label syntax inside the automaton editor, per machine type
+local AUT_HINT = {
+    dfa   = 'transition labels: comma list, e.g. <code>a,b</code>',
+    nfa   = 'transition labels: comma list, e.g. <code>a,b</code>',
+    ["nfa-eps"] = 'transition labels: comma list, e.g.' ..
+              ' <code>a,b</code> · <code>\\lambda</code> → λ = ε-move',
+    pda   = 'transition labels: <code>input pop/push</code>, e.g.' ..
+              ' <code>a A/AA</code> or <code>λ Z/λ</code> · several' ..
+              ' on one edge via <code>;</code> or <code>,</code> ·' ..
+              ' λ = no read/pop/push · a push may be a string',
+    tm    = 'transition labels: <code>read write move</code> with' ..
+              ' move ∈ {L,R,S}, e.g. <code>a A R</code> ·' ..
+              ' <code>⊔</code> = blank · <code>~</code> = keep symbol',
+}
+local function aut_hint(t)
+    local ntapes = t and t:match("^tm%-(%d+)$")
+    if ntapes then
+        return 'transition labels: one <code>read write move</code>' ..
+               ' clause per tape, separated by <code>|</code> — ' ..
+               ntapes .. ' tapes, e.g. <code>a a R | ⊔ X S</code>'
+    end
+    return AUT_HINT[t or "dfa"]
+end
 
 local state = {
     sheets = nil,          -- tab structure from the worker
@@ -276,6 +327,7 @@ local function render_regexp_block(view)
     r:appendChild(inp)
     r:appendChild(st)
     box:appendChild(r)
+    box:appendChild(text("div", REGEXP_SYNTAX_HINT, "hint"))
     state.regexp_input, state.regexp_st = inp, st
     return box
 end
@@ -886,6 +938,8 @@ local function render_part(pv, pi)
         row:appendChild(host)
         rec.app = mount_aut(host, aut_cfg(pv), false, pi)
         rec.aut_type = pv.aut_type
+        local ah = aut_hint(pv.aut_type)
+        if ah then box:appendChild(text("div", ah, "hint")) end
         -- mini views of the relevant given machines, next to the
         -- editor, plus an "insert" button that copies one in
         local gv = state.view and state.view.given
@@ -985,6 +1039,7 @@ local function render_part(pv, pi)
             local inp = mk_input("expr", 30, dirty(rst), REGEXP_REPLACE)
             r:appendChild(inp); r:appendChild(rst)
             box:appendChild(r)
+            box:appendChild(text("div", REGEXP_SYNTAX_HINT, "hint"))
             rec.re, rec.re_st = inp, rst
         end
     elseif pv.kind == "trace" then
@@ -1290,6 +1345,10 @@ local function render_part(pv, pi)
             rec.cells["i" .. i] = { td = rst }
         end
     end
+    -- the input-syntax hint for THIS part kind only, right where the
+    -- input happens (a global footer used to mix them all together)
+    local ph = PART_HINT[pv.kind]
+    if ph then box:appendChild(text("div", ph, "hint")) end
     return box
 end
 
@@ -1588,13 +1647,9 @@ local function render(view)
         goal_el:appendChild(text("div", view.desc, "desc"))
     end
     checkbtn.textContent = "Check proof"
-    if syntaxhint_el then syntaxhint_el.innerHTML = PROOF_SYNTAX_HINT end
     if view.type == "parts" then
         checkbtn.textContent = "Check all"
         rulesbox_el.style.display = "none"
-        if syntaxhint_el then
-            syntaxhint_el.innerHTML = PARTS_SYNTAX_HINT
-        end
         if view.given then
             proof_el:appendChild(render_given(view.given))
         end
@@ -1683,9 +1738,6 @@ local function render(view)
     if view.type == "regexp" then
         checkbtn.textContent = "Check"
         rulesbox_el.style.display = "none"
-        if syntaxhint_el then
-            syntaxhint_el.innerHTML = REGEXP_SYNTAX_HINT
-        end
         proof_el:appendChild(render_regexp_block(view))
         restore_local()
         return
@@ -1707,6 +1759,9 @@ local function render(view)
             rulesbox_el:appendChild(row)
         end
     end
+    -- term-input syntax applies to every hole below — it sits at the
+    -- top of the work area, not as a detached footer line
+    proof_el:appendChild(text("div", PROOF_SYNTAX_HINT, "hint"))
     if view.free then
         ihrow_el:appendChild(text("span",
             "Induction hypothesis (IH):  ", "seclabel"))
