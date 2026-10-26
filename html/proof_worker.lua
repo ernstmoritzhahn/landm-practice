@@ -19,6 +19,9 @@ local C = require "wordproof.check"
 local RC = require "wordproof.regexp_check"
 local DC = require "wordproof.dfa_check"
 local GC = require "wordproof.grammar_check"
+local PC = require "wordproof.pda_check"
+local TC = require "wordproof.tm_check"
+local CC = require "wordproof.cpump_check"
 local tasks = require "wordproof.tasks"
 
 local function build_input(task, data)
@@ -170,6 +173,16 @@ return function(data)
                                              pd.texts or pd.text)
                     elseif pdef.kind == "pattern" then
                         return GC.check_pattern(pdef, pd.text)
+                    elseif pdef.kind == "normalise" then
+                        return GC.check_normalise(pdef, pd.text)
+                    elseif pdef.kind == "cyk" then
+                        return GC.check_cyk(pdef, pd.cells)
+                    elseif pdef.kind == "pda" then
+                        return PC.check_pda(pdef, pd.text)
+                    elseif pdef.kind == "tm" then
+                        return TC.check_tm(pdef, pd.text)
+                    elseif pdef.kind == "cpump" then
+                        return CC.check_cpump(pdef, pd.z, pd.is)
                     end
                     return { ok=false, msg="unknown part kind" }
                 end)

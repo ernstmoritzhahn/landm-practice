@@ -97,6 +97,17 @@ local replace_table = {
 local REGEXP_REPLACE = {
     ["|"] = "∪",
 }
+-- typed arrows become real arrows while typing, like the exam's
+-- input helper:  => and -> both mean ⇒ in a derivation, → in a rule
+local DERIV_REPLACE = {
+    ["=>"] = "⇒", ["%->"] = "⇒", ["lambda"] = "λ",
+}
+local GRAMMAR_REPLACE = {
+    ["%->"] = "→", ["=>"] = "→", ["lambda"] = "λ",
+}
+local TREE_REPLACE = {
+    ["lambda"] = "λ",
+}
 local function replace_symbols(e, extra)
     local sel = e.selectionStart
     for k,v in pairs(replace_table) do
@@ -1137,20 +1148,66 @@ local function render_part(pv, pi)
         box:appendChild(r)
         rec.classes = cinp
         rec.cells["classes"] = { td = cst }
-    elseif pv.kind == "grammar" or pv.kind == "pattern"
+    elseif pv.kind == "cyk" then
+        -- triangular X_{i,j} table: cell (i,j) covers the substring
+        -- word[i..j]; bottom row repeats the word's letters
+        local word = pv.word or ""
+        local n = #word
+        rec.cells = {}
+        local tb = el("table", "trtable")
+        local hr = el("tr")
+        hr:appendChild(text("th", "X_{i,j}"))
+        for j = 1, n do hr:appendChild(text("th", j)) end
+        tb:appendChild(hr)
+        for i = 1, n do
+            local tr = el("tr")
+            tr:appendChild(text("td", i))
+            for j = 1, n do
+                local td = el("td")
+                if j >= i then
+                    local inp = mk_input(nil, 9, dirty(st))
+                    inp.placeholder = "-"
+                    td:appendChild(inp)
+                    rec.cells[i .. "," .. j] = { input = inp, td = td }
+                end
+                tr:appendChild(td)
+            end
+            tb:appendChild(tr)
+        end
+        local wr = el("tr")
+        wr:appendChild(text("td", "w"))
+        for j = 1, n do
+            wr:appendChild(text("td", word:sub(j, j)))
+        end
+        tb:appendChild(wr)
+        box:appendChild(tb)
+    elseif pv.kind == "grammar" or pv.kind == "normalise"
+        or pv.kind == "pda" or pv.kind == "tm" or pv.kind == "pattern"
         or (pv.kind == "tree" and (pv.count or 1) <= 1) then
         local r = el("div", "wordrow")
         local rst = el("span", "st")
         local ta = document:createElement("textarea")
         ta.className = "grammartext"
         ta:setAttribute("spellcheck", "false")
-        ta.rows = pv.kind == "grammar" and 6 or 3
+        ta.rows = pv.kind == "grammar" and 6
+            or ((pv.kind == "pda" or pv.kind == "tm") and 8 or 3)
         ta.cols = 52
         ta.placeholder = pv.kind == "grammar" and
-            "S -> aA | λ\nA -> bA | b" or
-            (pv.kind == "tree" and "S(a b S(…) c c)"
-             or "(ab)^n c^m d^m c^n | n>=0, m>0")
-        ta:addEventListener("input", dirty(rst))
+            "S -> aA | λ\nA -> bA | b"
+            or (pv.kind == "pda" and
+                "start: q0\nfinal: q1\nq0, a λ/A, q0\n"
+                .. "q0, λ λ/λ, q1\nq1, b A/λ, q1"
+            or (pv.kind == "tm" and
+                "start: q0\nfinal: qf\nq0, a A R, q1\n"
+                .. "q1, b b R, q1\nq1, B B L, qf"
+                or (pv.kind == "tree" and "S(a b S(…) c c)"
+                    or "(ab)^n c^m d^m c^n | n>=0, m>0")))
+        local repl = (pv.kind == "grammar" or pv.kind == "normalise"
+            or pv.kind == "pda") and GRAMMAR_REPLACE or TREE_REPLACE
+        ta:addEventListener("input", function()
+            replace_symbols(ta, repl)
+            dirty(rst)()
+        end)
         r:appendChild(ta); r:appendChild(rst)
         box:appendChild(r)
         if pv.hint then
@@ -1175,11 +1232,48 @@ local function render_part(pv, pi)
             ta.placeholder = pv.kind == "tree"
                 and "S(a b S(…) c c)" or
                 ("S\nSAB\nAB\n…\n" .. (pv.target or ""))
-            ta:addEventListener("input", dirty(rst))
+            local repl = pv.kind == "tree" and TREE_REPLACE
+                or DERIV_REPLACE
+            ta:addEventListener("input", function()
+                replace_symbols(ta, repl)
+                dirty(rst)()
+            end)
             r:appendChild(ta); r:appendChild(rst)
             box:appendChild(r)
             rec.fields[d] = ta
             rec.cells["d" .. d] = { td = rst }
+        end
+    elseif pv.kind == "cpump" then
+        rec.cells, rec.cpump_i = {}, {}
+        if pv.has_z then
+            local r = el("div", "wordrow")
+            r:appendChild(text("span", "z(k) =", "wlabel"))
+            local inp = mk_input(22)
+            if pv.z_hint then inp.placeholder = pv.z_hint end
+            local rst = el("span", "st")
+            inp:addEventListener("input", function()
+                replace_symbols(inp, PUMP_REPLACE)
+                dirty(rst)()
+            end)
+            r:appendChild(inp); r:appendChild(rst)
+            box:appendChild(r)
+            rec.cpump_z = inp
+            rec.cells.z = { td = rst }
+        end
+        for i, c in ipairs(pv.cases or {}) do
+            local r = el("div", "wordrow")
+            r:appendChild(text("span", "case " .. i .. " — "
+                .. c.desc, "wlabel"))
+            box:appendChild(r)
+            local r2 = el("div", "wordrow")
+            r2:appendChild(text("span", "i =", "wlabel"))
+            local inp = mk_input(10)
+            local rst = el("span", "st")
+            inp:addEventListener("input", dirty(rst))
+            r2:appendChild(inp); r2:appendChild(rst)
+            box:appendChild(r2)
+            rec.cpump_i[i] = inp
+            rec.cells["i" .. i] = { td = rst }
         end
     end
     return box
@@ -1220,7 +1314,8 @@ save_local = function()
             elseif p.kind == "accept" then
                 pr.ans = {}
                 for wi,sel in ipairs(p.ans) do pr.ans[wi] = sel.value end
-            elseif p.kind == "table" or p.kind == "stable" then
+            elseif p.kind == "table" or p.kind == "stable"
+                or p.kind == "cyk" then
                 pr.cells = {}
                 for k,c in pairs(p.cells) do pr.cells[k] = c.input.value end
             elseif p.kind == "closure" then
@@ -1228,9 +1323,17 @@ save_local = function()
                 for wi,inp in ipairs(p.sets) do pr.sets[wi] = inp.value end
             elseif p.kind == "regexp" then
                 pr.expr = p.expr.value
-            elseif p.kind == "grammar" or p.kind == "pattern"
+            elseif p.kind == "grammar" or p.kind == "normalise"
+                or p.kind == "pda" or p.kind == "tm"
+                or p.kind == "pattern"
                 or (p.kind == "tree" and not p.fields) then
                 pr.text = p.text and p.text.value or ""
+            elseif p.kind == "cpump" then
+                pr.z = p.cpump_z and p.cpump_z.value or ""
+                pr.is = {}
+                for i, inp in ipairs(p.cpump_i or {}) do
+                    pr.is[i] = inp.value
+                end
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pr.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
@@ -1314,7 +1417,8 @@ local function restore_local()
                     for wi,sel in ipairs(p.ans) do
                         sel.value = (pr.ans or {})[wi] or ""
                     end
-                elseif p.kind == "table" or p.kind == "stable" then
+                elseif p.kind == "table" or p.kind == "stable"
+                    or p.kind == "cyk" then
                     for k,c in pairs(p.cells) do
                         c.input.value = (pr.cells or {})[k] or ""
                     end
@@ -1347,7 +1451,9 @@ local function restore_local()
                         inp.value = (pr.wit or {})[k] or ""
                     end
                     if pr.classes then p.classes.value = pr.classes end
-                elseif p.kind == "grammar" or p.kind == "pattern"
+                elseif p.kind == "grammar" or p.kind == "normalise"
+                    or p.kind == "pda" or p.kind == "tm"
+                    or p.kind == "pattern"
                     or (p.kind == "tree" and not p.fields) then
                     if pr.text and p.text then
                         p.text.value = pr.text
@@ -1355,6 +1461,13 @@ local function restore_local()
                 elseif p.kind == "derivation" or p.kind == "tree" then
                     for d, ta in ipairs(p.fields or {}) do
                         ta.value = (pr.texts or {})[d] or ""
+                    end
+                elseif p.kind == "cpump" then
+                    if p.cpump_z and pr.z then
+                        p.cpump_z.value = pr.z
+                    end
+                    for i, inp in ipairs(p.cpump_i or {}) do
+                        inp.value = (pr.is or {})[i] or ""
                     end
                 end
             end
@@ -1619,7 +1732,8 @@ send_check = function(only_pi)
                 for wi,sel in ipairs(p.ans) do
                     pd.ans[wi] = sel.value
                 end
-            elseif p.kind == "table" or p.kind == "stable" then
+            elseif p.kind == "table" or p.kind == "stable"
+                or p.kind == "cyk" then
                 pd.cells = {}
                 for k,c in pairs(p.cells) do
                     pd.cells[k] = c.input.value
@@ -1643,9 +1757,17 @@ send_check = function(only_pi)
                 pd.gen = p.gen and {
                     u = p.gen.u.value, v = p.gen.v.value,
                     w = p.gen.w.value, i = p.gen.i.value } or nil
-            elseif p.kind == "grammar" or p.kind == "pattern"
+            elseif p.kind == "grammar" or p.kind == "normalise"
+                or p.kind == "pda" or p.kind == "tm"
+                or p.kind == "pattern"
                 or (p.kind == "tree" and not p.fields) then
                 pd.text = p.text and p.text.value or ""
+            elseif p.kind == "cpump" then
+                pd.z = p.cpump_z and p.cpump_z.value or ""
+                pd.is = {}
+                for i, inp in ipairs(p.cpump_i or {}) do
+                    pd.is[i] = inp.value
+                end
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pd.texts = {}
                 for d, ta in ipairs(p.fields or {}) do

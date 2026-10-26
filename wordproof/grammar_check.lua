@@ -123,6 +123,42 @@ function M.check_grammar(part, text)
         if cmp then
             return fail(table.concat(bits, ";  "), "mismatch")
         end
+        if part.bounded_ok then
+            -- type-0 grammars: equality is undecidable in general —
+            -- fall back to two-sided sampling over short words
+            local maxl, bad, n = 8, nil, 0
+            local ref_words = automata.grammar_enumerate_words(
+                ref, maxl) or {}
+            local stu_words = automata.grammar_enumerate_words(
+                g, maxl) or {}
+            for w in pairs(ref_words) do
+                n = n + 1
+                local has = automata.grammar_contains_word(w, g)
+                if has ~= true then
+                    bad = "'" .. (w == "" and "λ" or w)
+                        .. "' ∈ target but not derived"
+                    break
+                end
+            end
+            if not bad then
+                for w in pairs(stu_words) do
+                    n = n + 1
+                    local has = automata.grammar_contains_word(w, ref)
+                    if has ~= true then
+                        bad = "'" .. (w == "" and "λ" or w)
+                            .. "' derived but ∉ target"
+                        break
+                    end
+                end
+            end
+            if bad then return fail(bad, "mismatch") end
+            return { ok = true,
+                     msg = "✓ consistent on all derivable words "
+                        .. "up to length " .. maxl .. " (" .. n
+                        .. " words compared — unrestricted "
+                        .. "grammars admit no decision procedure, "
+                        .. "so this is a bounded check)" }
+        end
         return { ok = false, kind = "warn",
                  msg = "could not decide language equality within "
                     .. "the search budget — check by hand" }
@@ -580,7 +616,9 @@ function M.check_pattern(part, text)
     end
     local vars = {}
     local varlist = {}
-    for v in (part.vars or "n,m"):gmatch("[%a_]+") do
+    local src_vars = type(part.vars) == "table"
+        and table.concat(part.vars, ",") or (part.vars or "n,m")
+    for v in src_vars:gmatch("[%a_]+") do
         vars[v] = true; varlist[#varlist + 1] = v
     end
     -- optional domain guards after '|':  (ab)^n c^m d^m c^n | m>0
@@ -608,9 +646,24 @@ function M.check_pattern(part, text)
     -- ⊇: every small instance must be derivable
     local insts = {}
     pat_instances(blocks, varlist, {}, 1, maxlen, insts, min)
+    local start_sym = tostring(grammar:get_start_variable())
+    local function derives_lambda()
+        for rule, _ in pairs(grammar:get_rules()) do
+            if tostring(rule.lhs) == start_sym
+                and #rule.rhs == 0 then
+                return true
+            end
+        end
+        return false
+    end
     for _, w in ipairs(insts) do
-        local member = automata.grammar_contains_word(
-            w, grammar, { max_iter = 4000 })
+        local member
+        if w == "" then
+            member = derives_lambda()
+        else
+            member = automata.grammar_contains_word(
+                w, grammar, { max_iter = 4000 })
+        end
         if not member then
             return fail("'" .. (w ~= "" and w or "λ")
                 .. "' matches your pattern but ∉ L(G)", "mismatch")
@@ -619,6 +672,250 @@ function M.check_pattern(part, text)
     return { ok = true,
              msg = "verified on all words of length ≤ " .. maxlen
                 .. " in both directions" }
+end
+
+-- ---------- grammar normalisation (sheet 5) ----------
+-- part.form decides the structural property:
+--   "essentially_noncontracting"  only the start symbol may have λ
+--   "no_chain"        no unit rules A → B
+--   "terminating"     every variable derives a terminal word
+--   "no_useless"      every variable is terminating AND reachable
+--   "cnf"             Chomsky normal form
+-- plus language equivalence to part.grammar_ref when given.
+
+local function grammar_vars_reachable(g)
+    -- variables that produce a terminal word (productive)
+    local vars = g:get_variables()
+    local term = {}
+    local changed = true
+    while changed do
+        changed = false
+        for rule, _ in pairs(g:get_rules()) do
+            local lhs = tostring(rule.lhs)
+            if not term[lhs] then
+                local ok = true
+                for i = 1, rule.rhs:len() do
+                    local c = tostring(rule.rhs:get_char(i))
+                    if vars[c] and not term[c] then
+                        ok = false; break
+                    end
+                end
+                if ok then term[lhs] = true; changed = true end
+            end
+        end
+    end
+    return term
+end
+
+local function grammar_vars_reached(g)
+    -- variables reachable from the start symbol
+    local reached = { [tostring(g:get_start_variable())] = true }
+    local changed = true
+    while changed do
+        changed = false
+        for rule, _ in pairs(g:get_rules()) do
+            local lhs = tostring(rule.lhs)
+            if reached[lhs] then
+                for i = 1, rule.rhs:len() do
+                    local c = tostring(rule.rhs:get_char(i))
+                    if not reached[c] then
+                        reached[c] = true; changed = true
+                    end
+                end
+            end
+        end
+    end
+    return reached
+end
+
+local FORM_CHECKS = {
+    essentially_noncontracting = function(g)
+        if automata.grammar_is_essentially_noncontracting(g) then
+            return nil
+        end
+        return "not essentially noncontracting — only the (new) "
+            .. "start symbol may have a λ-rule"
+    end,
+    no_chain = function(g)
+        local vars = g:get_variables()
+        for rule, _ in pairs(g:get_rules()) do
+            if rule.rhs:len() == 1
+                and vars[tostring(rule.rhs:get_char(1))] then
+                return "chain rule "
+                    .. tostring(rule.lhs) .. " → "
+                    .. tostring(rule.rhs) .. " still present"
+            end
+        end
+        return nil
+    end,
+    terminating = function(g)
+        local term = grammar_vars_reachable(g)
+        for v, _ in pairs(g:get_variables()) do
+            if not term[v] then
+                return "variable " .. v
+                    .. " derives no terminal word (nonterminating)"
+            end
+        end
+        return nil
+    end,
+    no_useless = function(g)
+        local term = grammar_vars_reachable(g)
+        local reached = grammar_vars_reached(g)
+        for v, _ in pairs(g:get_variables()) do
+            if not term[v] then
+                return "variable " .. v
+                    .. " derives no terminal word (nonterminating)"
+            end
+            if not reached[v] then
+                return "variable " .. v
+                    .. " is unreachable from the start symbol"
+            end
+        end
+        return nil
+    end,
+    cnf = function(g)
+        if automata.grammar_is_cnf(g) then return nil end
+        return "not in Chomsky normal form — rules must be "
+            .. "A → BC or A → a (plus S → λ)"
+    end,
+}
+
+function M.check_normalise(part, text)
+    local pr = grammar_of(text or "")
+    local g = pr.g
+    local any = false
+    for _ in pairs(g:get_rules()) do any = true; break end
+    if not any then return fail("no rules parsed", "parse") end
+    local err = FORM_CHECKS[part.form](g)
+    if err then return fail(err) end
+    if part.grammar_ref then
+        local ref = grammar_of(part.grammar_ref).g
+        local res, cex_s, cex_r = automata.grammar_compare_languages(
+            ref, g, { max_iter = 150000, deadline = os.clock() + 8 })
+        if res == "=" then
+            return { ok = true }
+        end
+        if res then
+            local bits = {}
+            if cex_s then bits[#bits + 1] = "'" .. (cex_s ~= ""
+                and cex_s or "λ") .. "' ∈ L(G) but not derivable" end
+            if cex_r then bits[#bits + 1] = "'" .. (cex_r ~= ""
+                and cex_r or "λ") .. "' is derivable but ∉ L(G)" end
+            return fail(table.concat(bits, ";  "), "mismatch")
+        end
+        return { ok = true,
+                 msg = "the form is right; language equality could "
+                    .. "not be fully verified — check by hand" }
+    end
+    return { ok = true }
+end
+
+-- ---------- CYK matrix (sheet 5) ----------
+-- part: {grammar=text, word="acba"}
+-- input: cells map "i,j" (i..j substring) -> student set text
+
+local function cyk_table(word, g)
+    local cnf = automata.grammar_to_cnf(g)
+    local n = #word
+    local at = {}
+    for i = 1, n do
+        at[i] = { [1] = {} }
+        local term = cnf.terminals[word:sub(i, i)]
+        if term then for v, _ in pairs(term) do at[i][1][v] = true end
+        end
+    end
+    for len = 2, n do
+        for i = 1, n - len + 1 do
+            local cell = {}
+            for k = 1, len - 1 do
+                for b, _ in pairs(at[i][k] or {}) do
+                    local by_c = cnf.pairs[b]
+                    if by_c then
+                        for c, _ in pairs(at[i + k][len - k] or {}) do
+                            local prods = by_c[c]
+                            if prods then
+                                for a, _ in pairs(prods) do
+                                    cell[a] = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            at[i][len] = cell
+        end
+    end
+    -- at[i][len] covers substring i..i+len-1; re-index to X_{i,j}
+    local x = {}
+    for i = 1, n do
+        x[i] = {}
+        for len = 1, n - i + 1 do
+            x[i][i + len - 1] = at[i][len]
+        end
+    end
+    return x, cnf
+end
+
+local function parse_set_text(text)
+    -- "{S,E}", "S E", "S,E", "-", "∅" -> set, errmsg
+    local s = (text or ""):gsub("%s", "")
+    if s == "" or s == "-" or s == "∅" or s == "{}" then
+        return {}
+    end
+    s = s:gsub("[{}]", "")
+    local set = {}
+    for v in s:gmatch("[^,;]+") do
+        set[v] = true
+    end
+    return set
+end
+
+function M.check_cyk(part, cells)
+    local pr = grammar_of(part.grammar or "")
+    local word = part.word
+    local x, cnf = cyk_table(word, pr.g)
+    local n = #word
+    local missing, wrong = 0, nil
+    for i = 1, n do
+        for j = i, n do
+            local got = parse_set_text(cells and cells[i .. "," .. j])
+            local want = x[i][j] or {}
+            for v, _ in pairs(got) do
+                if not want[v] then
+                    return fail("X_{" .. i .. "," .. j .. "}: '"
+                        .. v .. "' is not produced by CYK "
+                        .. "(check the splits of '" .. word:sub(i, j)
+                        .. "')", "mismatch")
+                end
+            end
+            for v, _ in pairs(want) do
+                if not got[v] then
+                    if (cells and cells[i .. "," .. j] or "") == ""
+                        then missing = missing + 1
+                        else
+                        wrong = "X_{" .. i .. "," .. j
+                            .. "} should also contain '" .. v
+                            .. "' (a split of '" .. word:sub(i, j)
+                            .. "' is missing)"
+                    end
+                end
+            end
+        end
+    end
+    if wrong then return fail(wrong, "mismatch") end
+    if missing > 0 then
+        return fail(missing .. " cell(s) still empty "
+            .. "(enter - or ∅ for an empty set)", "empty")
+    end
+    local start = tostring(cnf.start)
+    local root = x[1][n] or {}
+    return { ok = true,
+             msg = "X_{1," .. n .. "} = {" .. table.concat(
+                (function() local t = {}
+                    for v in pairs(root) do t[#t+1] = v end
+                    table.sort(t) return t end)(), ",")
+                .. "}  →  " .. (root[start] and "the word IS in L(G)"
+                    or "the word is NOT in L(G)") }
 end
 
 return M

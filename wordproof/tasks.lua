@@ -1439,8 +1439,9 @@ parts_task{
     parts = {
         { kind="derivation", sub="c.a)", grammar=GR_C,
           target="ababccddcc", mode="any",
-          label="Give the derivation of ababccddcc (one sentential "
-             .. "form per line, or separated by =>)" },
+          label="Give the derivation of ababccddcc — one sentential "
+             .. "form per line, or a chain S ⇒ abSc ⇒ … "
+             .. "(typing => or -> produces ⇒)" },
         { kind="tree", sub="c.b)", grammar=GR_C,
           target="ababccddcc",
           label="The derivation tree, in bracket notation "
@@ -1620,6 +1621,165 @@ n2g_task("4.4m", "m", NFA_M_STR, NFA_M_MODEL, "nfa-eps", "a,b,c",
          .. "construction needs a plain NFA, so remove it first.")
 
 -- ======================================================================
+-- SHEET 5 — grammar normalisation: λ-elimination, chain rules,
+--           useless symbols, CNF, CYK
+-- ======================================================================
+
+local function norm_task(id, letter, gtext, form, form_desc, extra)
+    local parts = {
+        { kind="normalise", sub=letter .. ")", form=form,
+          grammar_ref=gtext,
+          label="Construct the equivalent grammar with "
+             .. form_desc
+             .. "  (one rule per line, e.g. S -> aS | λ; use S' for "
+             .. "a new start symbol)" },
+    }
+    if extra == "regexp" then
+        parts[#parts + 1] = {
+            kind="regexp", sub="(extra)",
+            label="(extra) A regular expression for L(G)",
+            ref_aut=function()
+                return AUT.grammar_to_nfa(AUT.parse_rules(gtext))
+            end }
+    end
+    parts_task{
+        id = id, letter = letter,
+        title = "Grammar normalisation",
+        given = { kind="text", text="G:\n" .. gtext },
+        parts = parts,
+    }
+end
+
+-- §1 noncontracting
+norm_task("5.1a", "a",
+    "S -> aS | bS | B\nB -> bb | C | λ\nC -> cC | λ",
+    "essentially_noncontracting",
+    "G_L: a nonrecursive start symbol and essentially "
+        .. "noncontracting (only the new start symbol may have λ)",
+    "regexp")
+norm_task("5.1b", "b",
+    "S -> ABC | aBC\nA -> aA | BC\nB -> bB | λ\nC -> cC | λ",
+    "essentially_noncontracting",
+    "G_L: essentially noncontracting", "regexp")
+
+-- §2 chain rules
+norm_task("5.2c", "c",
+    "S -> AS | A\nA -> aA | bB | C\nB -> bB | b\nC -> cC | B",
+    "no_chain",
+    "G_C without chain rules (the grammar has no λ-rules, "
+        .. "but you may need a nonrecursive start symbol S')")
+norm_task("5.2d", "d",
+    "S -> AB | C\nA -> aA | B\nB -> bB | C\nC -> cC | a | A",
+    "no_chain",
+    "G_C without chain rules (extra)")
+
+-- §3 useless symbols: two grammars each (G_T then G_U)
+local function useless_task(id, letter, gtext)
+    parts_task{
+        id = id, letter = letter,
+        title = "Removing useless symbols",
+        given = { kind="text", text="G:\n" .. gtext },
+        parts = {
+            { kind="normalise", sub=letter .. ".1)", form="terminating",
+              grammar_ref=gtext,
+              label="G_T: equivalent, without nonterminating "
+                 .. "symbols" },
+            { kind="normalise", sub=letter .. ".2)", form="no_useless",
+              grammar_ref=gtext,
+              label="G_U: equivalent, without unreachable "
+                 .. "(and nonterminating) symbols" },
+        },
+    }
+end
+useless_task("5.3e", "e",
+    "S -> AA | CD | bB\nA -> aA | a\nB -> bB | bC\nC -> cB\n"
+    .. "D -> dD | d")
+useless_task("5.3f", "f",
+    "S -> ACH | BB\nA -> aA | aF\nB -> CFH | b\nC -> aC | DH\n"
+    .. "D -> aD | BD | Ca\nF -> bB | b\nH -> dH | d")
+
+-- §4 CNF
+norm_task("5.4g", "g",
+    "S -> aA | ABa\nA -> AA | a\nB -> AbB | bb",
+    "cnf",
+    "Chomsky normal form (rules A -> BC or A -> a)")
+norm_task("5.4h", "h",
+    "S -> aAbB | ABC | a\nA -> aA | a\nB -> bBcC | b\nC -> abc",
+    "cnf",
+    "Chomsky normal form (rules A -> BC or A -> a)")
+
+-- §5 CYK
+parts_task{
+    id = "5.5i", letter = "i",
+    title = "The CYK parsing algorithm",
+    given = { kind="text",
+        text="G (CNF):\n  S -> CA | BD\n  A -> a\n  B -> b | c\n"
+            .. "  C -> AE\n  D -> EB | b\n  E -> BD | CA" },
+    parts = {
+        { kind="cyk", sub="i.a)  word: acba",
+          grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
+              .. "D -> EB | b\nE -> BD | CA",
+          word="acba",
+          label="the X_{i,j} matrix for acba — a set of "
+             .. "variables per cell, - or ∅ for empty" },
+        { kind="cyk", sub="i.a)  word: baca",
+          grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
+              .. "D -> EB | b\nE -> BD | CA",
+          word="baca",
+          label="the X_{i,j} matrix for baca" },
+        { kind="choice", sub="i.b)",
+          label="do the words belong to L(G)?",
+          slots = {
+              { key="acba", label="acba",
+                options = { {id="yes", label="yes — in L(G)"},
+                            {id="no", label="no — not in L(G)"} } },
+              { key="baca", label="baca",
+                options = { {id="yes", label="yes — in L(G)"},
+                            {id="no", label="no — not in L(G)"} } },
+          },
+          sel_check = function(sel)
+              local a, b = sel.acba, sel.baca
+              if a == "yes" and b == "no" then
+                  return { ok=true,
+                    msg="right: S ∈ X_{1,4} for acba, but not "
+                       .. "for baca" }
+              end
+              return { ok=false,
+                msg="read the top-right cell X_{1,4} of each "
+                   .. "matrix: the word is in L(G) iff it "
+                   .. "contains S" }
+          end },
+        { kind="tree", sub="i.b)",
+          grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
+              .. "D -> EB | b\nE -> BD | CA",
+          target="acba",
+          label="the derivation tree for the accepted word "
+             .. "(bracket notation)" },
+        { kind="choice", sub="i.c)", optional=true,
+          label="(extra) is CYK top-down or bottom-up?",
+          slots = {
+              { key="dir", label="CYK is",
+                options = {
+                    {id="top", label="top-down — it expands "
+                       .. "from S toward the word"},
+                    {id="bot", label="bottom-up — it builds "
+                       .. "substrings from length 1 upward"},
+                    {id="none", label="neither"} } } },
+          sel_check = function(sel)
+              if sel.dir == "bot" then
+                  return { ok=true,
+                    msg="right — all length-1 cells first, then "
+                       .. "longer substrings up to the whole word" }
+              end
+              return { ok=false,
+                msg="CYK fills the cells for substrings of "
+                   .. "length 1, 2, 3, … — which direction "
+                   .. "is that?" }
+          end },
+    },
+}
+
+-- ======================================================================
 -- free-mode variants: same tasks, the chain itself becomes editable.
 -- The section data (labels, premises, endpoints) is kept — free blocks
 -- inherit it so the checker knows where each chain must start and end.
@@ -1639,6 +1799,644 @@ for _,id in ipairs({"1.1a","1.1b","1.1c"}) do
     M.tasks[v.id] = v
     M.order[#M.order+1] = v.id
 end
+
+-- ======================= Sheet 6 =======================
+-- Pushdown automata.  Students enter PDAs as transition lists:
+--   start: q0 / final: q1 ... + lines "q0, a λ/A, q1".
+-- References are parsed from the teacher solutions' tuples
+-- (extended PDAs: pushes may be strings).
+
+local function pda_ref(tuple)
+    local cached
+    return function()
+        if not cached then
+            cached = require("automata").parse_pda_extended(tuple)
+        end
+        return cached
+    end
+end
+
+local PDA_FMT = "enter the PDA as a transition list — one line per "
+    .. "edge: 'state, input pop/push, state'; declare 'start: q0' "
+    .. "and 'final: ...'; λ for the empty word/stack symbol; "
+    .. "a push may be a string (extended PDA)"
+
+parts_task{
+    id = "6.1a", letter = "a",
+    title = "PDA for {a^i b^j | 0 ≤ i ≤ j}",
+    desc = "Give a small nondeterministic PDA and a "
+        .. "deterministic PDA.",
+    parts = {
+    { kind="pda", sub="a.1)", deterministic=false,
+      label = "a small NONDETERMINISTIC PDA — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1},{a,b},{A},"
+          .. "{(q0,a λ/A,q0),(q0,λ λ/λ,q1),(q1,b A/λ,q1),"
+          .. "(q1,b λ/λ,q1)},q0,{q0,q1})") },
+    { kind="pda", sub="a.2)", deterministic=true,
+      label = "a DETERMINISTIC PDA — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1,q2,q3},{a,b},{A,Z},"
+          .. "{(q0,λ λ/Z,q1),(q1,a λ/A,q1),(q1,b A/λ,q2),"
+          .. "(q1,b Z/λ,q3),(q2,b A/λ,q2),(q2,λ Z/λ,q3),"
+          .. "(q3,b λ/λ,q3)},q0,{q3})") },
+}
+}
+
+parts_task{
+    id = "6.1b", letter = "b",
+    title = "PDA for {a^i b^j | 0 ≤ i ≤ j ≤ 2i}",
+    parts = {
+    { kind="pda", sub="b)",
+      label = "PDA — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1,q2},{a,b},{A},"
+          .. "{(q0,a λ/A,q0),(q0,λ λ/λ,q1),(q1,b A/λ,q2),"
+          .. "(q2,b λ/λ,q1),(q2,λ λ/λ,q1)},q0,{q1})") },
+}
+}
+
+parts_task{
+    id = "6.1c", letter = "c",
+    title = "PDA for {a^i b^j | i ≠ j}",
+    parts = {
+    { kind="pda", sub="c)",
+      label = "PDA — hint: first push a bottom marker Z so you "
+          .. "can test for an empty stack — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1,q2,q3,q4},{a,b},{A,Z},"
+          .. "{(q0,λ λ/Z,q1),(q1,a λ/A,q1),(q1,λ λ/λ,q2),"
+          .. "(q2,b A/λ,q2),(q2,λ A/λ,q3),(q2,b Z/λ,q4),"
+          .. "(q3,λ A/λ,q3),(q3,λ Z/λ,q3),(q4,b λ/λ,q4)},"
+          .. "q0,{q3,q4})") },
+}
+}
+
+parts_task{
+    id = "6.1d", letter = "d",
+    title = "PDA for {wdw^R | w in {a,b,c}*}, stack ≤ 2 symbols",
+    parts = {
+    { kind="pda", sub="d)", max_stack=2,
+      label = "PDA with at most TWO stack symbols (a,b,c,d; "
+          .. "code a, b, c e.g. as B, BA, BAA) — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1,q2,q3,q4,q5},{a,b,c,d},{A,B},"
+          .. "{(q0,a λ/B,q0),(q0,b λ/B,q1),(q0,c λ/B,q2),"
+          .. "(q0,d λ/λ,q3),(q1,λ λ/A,q0),(q2,λ λ/A,q1),"
+          .. "(q3,a B/λ,q3),(q3,λ A/λ,q4),(q4,b B/λ,q3),"
+          .. "(q4,λ A/λ,q5),(q5,c B/λ,q3)},q0,{q3})") },
+}
+}
+
+-- the PDA M of exercise e, shown as a diagram (aut-shaped given)
+local PDA_M_GIVEN = {
+    alphabet = {"a","b","c"}, initial="q0", accepting={"q1"},
+    states = {"q0","q1"},
+    transitions = {
+        { from="q0", label="a λ/λ", target="q0" },
+        { from="q0", label="b λ/A", target="q0" },
+        { from="q0", label="b λ/λ", target="q1" },
+        { from="q1", label="c A/λ", target="q1" },
+    },
+}
+parts_task{
+    id = "6.1e", letter = "e",
+    title = "L(M), L_F(M), L_E(M) and conversions",
+    given = {
+        { kind="text",
+          text = "The PDA M (labels 'input pop/push'):" },
+        { kind="aut", model = PDA_M_GIVEN,
+          readonly = true, label = "M",
+          aut_type="pda" },
+        { kind="text",
+          text = "Give each language as a context-free grammar "
+              .. "(or build the required PDA).  L(M) = final state "
+              .. "+ empty stack, L_F(M) = final state only, "
+              .. "L_E(M) = empty stack only." },
+    },
+    parts = {
+    { kind="grammar", sub="e.a)",
+      label = "grammar for L(M) — words vbc^i with i = #_b(v)",
+      grammar_ref = "S -> aS | bSc | b" },
+    { kind="grammar", sub="e.b)",
+      label = "grammar for L_F(M) — i ≤ #_b(v)",
+      grammar_ref = "S -> aS | bSX | b\nX -> cX | λ" },
+    { kind="grammar", sub="e.c)",
+      label = "grammar for L_E(M) — L(M) ∪ a+",
+      grammar_ref = "S -> T | A\nT -> aT | bTc | b\nA -> aA | a" },
+    { kind="pda", sub="e.d)",
+      label = "M1 with L_F(M1) = L_E(M1) = L(M) — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({qs,q0,q1,qf},{a,b,c},{A,Z},"
+          .. "{(qs,λ λ/Z,q0),(q0,a λ/λ,q0),(q0,b λ/A,q0),"
+          .. "(q0,b λ/λ,q1),(q1,c A/λ,q1),(q1,λ Z/λ,qf)},"
+          .. "qs,{qf})") },
+    { kind="pda", sub="e.e)",
+      label = "M2 with L(M2) = L_F(M) — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1,qf},{a,b,c},{A},"
+          .. "{(q0,a λ/λ,q0),(q0,b λ/A,q0),(q0,b λ/λ,q1),"
+          .. "(q1,c A/λ,q1),(q1,λ λ/λ,qf),(qf,λ A/λ,qf)},"
+          .. "q0,{qf})") },
+    { kind="pda", sub="e.f)",
+      label = "M3 with L(M3) = L_E(M) — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({qs,q0,q1},{a,b,c},{A},"
+          .. "{(qs,a λ/λ,q0),(qs,b λ/A,q0),(qs,b λ/λ,q1),"
+          .. "(q0,a λ/λ,q0),(q0,b λ/A,q0),(q0,b λ/λ,q1),"
+          .. "(q1,c A/λ,q1)},qs,{q0,q1})") },
+}
+}
+
+parts_task{
+    id = "6.2f", letter = "f",
+    title = "GNF grammar to PDA",
+    given = {
+        { kind="text",
+          text = "Grammar in Greibach normal form: "
+              .. "S → aABA | aBB,  A → bA | b,  B → cB | c.  "
+              .. "Use the lecture construction (an extended PDA "
+              .. "pushing whole strings is fine)." },
+    },
+    parts = {
+    { kind="pda", sub="f)",
+      label = "PDA for L(G) — " .. PDA_FMT,
+      pda_ref = pda_ref(
+          "({q0,q1},{a,b,c},{S,A,B},"
+          .. "{(q0,a λ/ABA,q1),(q0,a λ/BB,q1),(q1,b A/A,q1),"
+          .. "(q1,b A/λ,q1),(q1,c B/B,q1),(q1,c B/λ,q1)},"
+          .. "q0,{q1})") },
+}
+}
+
+-- ======================= Sheet 7 =======================
+-- CFL pumping (uv^iwx^iy) + Turing machines.
+-- cpump parts: cases = ordered matchers over a concrete split
+-- {u,v,w,x,y}; the first matching case wins.  i is an expression
+-- in k, m=|v|, n=|x| evaluated per split.
+
+local function word_blocks(zw)
+    -- block index of each position = number of letter changes so
+    -- far (blocks are maximal runs of one symbol, any length)
+    local bounds = {}
+    local b = 0
+    for i = 1, #zw do
+        if i == 1 or zw:sub(i, i) ~= zw:sub(i - 1, i - 1) then
+            b = b + 1
+        end
+        bounds[i] = b
+    end
+    return function(pos) return bounds[pos] end
+end
+
+-- matcher factory: 'touch' = set of block indices that v ∪ x
+-- overlaps (blocks = maximal single-symbol runs of z).
+-- A case matches iff every touched block is in 'allowed'.
+local function touch_case(allowed)
+    local allow = {}
+    for _, b in ipairs(allowed) do allow[b] = true end
+    return function(sp, zw)
+        local block = word_blocks(zw)
+        local touched = {}
+        local lo, hi
+        local function scan(s, base)
+            for i = 1, #s do
+                local b = block(base + i - 1)
+                touched[b] = true
+            end
+        end
+        scan(sp.v, #sp.u + 1)
+        scan(sp.x, #sp.u + #sp.v + #sp.w + 1)
+        for b in pairs(touched) do
+            if not allow[b] then return false end
+            if not lo or b < lo then lo = b end
+            if not hi or b > hi then hi = b end
+        end
+        return true
+    end
+end
+
+local function lt_square(w)
+    if not w:match("^a*$") then return false end
+    local r = math.floor(math.sqrt(#w) + 0.5)
+    return r * r == #w
+end
+local function lt_abcd(w)
+    local a, b, c, d = w:match("^(a*)(b*)(c*)(d*)$")
+    return a ~= nil and #a == #c and #b == #d
+end
+local function lt_a2ba(w)
+    local a1, b, a2 = w:match("^(a*)(b*)(a*)$")
+    return a1 ~= nil and #b == 2 * #a1 and #a2 == #a1
+end
+-- finite prefixes of  ab aab aaab ... a^n b a^{n+1} b ...
+local function lt_infword(w)
+    local pos, n = 1, 1
+    while pos <= #w do
+        local run = n
+        for _ = 1, run do
+            if w:sub(pos, pos) ~= "a" then return false end
+            pos = pos + 1
+        end
+        if pos > #w then return true end     -- ended mid-run: prefix
+        if w:sub(pos, pos) ~= "b" then return false end
+        pos, n = pos + 1, n + 1
+    end
+    return true
+end
+local function infword_z(k)
+    local t = {}
+    for j = 1, k do t[#t + 1] = ("a"):rep(j) .. "b" end
+    return table.concat(t)
+end
+
+local CP_I = "pumping index i — an integer or an expression in "
+    .. "k, m=|v|, n=|x| (e.g. 0, 2, m)"
+
+parts_task{
+    id = "7.1a", letter = "a",
+    title = "L = {a^k | k is a square}",
+    desc = "Show with the pumping lemma for CFLs that L is not "
+        .. "context-free.  Give a witness z(k) (block list, e.g. "
+        .. "a^{k*k}) and a pumping index i for every case.",
+    given = { kind="text",
+        text = "z = uvwxy with |vwx| ≤ k and |vx| > 0 must satisfy "
+            .. "uv^iwx^iy ∉ L for some i ≥ 0." },
+    parts = {
+        { kind="cpump", sub="a)", alphabet="a",
+          z_hint = "a^{k*k}",
+          lang_test = lt_square,
+          cases = {
+            { desc="v,x ⊆ a-block (the only possibility)",
+              match=function() return true end },
+          } },
+    }
+}
+
+parts_task{
+    id = "7.1b", letter = "b",
+    title = "L = {a^i b^j c^i d^j}",
+    desc = "z = a^k b^k c^k d^k is the canonical witness — since "
+        .. "|vwx| ≤ k, vx can touch at most two adjacent blocks.  "
+        .. "Give i for every case (" .. CP_I .. ").",
+    parts = {
+        { kind="cpump", sub="b)", alphabet="a,b,c,d",
+          z_hint = "a^k b^k c^k d^k",
+          lang_test = lt_abcd,
+          cases = {
+            { desc="vx in the a-block",
+              match=touch_case({1}) },
+            { desc="vx in the b-block",
+              match=touch_case({2}) },
+            { desc="vx in the c-block",
+              match=touch_case({3}) },
+            { desc="vx in the d-block",
+              match=touch_case({4}) },
+            { desc="vx over the a/b boundary",
+              match=touch_case({1,2}) },
+            { desc="vx over the b/c boundary",
+              match=touch_case({2,3}) },
+            { desc="vx over the c/d boundary",
+              match=touch_case({3,4}) },
+          } },
+    }
+}
+
+parts_task{
+    id = "7.1c", letter = "c",
+    title = "L = {a^i b^{2i} a^i}   (extra)",
+    desc = "z = a^k b^{2k} a^k; vx touches at most two adjacent "
+        .. "blocks — five cases (" .. CP_I .. ").",
+    parts = {
+        { kind="cpump", sub="c)", alphabet="a,b",
+          z_hint = "a^k b^{2k} a^k",
+          lang_test = lt_a2ba,
+          cases = {
+            { desc="vx in the first a-block",
+              match=touch_case({1}) },
+            { desc="vx in the b-block",
+              match=touch_case({2}) },
+            { desc="vx in the last a-block",
+              match=touch_case({3}) },
+            { desc="vx over the first a/b boundary",
+              match=touch_case({1,2}) },
+            { desc="vx over the b/a boundary",
+              match=touch_case({2,3}) },
+          } },
+    }
+}
+
+parts_task{
+    id = "7.1d", letter = "d",
+    title = "L = finite prefixes of abaabaaab…  (extra extra)",
+    desc = "The witness is fixed: z = ab aab aaab … a^k b.  "
+        .. "By symmetry it suffices to look at v — give i for each "
+        .. "form v can take (" .. CP_I .. ").",
+    parts = {
+        { kind="cpump", sub="d)", alphabet="a,b",
+          zgen = infword_z,
+          lang_test = lt_infword,
+          cases = {
+            { desc="v or x contains ≥ 2 b's",
+              match=function(sp)
+                  local function nb(s)
+                      return select(2, s:gsub("b", "")) end
+                  return nb(sp.v) >= 2 or nb(sp.x) >= 2
+              end },
+            { desc="v or x contains exactly 1 b",
+              match=function(sp)
+                  local function nb(s)
+                      return select(2, s:gsub("b", "")) end
+                  return nb(sp.v) + nb(sp.x) == 1
+              end },
+            { desc="vx contains only a's",
+              match=function(sp)
+                  return not sp.v:find("b") and not sp.x:find("b")
+              end },
+          } },
+    }
+}
+
+-- TM test-word batteries
+local function words_accept_abcd()
+    local out = {}
+    for i = 0, 3 do
+        for j = 0, 3 do
+            out[#out + 1] = ("a"):rep(i) .. ("b"):rep(j)
+                .. ("c"):rep(i) .. ("d"):rep(j)
+        end
+    end
+    return out
+end
+local REJ_ABCD = { "a", "b", "c", "d", "ab", "cd", "abc", "abcdx",
+    "aabbc", "abbcdd", "abcd", "abcd", "abcdd", "aabccd", "abdc",
+    "aabbcd", "acbd", "bbdd", "aacdd", "abbcd", "abcbd", "adc" }
+
+parts_task{
+    id = "7.2e", letter = "e",
+    title = "Standard TM for {a^i b^j c^i d^j}",
+    desc = "Give a standard (single-tape, deterministic or not) "
+        .. "Turing machine recognising L.  Transition list: "
+        .. "'state, read write move, state' with move in {L,R,S}; "
+        .. "B is the blank; declare 'start:' and 'final:'.  The "
+        .. "head starts on the first input symbol; a machine halts "
+        .. "when no transition applies and accepts in a final state.",
+    parts = {
+        { kind="tm", sub="e)",
+          accept = words_accept_abcd(),
+          reject = { "a","b","c","d","ab","cd","abc","abcdd",
+              "aabbc","abdc","aabbcd","acbd","aacdd",
+              "abcbd","adc","aabbccddx","ba","dcba" },
+          label = "transition list" },
+    }
+}
+
+local function words_accept_prefix(maxn)
+    local out, w, n = {}, "", 1
+    while #w <= maxn do
+        w = w .. ("a"):rep(n) .. "b"
+        out[#out + 1] = w
+        out[#out + 1] = w .. ("a"):rep(n + 1 > 2 and n or 1)
+        n = n + 1
+    end
+    return out
+end
+
+parts_task{
+    id = "7.2f", letter = "f",
+    title = "Standard TM for the prefix language",
+    desc = "Recognise the finite prefixes of abaabaaab… "
+        .. "(same transition-list format as in 7.2e).",
+    parts = {
+        { kind="tm", sub="f)",
+          accept = { "a","ab","aba","abaab","abaaba","abaabaa",
+              "abaabaaa","abaabaaab","abaabaaaba","abaabaaabaa",
+              "abaabaaabaaa","abaabaaabaaab","abaabaaabaaaab",
+              "abaabaaabaaaaba","abaabaaabaaaabaaaa",
+              "abaabaaabaaaabaaaab" },
+          reject = { "b","ba","abb","abaabb","ababa","abbab",
+              "aab","abab","abaa","abaabb","abaabab","abaabbaa",
+              "abaabaaaab","abaabaaabaab","abaabaaabba",
+              "abca","abaac","abaabaaabaaaaab" },
+          label = "transition list" },
+    }
+}
+
+parts_task{
+    id = "7.3g", letter = "g",
+    title = "Multi-tape TM for {a^i b^j c^i d^j}  (extra)",
+    desc = "Give a TWO-tape TM; tape 1 may only move right or "
+        .. "stay.  Format per line: 'state, r w d | r w d, state' "
+        .. "(clause per tape).",
+    parts = {
+        { kind="tm", sub="g)", tapes = 2, tape1_no_L = true,
+          accept = words_accept_abcd(),
+          reject = { "a","b","c","d","ab","cd","abc","abcdd",
+              "aabbc","abdc","aabbcd","acbd","aacdd",
+              "abcbd","adc","ba" },
+          label = "two-tape transition list" },
+    }
+}
+
+parts_task{
+    id = "7.3h", letter = "h",
+    title = "Multi-tape TM for the prefix language  (extra extra)",
+    desc = "Two tapes, tape 1 only R/S (same format as 7.3g).",
+    parts = {
+        { kind="tm", sub="h)", tapes = 2, tape1_no_L = true,
+          optional = true,
+          accept = { "a","ab","aba","abaab","abaaba","abaabaa",
+              "abaabaaa","abaabaaab","abaabaaabaaab",
+              "abaabaaabaaaab" },
+          reject = { "b","ba","abb","abaabb","ababa","aab",
+              "abab","abaa","abaabbaa","abaabaaabaab" },
+          label = "two-tape transition list" },
+    }
+}
+
+-- ======================= Sheet 8 =======================
+-- Unrestricted grammars + undecidability.
+
+parts_task{
+    id = "8.1a", letter = "a",
+    title = "Unrestricted grammar for {a^i b^j a^i b^j}",
+    desc = "Give an unrestricted (type-0) grammar.  Idea: generate "
+        .. "a^i b^j E^{j-1} a^i b context-freely, let the Es travel "
+        .. "right and turn into b.",
+    parts = {
+        { kind="grammar", sub="a)",
+          label = "unrestricted grammar",
+          grammar_ref = "S -> A | B | aCab\nA -> aaA | λ\n"
+              .. "B -> bbB | λ\nC -> aCa | bD\nD -> bDE | λ\n"
+              .. "Ea -> aE\nEb -> bb",
+          bounded_ok = true },
+    }
+}
+
+parts_task{
+    id = "8.1b", letter = "b",
+    title = "Unrestricted grammar for {a^i b^i c^i d^i}  (extra)",
+    desc = "Generate {a^{i+1} b D^i c d} first, let D produce a b "
+        .. "on meeting c and continue as E; E turns into cd on d.",
+    parts = {
+        { kind="grammar", sub="b)",
+          label = "unrestricted grammar",
+          grammar_ref = "S -> aCcd | λ\nC -> aCD | b\n"
+              .. "Db -> bD\nDc -> bcE\nEc -> cE\nEd -> cdd",
+          bounded_ok = true },
+    }
+}
+
+local G_102 = "S -> aAbc | λ\nA -> aAbC | λ\nCb -> bC\nCc -> cc"
+
+parts_task{
+    id = "8.1c", letter = "c",
+    title = "The grammar of 10.2 generates {a^i b^i c^i}",
+    desc = "Grammar: S → aAbc | λ,  A → aAbC | λ,  Cb → bC,  "
+        .. "Cc → cc.",
+    parts = {
+        { kind="pattern", sub="c.1)",
+          label = "L(G) in set notation (e.g. a^n b^n c^n | n>=0)",
+          grammar = G_102,
+          maxlen = 13,
+          vars = { "n" } },
+        { kind="derivation", sub="c.2)", target = "aaabbbccc",
+          grammar = G_102,
+          label = "derive aaabbbccc — chain the sentential forms "
+              .. "with ⇒ (mind the Cb→bC reordering steps)" },
+        { kind="derivation", sub="c.3)", target = "aabbcc",
+          grammar = G_102,
+          label = "derive aabbcc" },
+    }
+}
+
+parts_task{
+    id = "8.1d", letter = "d",
+    title = "10.5 — the language a TM-grammar recognises",
+    desc = "The grammar in the teacher notes simulates a Turing "
+        .. "machine (rules S, T[, A…, X…, q0…, q1…, q2…, E_R, E_L).",
+    parts = {
+        { kind="regexp", sub="d.1)",
+          label = "the language M recognises, as a regular "
+              .. "expression",
+          reference = "b(ab)*(λ|b(a|b)*)" },
+    }
+}
+
+-- a one-slot multiple-choice part: verdict options + a check
+-- function mapping the chosen option id to a verdict.
+local function mc(sub, label, options, check)
+    local opts = {}
+    for _, o in ipairs(options) do
+        opts[#opts + 1] = { id = o[1], label = o[2] }
+    end
+    return { kind="choice", sub=sub, label=label,
+        slots = { { key="v", label=label, options=opts } },
+        sel_check = function(sel) return check(sel.v) end }
+end
+local function mc_result(want, ok_msg, no_msg)
+    return function(v)
+        if v == want then
+            return { ok=true, kind="ok", msg=ok_msg }
+        end
+        return { ok=false, kind="fail", msg=no_msg }
+    end
+end
+
+parts_task{
+    id = "8.2e", letter = "e",
+    title = "The n-step halting problem",
+    desc = "Given M and w, decide whether M halts within n "
+        .. "transitions on w.",
+    parts = {
+        mc("e.1)", "decidable or undecidable?",
+           { {"d","decidable"}, {"u","undecidable"} },
+           mc_result("d",
+             "correct — a modified universal machine counts the "
+             .. "steps and answers once it reaches n+1",
+             "think again — simulating M on w can simply be "
+             .. "stopped after n transitions")),
+        mc("e.2)", "why?",
+           { {"c","a modified universal machine counts steps and "
+             .. "stops at n+1 — always terminates"},
+             {"h","it would solve the ordinary halting problem"},
+             {"s","it is a subproblem of the halting problem"} },
+           mc_result("c",
+             "exactly — bounded simulation always terminates",
+             "the point is that only n steps are simulated — "
+             .. "the simulation itself always terminates")),
+    }
+}
+
+parts_task{
+    id = "8.2f", letter = "f",
+    title = "Halting problem for a fixed M (12.3)",
+    desc = "L is r.e. but not recursive; M recognises L.  "
+        .. "Is 'does M halt on w?' decidable?",
+    parts = {
+        mc("f.1)", "decidable or undecidable?",
+           { {"d","decidable"}, {"u","undecidable"} },
+           mc_result("u",
+             "correct — a halting decider for M would decide L",
+             "think again — with a halting oracle for M you could "
+             .. "decide L, which is not recursive")),
+        mc("f.2)", "which argument proves it?",
+           { {"m","H_M + M give a decider for L — contradiction "
+             .. "with L not recursive"},
+             {"r","the universal halting problem reduces to it "
+             .. "directly"},
+             {"i","L is infinite, so M cannot always halt"} },
+           mc_result("m",
+             "exactly — H_M followed by M decides L, which is "
+             .. "not recursive",
+             "the proof combines the hypothetical H_M with M "
+             .. "into a decider for L")),
+    }
+}
+
+parts_task{
+    id = "8.2g", letter = "g",
+    title = "Why the subproblem argument fails (12.9)",
+    desc = "'The blank tape problem is a subproblem of the "
+        .. "halting problem, which is undecidable, therefore it "
+        .. "is undecidable.'",
+    parts = {
+        mc("g)", "why is this not valid?",
+           { {"w","the reduction points the wrong way — a "
+             .. "subproblem may be easier (every DFA is a TM "
+             .. "that always halts)"},
+             {"a","subproblems are always decidable"},
+             {"d","the blank tape problem is actually decidable"} },
+           mc_result("w",
+             "exactly — the reduction direction is wrong; a "
+             .. "subproblem can be strictly easier",
+             "check the direction: ease of a subproblem does "
+             .. "not transfer undecidability")),
+    }
+}
+
+parts_task{
+    id = "8.2h", letter = "h",
+    title = "Reduction: blank-tape ≤ Q",
+    desc = "R transforms P into P' which first erases its input, "
+        .. "then behaves like P iff the input was 101, else "
+        .. "diverges.  What does the reduction show?",
+    parts = {
+        mc("h)", "the correct conclusion",
+           { {"u","P halts on blank tape iff Q answers yes on "
+             .. "P' — so Q is undecidable"},
+             {"q","Q is decidable because blank-tape reduces "
+             .. "to it"},
+             {"b","blank-tape is decidable because Q answers "
+             .. "on P'"} },
+           mc_result("u",
+             "exactly — the reduction transfers undecidability "
+             .. "from blank-tape to Q",
+             "reductions transfer undecidability FROM the source "
+             .. "problem TO the target, not the other way")),
+    }
+}
+
 
 -- ============ sheet structure for the tabbed page ============
 -- sheets -> exercise groups -> subtasks (each with a guided and a
@@ -1686,6 +2484,42 @@ M.sheets = {
           subtasks = {"4.3h","4.3i","4.3j"} },
         { id="4.4", title="Exercise 4.4",
           subtasks = {"4.4k","4.4l","4.4m"} },
+      }},
+    { id="sheet5", title="Sheet 5",
+      groups = {
+        { id="5.1", title="Exercise 5.1",
+          subtasks = {"5.1a","5.1b"} },
+        { id="5.2", title="Exercise 5.2",
+          subtasks = {"5.2c","5.2d"} },
+        { id="5.3", title="Exercise 5.3",
+          subtasks = {"5.3e","5.3f"} },
+        { id="5.4", title="Exercise 5.4",
+          subtasks = {"5.4g","5.4h"} },
+        { id="5.5", title="Exercise 5.5",
+          subtasks = {"5.5i"} },
+      }},
+    { id="sheet6", title="Sheet 6",
+      groups = {
+        { id="6.1", title="Exercise 6.1",
+          subtasks = {"6.1a","6.1b","6.1c","6.1d","6.1e"} },
+        { id="6.2", title="Exercise 6.2",
+          subtasks = {"6.2f"} },
+      }},
+    { id="sheet7", title="Sheet 7",
+      groups = {
+        { id="7.1", title="Exercise 7.1",
+          subtasks = {"7.1a","7.1b","7.1c","7.1d"} },
+        { id="7.2", title="Exercise 7.2",
+          subtasks = {"7.2e","7.2f"} },
+        { id="7.3", title="Exercise 7.3",
+          subtasks = {"7.3g","7.3h"} },
+      }},
+    { id="sheet8", title="Sheet 8",
+      groups = {
+        { id="8.1", title="Exercise 8.1",
+          subtasks = {"8.1a","8.1b","8.1c","8.1d"} },
+        { id="8.2", title="Exercise 8.2",
+          subtasks = {"8.2e","8.2f","8.2g","8.2h"} },
       }},
 }
 
@@ -1751,8 +2585,18 @@ local function view_part(pd, pi)
         v.initial, v.accepting = pd.initial, pd.accepting
     elseif pd.kind == "closure" then
         v.states = pd.states
-    elseif pd.kind == "grammar" then
+    elseif pd.kind == "grammar" or pd.kind == "normalise"
+            or pd.kind == "pda" or pd.kind == "tm" then
         v.hint = pd.hint
+    elseif pd.kind == "cpump" then
+        v.z_hint = pd.z_hint
+        v.has_z = (pd.zgen == nil)
+        v.cases = {}
+        for i, c in ipairs(pd.cases or {}) do
+            v.cases[i] = { desc = c.desc }
+        end
+    elseif pd.kind == "cyk" then
+        v.word = pd.word
     elseif pd.kind == "derivation" then
         v.count = pd.count or 1
         v.mode = pd.mode or "any"
