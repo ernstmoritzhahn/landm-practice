@@ -2421,18 +2421,43 @@ parts_task{
         .. "transitions on w.",
     parts = {
         mc("e.1)", "decidable or undecidable?",
-           { {"d","decidable"}, {"u","undecidable"} },
+           {
+             {"a","undecidable — it reduces to the halting problem"},
+             {"b","undecidable — n can be arbitrarily large"},
+             {"c","decidable — every TM halts on every input"}, {"d","decidable — a modified universal machine counts "
+             .. "the steps and stops at n+1"},
+             {"e","undecidable — it is r.e. but not recursive"},
+             {"f","decidable — but only for deterministic M"},
+             {"g","undecidable — by Rice's theorem"},
+             {"h","decidable — a finite tape means finite behaviour"},
+             {"i","undecidable — as a subproblem of the halting "
+             .. "problem it inherits undecidability"},
+             {"j","decidable — one can always decide by trying "
+             .. "all inputs"} },
            mc_result("d",
-             "correct — a modified universal machine counts the "
-             .. "steps and answers once it reaches n+1",
+             "correct — the bounded simulation terminates "
+             .. "after at most n+1 steps",
              "think again — simulating M on w can simply be "
              .. "stopped after n transitions")),
         mc("e.2)", "why?",
-           { {"c","a modified universal machine counts steps and "
+           {
+             {"a","it would solve the ordinary halting problem"},
+             {"b","it is a subproblem of the halting problem"},
+             {"c","because the halting problem is undecidable"},
+             {"d","because n is finite, M can only visit "
+             .. "finitely many states"},
+             {"e","by Rice's theorem: halting is a non-trivial "
+             .. "property"},
+             {"f","undecidability of a problem always implies "
+             .. "decidability of bounded variants"}, {"g","a modified universal machine counts steps and "
              .. "stops at n+1 — always terminates"},
-             {"h","it would solve the ordinary halting problem"},
-             {"s","it is a subproblem of the halting problem"} },
-           mc_result("c",
+             {"h","the tape alphabet is finite, so the machine "
+             .. "must repeat a state"},
+             {"i","the answer depends only on whether M halts "
+             .. "at all, which is r.e."},
+             {"j","decidable problems are closed under "
+             .. "subproblems"} },
+           mc_result("g",
              "exactly — bounded simulation always terminates",
              "the point is that only n steps are simulated — "
              .. "the simulation itself always terminates")),
@@ -2446,18 +2471,50 @@ parts_task{
         .. "Is 'does M halt on w?' decidable?",
     parts = {
         mc("f.1)", "decidable or undecidable?",
-           { {"d","decidable"}, {"u","undecidable"} },
-           mc_result("u",
+           {
+             {"a","decidable — M is fixed, so the answers can be "
+             .. "hard-coded into a table"},
+             {"b","decidable — just simulate M on w and watch "
+             .. "whether it halts"},
+             {"c","undecidable — the halting problem is "
+             .. "undecidable in general"},
+             {"d","decidable — for every w the machine either "
+             .. "halts or it does not"}, {"e","undecidable — a halting decider for M would "
+             .. "decide L"},
+             {"f","undecidable — M may loop forever on some "
+             .. "inputs"},
+             {"g","decidable — M recognises L, so checking "
+             .. "w ∈ L is enough"},
+             {"h","undecidable — by Rice's theorem"},
+             {"i","decidable — partial functions are always "
+             .. "computable"},
+             {"j","undecidable — as a subproblem of the halting "
+             .. "problem it must be undecidable"} },
+           mc_result("e",
              "correct — a halting decider for M would decide L",
              "think again — with a halting oracle for M you could "
              .. "decide L, which is not recursive")),
         mc("f.2)", "which argument proves it?",
-           { {"m","H_M + M give a decider for L — contradiction "
+           { {"a","H_M + M give a decider for L — contradiction "
              .. "with L not recursive"},
-             {"r","the universal halting problem reduces to it "
+             {"b","the universal halting problem reduces to it "
              .. "directly"},
-             {"i","L is infinite, so M cannot always halt"} },
-           mc_result("m",
+             {"c","L is infinite, so M cannot always halt"},
+             {"d","assume a decider; diagonalisation produces a "
+             .. "w on which it fails"},
+             {"e","Rice's theorem applies since halting is a "
+             .. "non-trivial semantic property"},
+             {"f","since L is r.e., halting of M is already "
+             .. "r.e.-complete"},
+             {"g","with H_M one could decide acceptance without "
+             .. "running M, which is impossible"},
+             {"h","the recursion theorem forces M to predict "
+             .. "its own halting"},
+             {"i","M is nondeterministic, so halting cannot be "
+             .. "analysed"},
+             {"j","undecidability is inherited from the general "
+             .. "halting problem by specialisation"} },
+           mc_result("a",
              "exactly — H_M followed by M decides L, which is "
              .. "not recursive",
              "the proof combines the hypothetical H_M with M "
@@ -2473,12 +2530,26 @@ parts_task{
         .. "is undecidable.'",
     parts = {
         mc("g)", "why is this not valid?",
-           { {"w","the reduction points the wrong way — a "
+           {
+             {"a","subproblems are always decidable"},
+             {"b","the blank tape problem is actually decidable"},
+             {"c","since the halting problem is undecidable, all "
+             .. "of its subproblems are undecidable too"},
+             {"d","the argument is valid — the blank tape problem "
+             .. "is indeed undecidable"},
+             {"e","'subproblem' is not a formal notion, so the "
+             .. "argument says nothing"},
+             {"f","a problem is undecidable only if it equals "
+             .. "the halting problem"},
+             {"g","undecidability transfers to subproblems only "
+             .. "for r.e. problems"}, {"h","the reduction points the wrong way — a "
              .. "subproblem may be easier (every DFA is a TM "
              .. "that always halts)"},
-             {"a","subproblems are always decidable"},
-             {"d","the blank tape problem is actually decidable"} },
-           mc_result("w",
+             {"i","the halting problem is r.e., and r.e. problems "
+             .. "have no undecidable subproblems"},
+             {"j","blank tape is not a special case but an "
+             .. "unrelated problem"} },
+           mc_result("h",
              "exactly — the reduction direction is wrong; a "
              .. "subproblem can be strictly easier",
              "check the direction: ease of a subproblem does "
@@ -2494,13 +2565,26 @@ parts_task{
         .. "diverges.  What does the reduction show?",
     parts = {
         mc("h)", "the correct conclusion",
-           { {"u","P halts on blank tape iff Q answers yes on "
-             .. "P' — so Q is undecidable"},
-             {"q","Q is decidable because blank-tape reduces "
+           {
+             {"a","Q is decidable because blank-tape reduces "
              .. "to it"},
              {"b","blank-tape is decidable because Q answers "
-             .. "on P'"} },
-           mc_result("u",
+             .. "on P'"}, {"c","P halts on blank tape iff Q answers yes on "
+             .. "P' — so Q is undecidable"},
+             {"d","P is decidable since P' simulates it on "
+             .. "blank tape"},
+             {"e","the reduction shows P and Q are equivalent"},
+             {"f","Q reduces to blank-tape, hence blank-tape is "
+             .. "undecidable"},
+             {"g","nothing — the construction only works for "
+             .. "input 101"},
+             {"h","blank-tape reduces to Q only if Q is "
+             .. "decidable"},
+             {"i","P' is the same machine as P, so nothing is "
+             .. "shown"},
+             {"j","the construction shows P ≤ Q, hence Q is "
+             .. "decidable exactly when P is"} },
+           mc_result("c",
              "exactly — the reduction transfers undecidability "
              .. "from blank-tape to Q",
              "reductions transfer undecidability FROM the source "
