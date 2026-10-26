@@ -145,8 +145,14 @@
             border-color: var(--accent);
         }
 
-        #variant { margin: 0.6rem 0 1.4rem 0; }
-        #variant .varlabel { font-size: 0.85rem; color: var(--muted); margin-right: 0.4rem; }
+        #goalrow {
+            display: flex;
+            align-items: baseline;
+            gap: 1.5rem;
+            margin: 0 0 1.2rem 0;
+        }
+        #goalrow #goal { flex: 1; margin: 0; }
+        #variant { flex: none; white-space: nowrap; }
         #variant .vartab {
             padding: 4px 12px; font-size: 0.85rem;
             border: 1px solid var(--border-color);
@@ -554,9 +560,10 @@
 <main>
     <div id="tabs"></div>
     <div id="subtabs"></div>
-    <div id="variant"></div>
-
-    <div id="goal"></div>
+    <div id="goalrow">
+        <div id="goal"></div>
+        <div id="variant"></div>
+    </div>
     <div id="rulesbox"></div>
     <div id="ihrow"></div>
     <div id="proof"></div>

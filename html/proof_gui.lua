@@ -2282,7 +2282,6 @@ local function render_tabs()
     clear(variant_el)
     local sub = g.subtasks[state.sub_i]
     if sub and sub.variants then
-        variant_el:appendChild(text("span", "variant: ", "varlabel"))
         for vi,v in ipairs(sub.variants) do
             local b = text("button", v.label,
                 (state.variant_i or 1)==vi and "vartab active"
@@ -2296,7 +2295,6 @@ local function render_tabs()
             variant_el:appendChild(b)
         end
     elseif sub and sub.free_id then
-        variant_el:appendChild(text("span", "variant: ", "varlabel"))
         for _,v in ipairs{{free=false,label="guided"},{free=true,label="free proof"}} do
             local b = text("button", v.label,
                 state.free==v.free and "vartab active" or "vartab")
