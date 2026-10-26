@@ -927,7 +927,10 @@ local function render_part(pv, pi)
             for _, spi in ipairs(pv.seeds) do
                 local op = document:createElement("option")
                 op.value = tostring(spi)
-                op.textContent = string.char(96 + spi) .. ")"
+                local spv = state.view and state.view.parts
+                          and state.view.parts[spi]
+                op.textContent = (spv and spv.sub)
+                    or (string.char(96 + spi) .. ")")
                 sel:appendChild(op)
             end
             local btn = el("button", "seedbtn")
@@ -1548,11 +1551,27 @@ end
 
 local function save_note(s) savemsg_el.textContent = s end
 
+-- ---------- part (a)(b)(c) sub-tabs: hide all but the active part.
+-- Every part is rendered and booted (seeds/takeover/check-all reach
+-- into sibling parts' editors); only visibility toggles.  The aut
+-- canvas re-sizes itself via ResizeObserver on un-hide.
+local function select_part(pi)
+    state.part_i = pi
+    for i,box in ipairs(state.part_boxes or {}) do
+        box.style.display = (i == pi) and "" or "none"
+    end
+    for i,t in ipairs(state.part_tabs or {}) do
+        t.className = (i == pi) and "parttab active" or "parttab"
+    end
+end
+
 -- ---------- render dispatch ----------
 local function render(view)
     state.view = view
     state.holes, state.st, state.free_blocks = {}, {}, {}
     state.parts = {}
+    state.part_boxes, state.part_tabs, state.part_marks = {}, nil, {}
+    state.part_i = 1
     state.ih_input, state.ih_st = nil, nil
     state.regexp_input, state.regexp_st = nil, nil
     clear(proof_el); clear(summary_el)
@@ -1594,8 +1613,30 @@ local function render(view)
                 state.stage_map[pv.takeover_from] = e
             end
         end
+        -- a) b) c)… part tabs: one strip when the task has >1 part
+        local nparts = #(view.parts or {})
+        if nparts > 1 then
+            local strip = el("div", "parttabs")
+            state.part_tabs = {}
+            for pi,pv in ipairs(view.parts) do
+                local b = el("button", "parttab")
+                b:appendChild(text("span",
+                    pv.sub or (string.char(96 + pi) .. ")")))
+                local mk = el("span", "ptmark")
+                b:appendChild(mk)
+                state.part_marks[pi] = mk
+                b:addEventListener("click", function()
+                    select_part(pi)
+                end)
+                state.part_tabs[pi] = b
+                strip:appendChild(b)
+            end
+            proof_el:appendChild(strip)
+        end
         for pi,pv in ipairs(view.parts or {}) do
-            proof_el:appendChild(render_part(pv, pi))
+            local box = render_part(pv, pi)
+            state.part_boxes[pi] = box
+            proof_el:appendChild(box)
         end
         boot_pending_aut()
         restore_local()
@@ -1635,6 +1676,7 @@ local function render(view)
                 end
             end)
         end
+        if nparts > 1 then select_part(state.part_i) end
         return
     end
     if view.type == "regexp" then
@@ -1798,6 +1840,9 @@ send_check = function(only_pi)
             -- the check can take seconds in the worker (bounded PDA/TM
             -- searches) — mark it so the page does not look dead
             if p.st then paint_st(p.st, "pending", "checking…") end
+            local mk = state.part_marks and state.part_marks[pi]
+            if mk then mk.className = "ptmark pending"
+                      mk.textContent = "…" end
             end
         end
         data.parts = parts
@@ -2020,6 +2065,15 @@ local function paint(res)
                     paint_st(p.st, pres.kind or "fail", pres.msg)
                 else
                     paint_st(p.st, pres.kind or "pending")
+                end
+                local mk = state.part_marks and state.part_marks[pres.pi]
+                if mk then
+                    local k = KIND[pres.ok and "ok"
+                                   or (pres.msg and (pres.kind or "fail"))
+                                   or (pres.kind or "pending")]
+                             or KIND.pending
+                    mk.className = "ptmark " .. k[1]
+                    mk.textContent = k[2]
                 end
                 for wi,row in pairs(pres.rows or {}) do
                     local rst = p.row_st and p.row_st[tonumber(wi)]

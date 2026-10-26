@@ -92,6 +92,42 @@
             background: transparent;
             color: var(--accent);
         }
+        /* per-part (a)(b)(c) tabs inside a task */
+        .parttabs {
+            margin-bottom: 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+        .parttabs .parttab {
+            font-family: "Monaco", "Consolas", monospace;
+            font-size: 0.8rem;
+            padding: 3px 10px;
+            border: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            color: #555;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .parttabs .parttab.active {
+            border-bottom-color: var(--accent);
+            font-weight: bold;
+            color: var(--accent);
+        }
+        .parttabs .parttab:hover {
+            background: transparent;
+            color: var(--accent);
+        }
+        .parttabs .ptmark { font-size: 0.75rem; min-width: 0.8em; }
+        .parttabs .ptmark.ok      { color: #1a7f37; }
+        .parttabs .ptmark.fail    { color: #b3261e; }
+        .parttabs .ptmark.warn    { color: #b26a00; }
+        .parttabs .ptmark.pending { color: #888; }
+
         #variant { margin: 0.6rem 0 1.4rem 0; }
         #variant .varlabel { font-size: 0.85rem; color: var(--muted); margin-right: 0.4rem; }
         #variant .vartab {
