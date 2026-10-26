@@ -535,6 +535,17 @@ function M.check_aut(part, model_json, expect_type)
         return { ok=false, kind="empty",
                  msg="no automaton — draw the state diagram" }
     end
+    -- graphical PDA / Turing-machine input delegates to the dedicated
+    -- checkers; their labels parse through automata.label_lang
+    if part.aut_type == "pda" then
+        return require("wordproof.pda_check")
+            .check_pda_model(part, model_json)
+    end
+    if part.aut_type == "tm"
+       or (part.aut_type or ""):match("^tm%-%d+$") then
+        return require("wordproof.tm_check")
+            .check_tm_model(part, model_json)
+    end
     local aut, problems
     if is_nfa_type(part.aut_type) then
         aut, problems = model_to_nfa(m, part.aut_type)

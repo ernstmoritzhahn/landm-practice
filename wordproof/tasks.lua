@@ -1850,10 +1850,10 @@ local function pda_ref(tuple)
     end
 end
 
-local PDA_FMT = "enter the PDA as a transition list — one line per "
-    .. "edge: 'state, input pop/push, state'; declare 'start: q0' "
-    .. "and 'final: ...'; λ for the empty word/stack symbol; "
-    .. "a push may be a string (extended PDA)"
+local PDA_FMT = "draw the state diagram — each transition label "
+    .. "reads 'input pop/push' (e.g. \"a A/AA\" or \"λ Z/λ\"); "
+    .. "λ = empty input/no pop/no push; a push may be a string "
+    .. "(extended PDA); mark the initial and the final states"
 
 parts_task{
     id = "6.1a", letter = "a",
@@ -1861,14 +1861,21 @@ parts_task{
     desc = "Give a small nondeterministic PDA and a "
         .. "deterministic PDA.",
     parts = {
-    { kind="pda", sub="a.1)", deterministic=false,
+    { kind="aut", aut_type="pda", sub="a.1)", deterministic=false,
+      alphabet="a,b", stack_alphabet="A,Z",
       label = "a small NONDETERMINISTIC PDA — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1},{a,b},{A},"
           .. "{(q0,a λ/A,q0),(q0,λ λ/λ,q1),(q1,b A/λ,q1),"
           .. "(q1,b λ/λ,q1)},q0,{q0,q1})") },
-    { kind="pda", sub="a.2)", deterministic=true,
+    { kind="aut", aut_type="pda", sub="a.2)", deterministic=true,
+      alphabet="a,b", stack_alphabet="A,Z",
       label = "a DETERMINISTIC PDA — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true,
+                 deterministic=true },
       pda_ref = pda_ref(
           "({q0,q1,q2,q3},{a,b},{A,Z},"
           .. "{(q0,λ λ/Z,q1),(q1,a λ/A,q1),(q1,b A/λ,q2),"
@@ -1881,8 +1888,11 @@ parts_task{
     id = "6.1b", letter = "b",
     title = "PDA for {a^i b^j | 0 ≤ i ≤ j ≤ 2i}",
     parts = {
-    { kind="pda", sub="b)",
+    { kind="aut", aut_type="pda", sub="b)",
+      alphabet="a,b", stack_alphabet="A",
       label = "PDA — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1,q2},{a,b},{A},"
           .. "{(q0,a λ/A,q0),(q0,λ λ/λ,q1),(q1,b A/λ,q2),"
@@ -1894,9 +1904,12 @@ parts_task{
     id = "6.1c", letter = "c",
     title = "PDA for {a^i b^j | i ≠ j}",
     parts = {
-    { kind="pda", sub="c)",
+    { kind="aut", aut_type="pda", sub="c)",
+      alphabet="a,b", stack_alphabet="A,Z",
       label = "PDA — hint: first push a bottom marker Z so you "
           .. "can test for an empty stack — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1,q2,q3,q4},{a,b},{A,Z},"
           .. "{(q0,λ λ/Z,q1),(q1,a λ/A,q1),(q1,λ λ/λ,q2),"
@@ -1910,9 +1923,12 @@ parts_task{
     id = "6.1d", letter = "d",
     title = "PDA for {wdw^R | w in {a,b,c}*}, stack ≤ 2 symbols",
     parts = {
-    { kind="pda", sub="d)", max_stack=2,
+    { kind="aut", aut_type="pda", sub="d)", max_stack=2,
+      alphabet="a,b,c,d", stack_alphabet="A,B",
       label = "PDA with at most TWO stack symbols (a,b,c,d; "
           .. "code a, b, c e.g. as B, BA, BAA) — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1,q2,q3,q4,q5},{a,b,c,d},{A,B},"
           .. "{(q0,a λ/B,q0),(q0,b λ/B,q1),(q0,c λ/B,q2),"
@@ -1958,22 +1974,31 @@ parts_task{
     { kind="grammar", sub="e.c)",
       label = "grammar for L_E(M) — L(M) ∪ a+",
       grammar_ref = "S -> T | A\nT -> aT | bTc | b\nA -> aA | a" },
-    { kind="pda", sub="e.d)",
+    { kind="aut", aut_type="pda", sub="e.d)",
+      alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M1 with L_F(M1) = L_E(M1) = L(M) — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({qs,q0,q1,qf},{a,b,c},{A,Z},"
           .. "{(qs,λ λ/Z,q0),(q0,a λ/λ,q0),(q0,b λ/A,q0),"
           .. "(q0,b λ/λ,q1),(q1,c A/λ,q1),(q1,λ Z/λ,qf)},"
           .. "qs,{qf})") },
-    { kind="pda", sub="e.e)",
+    { kind="aut", aut_type="pda", sub="e.e)",
+      alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M2 with L(M2) = L_F(M) — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1,qf},{a,b,c},{A},"
           .. "{(q0,a λ/λ,q0),(q0,b λ/A,q0),(q0,b λ/λ,q1),"
           .. "(q1,c A/λ,q1),(q1,λ λ/λ,qf),(qf,λ A/λ,qf)},"
           .. "q0,{qf})") },
-    { kind="pda", sub="e.f)",
+    { kind="aut", aut_type="pda", sub="e.f)",
+      alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M3 with L(M3) = L_E(M) — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({qs,q0,q1},{a,b,c},{A},"
           .. "{(qs,a λ/λ,q0),(qs,b λ/A,q0),(qs,b λ/λ,q1),"
@@ -1993,8 +2018,11 @@ parts_task{
               .. "pushing whole strings is fine)." },
     },
     parts = {
-    { kind="pda", sub="f)",
+    { kind="aut", aut_type="pda", sub="f)",
+      alphabet="a,b,c", stack_alphabet="S,A,B",
       label = "PDA for L(G) — " .. PDA_FMT,
+      checks = { labels=true, alphabet=true, one_initial=true,
+                 endpoints=true, unique_names=true, nonempty=true },
       pda_ref = pda_ref(
           "({q0,q1},{a,b,c},{S,A,B},"
           .. "{(q0,a λ/ABA,q1),(q0,a λ/BB,q1),(q1,b A/A,q1),"
@@ -2210,18 +2238,21 @@ parts_task{
     id = "7.2e", letter = "e",
     title = "Standard TM for {a^i b^j c^i d^j}",
     desc = "Give a standard (single-tape, deterministic or not) "
-        .. "Turing machine recognising L.  Transition list: "
-        .. "'state, read write move, state' with move in {L,R,S}; "
-        .. "B is the blank; declare 'start:' and 'final:'.  The "
-        .. "head starts on the first input symbol; a machine halts "
-        .. "when no transition applies and accepts in a final state.",
+        .. "Turing machine recognising L.  Draw the state diagram: "
+        .. "each transition label reads 'read write move' with move "
+        .. "in {L,R,S} (λ = blank B, ~ = keep symbol); mark the "
+        .. "initial and the final states.  The head starts on the "
+        .. "first input symbol; a machine halts when no transition "
+        .. "applies and accepts in a final state.",
     parts = {
-        { kind="tm", sub="e)",
+        { kind="aut", aut_type="tm", sub="e)", alphabet="a,b,c,d",
           accept = words_accept_abcd(),
           reject = { "a","b","c","d","ab","cd","abc","abcdd",
               "aabbc","abdc","aabbcd","acbd","aacdd",
               "abcbd","adc","aabbccddx","ba","dcba" },
-          label = "transition list" },
+          checks = { labels=true, one_initial=true, endpoints=true,
+                     unique_names=true, nonempty=true },
+          label = "the TM (labels 'r w d')" },
     }
 }
 
@@ -2240,9 +2271,9 @@ parts_task{
     id = "7.2f", letter = "f",
     title = "Standard TM for the prefix language",
     desc = "Recognise the finite prefixes of abaabaaab… "
-        .. "(same transition-list format as in 7.2e).",
+        .. "(drawn like in 7.2e).",
     parts = {
-        { kind="tm", sub="f)",
+        { kind="aut", aut_type="tm", sub="f)", alphabet="a,b,c,d",
           accept = { "a","ab","aba","abaab","abaaba","abaabaa",
               "abaabaaa","abaabaaab","abaabaaaba","abaabaaabaa",
               "abaabaaabaaa","abaabaaabaaab","abaabaaabaaaab",
@@ -2252,7 +2283,9 @@ parts_task{
               "aab","abab","abaa","abaabb","abaabab","abaabbaa",
               "abaabaaaab","abaabaaabaab","abaabaaabba",
               "abca","abaac","abaabaaabaaaaab" },
-          label = "transition list" },
+          checks = { labels=true, one_initial=true, endpoints=true,
+                     unique_names=true, nonempty=true },
+          label = "the TM (labels 'r w d')" },
     }
 }
 
@@ -2260,15 +2293,18 @@ parts_task{
     id = "7.3g", letter = "g",
     title = "Multi-tape TM for {a^i b^j c^i d^j}  (extra)",
     desc = "Give a TWO-tape TM; tape 1 may only move right or "
-        .. "stay.  Format per line: 'state, r w d | r w d, state' "
-        .. "(clause per tape).",
+        .. "stay.  Each label carries one 'r w d' clause per tape, "
+        .. "separated by '|' (e.g. \"a a R | B X S\").",
     parts = {
-        { kind="tm", sub="g)", tapes = 2, tape1_no_L = true,
+        { kind="aut", aut_type="tm-2", sub="g)", alphabet="a,b,c,d",
+          tapes = 2, tape1_no_L = true,
           accept = words_accept_abcd(),
           reject = { "a","b","c","d","ab","cd","abc","abcdd",
               "aabbc","abdc","aabbcd","acbd","aacdd",
               "abcbd","adc","ba" },
-          label = "two-tape transition list" },
+          checks = { labels=true, one_initial=true, endpoints=true,
+                     unique_names=true, nonempty=true },
+          label = "the 2-tape TM (labels 'r w d | r w d')" },
     }
 }
 
@@ -2277,14 +2313,16 @@ parts_task{
     title = "Multi-tape TM for the prefix language  (extra extra)",
     desc = "Two tapes, tape 1 only R/S (same format as 7.3g).",
     parts = {
-        { kind="tm", sub="h)", tapes = 2, tape1_no_L = true,
-          optional = true,
+        { kind="aut", aut_type="tm-2", sub="h)", alphabet="a,b,c,d",
+          tapes = 2, tape1_no_L = true, optional = true,
           accept = { "a","ab","aba","abaab","abaaba","abaabaa",
               "abaabaaa","abaabaaab","abaabaaabaaab",
               "abaabaaabaaaab" },
           reject = { "b","ba","abb","abaabb","ababa","aab",
               "abab","abaa","abaabbaa","abaabaaabaab" },
-          label = "two-tape transition list" },
+          checks = { labels=true, one_initial=true, endpoints=true,
+                     unique_names=true, nonempty=true },
+          label = "the 2-tape TM (labels 'r w d | r w d')" },
     }
 }
 
@@ -2593,6 +2631,7 @@ local function view_part(pd, pi)
                 optional = pd.optional or false }
     if pd.kind == "aut" then
         v.aut_type, v.alphabet = pd.aut_type, pd.alphabet
+        v.stack_alphabet = pd.stack_alphabet
         v.with_regexp = pd.with_regexp or false
         v.checks = pd.checks
         v.initial = pd.initial

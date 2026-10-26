@@ -325,6 +325,7 @@ local function aut_cfg(v)
     return { mode="aut",
              aut_type = v.aut_type or "dfa",
              alphabet = v.alphabet or "",
+             stack_alphabet = v.stack_alphabet or "",
              checks   = v.checks,
              initial  = v.initial or v.model }
 end

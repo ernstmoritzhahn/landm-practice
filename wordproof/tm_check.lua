@@ -145,9 +145,7 @@ function M.run(tm, word, max_steps)
     return "timeout"
 end
 
-function M.check_tm(part, text)
-    local tm, err = M.parse_tm_text(text, part.tapes or 1)
-    if not tm then return { ok = false, msg = err } end
+local function check_tm_obj(part, tm)
     if part.tape1_no_L then
         for st, list in pairs(tm.trans) do
             for _, tr in ipairs(list) do
@@ -180,6 +178,69 @@ function M.check_tm(part, text)
     return { ok = true, msg = "✓ correct on all "
         .. (npos + #(part.reject or {})) .. " test words"
         .. (tm.ntapes > 1 and (" (" .. tm.ntapes .. " tapes)") or "") }
+end
+
+function M.check_tm(part, text)
+    local tm, err = M.parse_tm_text(text, part.tapes or 1)
+    if not tm then return { ok = false, msg = err } end
+    return check_tm_obj(part, tm)
+end
+
+-- graphical input: the editor's model JSON; each transition label
+-- parses through automata.label_lang as 'read write L|R|S', '|'-
+-- separated per tape on multitape types ("tm-2" → ntapes=2)
+function M.check_tm_model(part, model_json)
+    local json = require "lib.json"
+    local label_lang = require "automata.label_lang"
+    local ok, m = pcall(json.decode, model_json or "")
+    if not ok or type(m) ~= "table" or not m.states
+       or #m.states == 0 then
+        return { ok=false, msg="no automaton — draw the state diagram" }
+    end
+    local ntapes = label_lang.tapes(m.type) or part.tapes or 1
+    local tm = { trans = {}, finals = {}, ntapes = ntapes }
+    local names, problems = {}, {}
+    for _, s in ipairs(m.states) do
+        local nm = tostring(s.name or s.id)
+        names[s.id] = nm
+        if s.initial then
+            if tm.start then
+                problems[#problems + 1] = "more than one initial state"
+            else
+                tm.start = nm
+            end
+        end
+        if s.accepting then tm.finals[nm] = true end
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local a, b = names[e.from], names[e.to]
+        if not (a and b) then
+            problems[#problems + 1] = "transition with a dangling "
+                .. "endpoint"
+        else
+            local ts, why = label_lang.parse(
+                "tm" .. (ntapes > 1 and ("-" .. ntapes) or ""), e.label)
+            if not ts then
+                problems[#problems + 1] = "label '" .. tostring(e.label)
+                    .. "': " .. why
+            else
+                local tapes = {}
+                for i, c in ipairs(ts) do
+                    tapes[i] = { r = c[1], w = c[2], d = c[3] }
+                end
+                local l = tm.trans[a] or {}
+                tm.trans[a] = l
+                l[#l + 1] = { from = a, tapes = tapes, to = b }
+            end
+        end
+    end
+    if not tm.start then
+        problems[#problems + 1] = "no initial state"
+    end
+    if #problems > 0 then
+        return { ok = false, msg = table.concat(problems, "; ") }
+    end
+    return check_tm_obj(part, tm)
 end
 
 return M

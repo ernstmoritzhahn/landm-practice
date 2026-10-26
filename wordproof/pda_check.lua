@@ -167,10 +167,10 @@ end
 local REL_DISPLAY = { ["="] = "=", ["!="] = "≠", ["<"] = "⊊",
                       [">"] = "⊋" }
 
-function M.check_pda(part, text)
-    local pda, err, warn = M.parse_pda_text(text)
-    if not pda then return { ok = false, msg = err } end
-    local notes = warn and { warn } or {}
+-- shared tail for the text and the graphical model paths: `pda` is a
+-- built make_pda object, `notes` accumulates student-facing warnings
+local function check_pda_obj(part, pda, notes)
+    notes = notes or {}
     if part.deterministic then
         local det, derr = M.is_deterministic(pda)
         if not det then
@@ -221,6 +221,74 @@ function M.check_pda(part, text)
             .. "' is accepted by yours but not by the reference"
     end
     return { ok = false, msg = table.concat(bits, "; ") }
+end
+
+-- graphical input: the editor's model JSON ({type="pda", states,
+-- transitions[{from,to,label}]}) — every label parses through
+-- automata.label_lang ("input pop/push" / "input, pop -> push")
+function M.check_pda_model(part, model_json)
+    local json = require "lib.json"
+    local label_lang = require "automata.label_lang"
+    local ok, m = pcall(json.decode, model_json or "")
+    if not ok or type(m) ~= "table" or not m.states
+       or #m.states == 0 then
+        return { ok=false, msg = "no automaton — draw the state diagram" }
+    end
+    local pda = automata.make_pda(true)
+    local names, initial, problems = {}, nil, {}
+    for _, s in ipairs(m.states) do
+        local nm = tostring(s.name or s.id)
+        names[s.id] = nm
+        pda:add_state(nm)
+        if s.initial then
+            if initial then
+                problems[#problems + 1] = "more than one initial state"
+            else
+                initial = nm
+            end
+        end
+        if s.accepting then pda:set_accepting(nm, true) end
+    end
+    for _, e in ipairs(m.transitions or {}) do
+        local a, b = names[e.from], names[e.to]
+        if not (a and b) then
+            problems[#problems + 1] = "transition with a dangling "
+                .. "endpoint"
+        else
+            local t, why = label_lang.parse("pda", e.label)
+            if not t then
+                problems[#problems + 1] = "label '" .. tostring(e.label)
+                    .. "': " .. why
+            else
+                local pok, perr = pcall(pda.add_transition, pda, a,
+                                        label_lang.pda_label(t), b)
+                if not pok then
+                    problems[#problems + 1] = "label '"
+                        .. tostring(e.label) .. "': " .. tostring(perr)
+                end
+            end
+        end
+    end
+    if not initial then
+        problems[#problems + 1] = "no initial state"
+    else
+        pda:set_initial(initial, true)
+    end
+    if #problems > 0 then
+        return { ok = false, msg = table.concat(problems, "; ") }
+    end
+    local notes = {}
+    if not next(pda:get_accepting() or {}) then
+        notes[1] = "no final states — accepts by empty stack"
+    end
+    return check_pda_obj(part, pda, notes)
+end
+
+function M.check_pda(part, text)
+    local pda, err, warn = M.parse_pda_text(text)
+    if not pda then return { ok = false, msg = err } end
+    local notes = warn and { warn } or {}
+    return check_pda_obj(part, pda, notes)
 end
 
 return M
