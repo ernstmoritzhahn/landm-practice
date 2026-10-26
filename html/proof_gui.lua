@@ -2288,6 +2288,46 @@ end)
 -- NB: no js_post_message here — it is only wired after this module's
 -- require() returns.  The worker pushes the task list itself on load.
 
+-- bad ?exercise=/?sub= deep link: show an error + the valid choices
+-- instead of silently landing on the default task
+local function render_error(bad_ex, bad_sub)
+    clear(proof_el); clear(summary_el)
+    clear(ihrow_el); clear(rulesbox_el)
+    clear(variant_el)
+    checkbtn.textContent = "Check"
+    goal_el.innerHTML = ""
+    goal_el:appendChild(text("span", "Exercise not found", "goaltitle"))
+    local msg = el("div", "desc")
+    if bad_ex then
+        msg.textContent = "There is no exercise \xE2\x80\x9C" .. bad_ex
+            .. "\xE2\x80\x9D on this site.  Available exercises:"
+    else
+        msg.textContent = "There is no part \xE2\x80\x9C" .. bad_sub
+            .. "\xE2\x80\x9D in this exercise.  Available parts:"
+    end
+    proof_el:appendChild(msg)
+    local row = el("div", "exlinks")
+    if bad_ex then
+        for _,sh in ipairs(state.sheets) do
+            for _,g in ipairs(sh.groups) do
+                local a = el("a", "exlink")
+                a.href = "?exercise=" .. g.id
+                a.textContent = g.id
+                row:appendChild(a)
+            end
+        end
+    else
+        local g = cur_sheet().groups[state.group_i]
+        for _,sub in ipairs(g.subtasks) do
+            local a = el("a", "exlink")
+            a.href = "?exercise=" .. g.id .. "&sub=" .. sub.sub
+            a.textContent = sub.sub .. ")"
+            row:appendChild(a)
+        end
+    end
+    proof_el:appendChild(row)
+end
+
 -- ---------- message handler (worker -> gui) ----------
 return function(data)
     local ok,msg = pcall(json.decode, data)
@@ -2295,6 +2335,7 @@ return function(data)
     data = msg
     if data.what == "tasks" then
         state.sheets = data.sheets
+        local bad_ex, bad_sub
         if ex_param then
             for si,sh in ipairs(state.sheets) do
                 for gi,g in ipairs(sh.groups) do
@@ -2306,15 +2347,26 @@ return function(data)
                 end
                 if state.pinned then break end
             end
+            if not state.pinned then bad_ex = ex_param end
         end
-        if sub_param then
+        if sub_param and not bad_ex then
             local g = cur_sheet().groups[state.group_i]
+            local found = false
             for si,sub in ipairs(g.subtasks) do
-                if sub.sub == sub_param then state.sub_i = si break end
+                if sub.sub == sub_param then
+                    state.sub_i = si
+                    found = true
+                    break
+                end
             end
+            if not found then bad_sub = sub_param end
         end
         render_tabs()
-        select_task()
+        if bad_ex or bad_sub then
+            render_error(bad_ex, bad_sub)
+        else
+            select_task()
+        end
     elseif data.what == "view" then
         if data.id == state.id then render(data.view) end
     elseif data.what == "splits" then

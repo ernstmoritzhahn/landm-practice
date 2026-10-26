@@ -128,6 +128,23 @@
         .parttabs .ptmark.warn    { color: #b26a00; }
         .parttabs .ptmark.pending { color: #888; }
 
+        /* bad deep-link error page */
+        .exlinks { margin-top: 0.4rem; }
+        .exlinks .exlink {
+            display: inline-block;
+            font-family: "Monaco", "Consolas", monospace;
+            font-size: 0.85rem;
+            padding: 3px 10px;
+            margin: 0 4px 4px 0;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .exlinks .exlink:hover {
+            border-color: var(--accent);
+        }
+
         #variant { margin: 0.6rem 0 1.4rem 0; }
         #variant .varlabel { font-size: 0.85rem; color: var(--muted); margin-right: 0.4rem; }
         #variant .vartab {
