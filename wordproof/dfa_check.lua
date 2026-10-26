@@ -363,6 +363,167 @@ local function word_or_lam(w)
     return w == "" and "λ" or w
 end
 
+-- ---------------------------------------------------------------------
+-- structural isomorphism for part.structure parts: language equality
+-- alone cannot see a misdrawn construction (a wrong automaton may
+-- still accept the same language).  The reachable part of the student
+-- automaton must be isomorphic to the reference construction — same
+-- states (up to names), same transition multiset, same initial state,
+-- same accepting set.  Extra UNREACHABLE states (e.g. a pair state
+-- drawn for completeness) do not fail the check: the sheet itself
+-- only draws the reachable product.
+local function norm_label(l)
+    if l == "" or l == "λ" or l == "eps" or l == "lambda" then
+        return "λ"
+    end
+    return tostring(l)
+end
+
+-- states reachable from the initial state (any label incl. λ) plus
+-- the transitions inside that set
+local function reachable_part(aut)
+    local reach, stack = {}, {}
+    local init = aut:get_initial()
+    if init then reach[init] = true; stack[1] = init end
+    local all = aut:get_transitions()
+    while #stack > 0 do
+        local s = table.remove(stack)
+        for _, t in ipairs(all) do
+            if t.from == s and not reach[t.target] then
+                reach[t.target] = true
+                stack[#stack + 1] = t.target
+            end
+        end
+    end
+    local ts = {}
+    for _, t in ipairs(all) do
+        if reach[t.from] and reach[t.target] then
+            ts[#ts + 1] = t
+        end
+    end
+    return reach, ts
+end
+
+-- signature per state: accepting flag + in/out label multisets +
+-- self-loop labels — a bijection must map signatures 1:1
+local function state_sig(aut, s, out, into)
+    local acc = aut:is_accepting(s) and "F" or "."
+    local parts = {acc}
+    for l, m in pairs(out[s] or {}) do
+        local n = 0
+        for _, c in pairs(m) do n = n + c end
+        parts[#parts+1] = ">"..l..":"..n
+    end
+    for l, m in pairs(into[s] or {}) do
+        local n = 0
+        for _, c in pairs(m) do n = n + c end
+        parts[#parts+1] = "<"..l..":"..n
+    end
+    table.sort(parts)
+    return table.concat(parts, ",")
+end
+
+local function aut_isomorphic(a, b)
+    local ra, ta = reachable_part(a)
+    local rb, tb = reachable_part(b)
+    local na, nb = 0, 0
+    for _ in pairs(ra) do na = na + 1 end
+    for _ in pairs(rb) do nb = nb + 1 end
+    if na ~= nb then
+        return false, "reachable part has " .. na .. " states, "
+                   .. "the construction gives " .. nb
+    end
+    if #ta ~= #tb then
+        return false, "reachable part has " .. #ta .. " transitions, "
+                   .. "the construction gives " .. #tb
+    end
+    -- adjacency: out[s][l][t] = n, into[t][l][s] = n
+    local function adj(ts)
+        local out, into = {}, {}
+        for _, t in ipairs(ts) do
+            local l = norm_label(t.label)
+            local o = out[t.from] or {}; out[t.from] = o
+            local m = o[l] or {}; o[l] = m
+            m[t.target] = (m[t.target] or 0) + 1
+            local i2 = into[t.target] or {}; into[t.target] = i2
+            local m2 = i2[l] or {}; i2[l] = m2
+            m2[t.from] = (m2[t.from] or 0) + 1
+        end
+        return out, into
+    end
+    local aout, ainto = adj(ta)
+    local bout, binto = adj(tb)
+    -- order a-states by rarest signature (fail fast)
+    local bsigs, bcount = {}, {}
+    for s in pairs(rb) do
+        local g = state_sig(b, s, bout, binto)
+        bsigs[s] = g
+        bcount[g] = (bcount[g] or 0) + 1
+    end
+    local alist = {}
+    for s in pairs(ra) do
+        local g = state_sig(a, s, aout, ainto)
+        if not bcount[g] then
+            return false, "no state matches " .. tostring(s)
+                       .. "'s neighbourhood (labels/accepting)"
+        end
+        alist[#alist+1] = {s = s, sig = g, rare = bcount[g]}
+    end
+    table.sort(alist, function(x, y) return x.rare < y.rare end)
+    -- backtracking with forward checking on already-mapped neighbours
+    local map, used_b = {}, {}
+    local init_a, init_b = a:get_initial(), b:get_initial()
+    local function edge_need(out, s, l, t)
+        local o = out[s] and out[s][l]; return o and o[t] or 0
+    end
+    local function dfs(k)
+        if k > #alist then return true end
+        local s, sg = alist[k].s, alist[k].sig
+        for u in pairs(rb) do
+            if not used_b[u] and bsigs[u] == sg
+               and a:is_accepting(s) == b:is_accepting(u)
+               and (s == init_a) == (u == init_b) then
+                local okm = true
+                -- self-loops at s must exist at u (s not yet in map,
+                -- so the neighbour scan below cannot see them)
+                for l, m in pairs(aout[s] or {}) do
+                    if (m[s] or 0) > edge_need(bout, u, l, u) then
+                        okm = false break
+                    end
+                end
+                -- every transition between s and an already-mapped
+                -- state must exist between u and its image, with
+                -- multiplicity, in both directions (s as source,
+                -- s as target, s->s loops land in both checks)
+                for v, mv in pairs(map) do
+                    for l, m in pairs(aout[s] or {}) do
+                        local need = m[v] or 0
+                        if need > edge_need(bout, u, l, mv) then
+                            okm = false break
+                        end
+                    end
+                    for l, m in pairs(ainto[s] or {}) do
+                        local need = m[v] or 0
+                        if need > edge_need(binto, u, l, mv) then
+                            okm = false break
+                        end
+                    end
+                    if not okm then break end
+                end
+                if okm then
+                    map[s], used_b[u] = u, true
+                    if dfs(k + 1) then return true end
+                    map[s], used_b[u] = nil, nil
+                end
+            end
+        end
+        return false
+    end
+    if dfs(1) then return true end
+    return false, "the reachable structure differs from the "
+               .. "construction (check state pairs and transitions)"
+end
+
 -- part.kind == "aut": structural problems + language equivalence
 function M.check_aut(part, model_json, expect_type)
     local ok, m = pcall(json.decode, model_json or "")
@@ -398,6 +559,18 @@ function M.check_aut(part, model_json, expect_type)
             .. "' is in L but not accepted" end
         return { ok=false, kind="mismatch",
                  msg=table.concat(parts, ";  ") }
+    end
+    if part.structure then
+        -- the exercise grades a CONSTRUCTION (projection, product):
+        -- the reachable part must be the construction result itself,
+        -- not just any automaton for the right language
+        local iso, why = aut_isomorphic(aut, ref)
+        if not iso then
+            return { ok=false, kind="mismatch",
+                     msg="accepts the right language, but the "
+                      .. "structure is not the construction: " .. why }
+        end
+        return { ok=true }
     end
     if not is_tuple or is_nfa_type(part.aut_type) then
         return { ok=true }

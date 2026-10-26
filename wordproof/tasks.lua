@@ -1355,6 +1355,42 @@ local M2_MODEL = { type="nfa", alphabet="a,b",
                   {id=5,from=3,to=2,label="a"},
                   {id=6,from=3,to=1,label="a"} } }
 
+-- product M1 × M2: ALL pairs (q_i,q_j), transition on l whenever both
+-- components step on l; accepting iff both accept.  The unreachable
+-- pairs stay in the automaton (the reachable_part restriction in
+-- dfa_check drops them for the structure comparison).
+local function product(aut_str1, aut_str2)
+    local a = AUT.parse_nfa(aut_str1)
+    local b = AUT.parse_nfa(aut_str2)
+    local n = AUT.make_nfa(false)
+    local name = {}
+    for s1 in pairs(a:get_states()) do
+        for s2 in pairs(b:get_states()) do
+            local nm = tostring(s1) .. "," .. tostring(s2)
+            name[tostring(s1) .. "\0" .. tostring(s2)] = nm
+            n:add_state(nm)
+            if a:is_accepting(s1) and b:is_accepting(s2) then
+                n:set_accepting(nm, true)
+            end
+        end
+    end
+    n:set_initial(
+        name[tostring(a:get_initial()) .. "\0"
+             .. tostring(b:get_initial())], true)
+    for _, t1 in ipairs(a:get_transitions()) do
+        for _, t2 in ipairs(b:get_transitions()) do
+            if tostring(t1.label) == tostring(t2.label) then
+                n:add_transition(
+                    name[tostring(t1.from) .. "\0" .. tostring(t2.from)],
+                    t1.label,
+                    name[tostring(t1.target) .. "\0"
+                         .. tostring(t2.target)])
+            end
+        end
+    end
+    return n
+end
+
 -- projection M↾Σ': letters outside `keep` become λ-steps (NFA-λ)
 local function project(aut_str, keep)
     local src = AUT.parse_nfa_lambda(aut_str)
@@ -1389,13 +1425,13 @@ parts_task{
         { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) left",
           label="M1 restricted to {a}  — click “insert M1” to copy "
              .. "M1 into the editor, then turn b-steps into λ-steps",
-          copy = 1,
+          copy = 1, structure = true,
           reference=lazy(function() return project(M1_STR, {a=true})
               end) },
         { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) right",
           label="M2 restricted to {a}  — click “insert M2” to copy "
              .. "M2 into the editor, then turn b-steps into λ-steps",
-          copy = 2,
+          copy = 2, structure = true,
           reference=lazy(function() return project(M2_STR, {a=true})
               end) },
     },
@@ -1415,11 +1451,9 @@ parts_task{
     parts = {
         { kind="aut", aut_type="nfa", alphabet="a,b", sub="b)",
           label="the product M1 × M2 (name the states q00, q01, …)",
-          show_given = {1, 2},
+          show_given = {1, 2}, structure = true,
           reference=lazy(function()
-              return AUT.intersec_regular(
-                  AUT.parse_nfa(M1_STR), AUT.parse_nfa(M2_STR))
-          end) },
+              return product(M1_STR, M2_STR) end) },
     },
 }
 
