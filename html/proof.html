@@ -289,16 +289,23 @@
 
         #summary { font-size: 0.95rem; }
 
-        #savebar {
-            margin-top: 1.6rem;
-            border-top: 1px solid var(--border-color);
-            padding-top: 1.2rem;
+        /* save/import/export lives in a modal opened from the checkbar —
+           the page bottom stays free of it */
+        #datadlg {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1.1rem 1.3rem;
+            width: min(44rem, 92vw);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
         }
-        #savebar .saverow {
+        #datadlg::backdrop { background: rgba(0, 0, 0, 0.28); }
+        #datadlg .dlgtitle { font-weight: 600; margin-bottom: 0.9rem; }
+        #datadlg .saverow {
             display: flex; align-items: baseline;
             gap: 1rem; flex-wrap: wrap;
         }
-        #savebar button { padding: 8px 18px; font-size: 0.85rem; }
+        #datadlg button { padding: 8px 18px; font-size: 0.85rem; }
+        #datadlg .dlgclose { margin-top: 1rem; }
         #savemsg { font-size: 0.85rem; color: var(--muted); }
         .savehint {
             color: var(--muted); font-size: 0.8rem;
@@ -556,6 +563,7 @@
 
     <div id="checkbar">
         <button id="check">Check proof</button>
+        <button id="databtn">Data import/export</button>
         <span id="summary"></span>
     </div>
 
@@ -567,33 +575,36 @@
         <code>f(n)</code>
     </div>
 
-    <div id="savebar">
-        <div class="saverow">
-            <button id="savefile">Save ALL work to file</button>
-            <button id="loadfile">Load work from file</button>
-            <input type="file" id="loadinput"
-                   accept=".json,.txt,application/json" hidden>
-            <span id="savemsg"></span>
-        </div>
-        <p class="savehint">
-            Your work is auto-saved in this browser as you type. The
-            downloaded file (and the text below) always contains
-            <b>every exercise on every sheet</b> of this site — keep it as
-            a backup or use it to move your work to another browser.
-        </p>
-        <details id="savedetails">
-            <summary>All saved work as text (copy / paste alternative)</summary>
-            <p class="savehint">
-                This text is everything saved in this browser — all sheets,
-                all exercises. Copy it to keep a backup, or paste a
-                previously saved text here and click
-                &ldquo;Restore from text&rdquo;.
-            </p>
-            <textarea id="stateta" rows="6" spellcheck="false"></textarea>
-            <button id="loadtext">Restore from text</button>
-        </details>
-    </div>
 </main>
+
+<dialog id="datadlg">
+    <div class="dlgtitle">Saved work — import / export</div>
+    <div class="saverow">
+        <button id="savefile">Save ALL work to file</button>
+        <button id="loadfile">Load work from file</button>
+        <input type="file" id="loadinput"
+               accept=".json,.txt,application/json" hidden>
+        <span id="savemsg"></span>
+    </div>
+    <p class="savehint">
+        Your work is auto-saved in this browser as you type. The
+        downloaded file (and the text below) always contains
+        <b>every exercise on every sheet</b> of this site — keep it as
+        a backup or use it to move your work to another browser.
+    </p>
+    <details id="savedetails">
+        <summary>All saved work as text (copy / paste alternative)</summary>
+        <p class="savehint">
+            This text is everything saved in this browser — all sheets,
+            all exercises. Copy it to keep a backup, or paste a
+            previously saved text here and click
+            &ldquo;Restore from text&rdquo;.
+        </p>
+        <textarea id="stateta" rows="6" spellcheck="false"></textarea>
+        <button id="loadtext">Restore from text</button>
+    </details>
+    <form method="dialog"><button class="dlgclose">Close</button></form>
+</dialog>
 
 </body>
 </html>

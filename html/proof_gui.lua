@@ -23,6 +23,7 @@ local savefile_btn, loadfile_btn = get("savefile"), get("loadfile")
 local loadinput, stateta = get("loadinput"), get("stateta")
 local loadtext_btn = get("loadtext")
 local savedetails_el, savemsg_el = get("savedetails"), get("savemsg")
+local databtn, datadlg = get("databtn"), get("datadlg")
 local syntaxhint_el = get("syntaxhint")
 
 local PROOF_SYNTAX_HINT =
@@ -2276,6 +2277,10 @@ savefile_btn:addEventListener("click", function()
     util.js_get("landm.download")(false, "landm-saved-work.json", dump)
     save_note("file downloaded — it contains every exercise on every sheet")
 end)
+-- the import/export dialog sits in one central place (bottom of the
+-- page's DOM); the checkbar button just opens it — every sheet and
+-- exercise share this single instance
+databtn:addEventListener("click", function() datadlg:showModal() end)
 loadfile_btn:addEventListener("click", function() loadinput:click() end)
 loadinput:addEventListener("change", function()
     util.js_get("landm.read_file")(false, loadinput, import_and_reload)
