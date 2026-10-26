@@ -2239,7 +2239,7 @@ parts_task{
     desc = "Give a standard (single-tape, deterministic or not) "
         .. "Turing machine recognising L.  Draw the state diagram: "
         .. "each transition label reads 'read write move' with move "
-        .. "in {L,R,S} (λ = blank B, ~ = keep symbol); mark the "
+        .. "in {L,R,S} (⊔ = blank, ~ = keep symbol); mark the "
         .. "initial and the final states.  The head starts on the "
         .. "first input symbol; a machine halts when no transition "
         .. "applies and accepts in a final state.",

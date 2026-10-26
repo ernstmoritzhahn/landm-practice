@@ -4,12 +4,13 @@
 -- wordproof graders (model JSON -> machine objects).
 --
 -- A label on ONE edge describes ONE transition.  λ stands for the
--- empty word (input), "no pop"/"no push" (PDA) and the blank/keep
--- (TM read/write; "~" keeps the cell contents too).  Accepted shapes:
+-- empty word (input), "no pop"/"no push" (PDA) and "keep" (TM write;
+-- "~" too).  The TM blank is "⊔" ("B" accepted as the book's
+-- notation); λ is NOT the blank.  Accepted shapes:
 --
 --   pda   "a A/AA" | "a, A -> AA" | "a, A → AA" | "λ Z/Z"
 --   tm    "a b R"  | "a,b,R"      | "a -> b, R"  | "a b -> R"
---   tm-N  "a b R | B B L"        — N clauses separated by '|'
+--   tm-N  "a b R | ⊔ ⊔ L"        — N clauses separated by '|'
 --
 -- parse(type, label) returns a plain tuple table or nil, reason:
 --   pda   -> {input=sym|"", pop=sym|"", push=string|""}
@@ -23,8 +24,10 @@ local P, S, C, Ct = lpeg.P, lpeg.S, lpeg.C, lpeg.Ct
 local sp   = S" \t"^0
 local EOL  = P(-1)
 local LAM  = P"λ" + P"ε" + P"eps" + P"\\lambda"
--- a symbol token: maximal run excluding separators/ws
-local ID   = C((1 - S" \t,;/|→")^1)
+-- a symbol token: maximal run excluding separators/ws and "→"
+-- (multibyte: putting → into the S-set would ban every symbol whose
+-- UTF-8 shares a byte with it — ⊔ = E2 8A 94 vs → = E2 86 92)
+local ID   = C(((1 - S" \t,;/|") - P"→")^1)
 local LAMC = C(LAM)
 local SEP1 = (sp * P"," * sp) + (S" \t"^1)
 local ARR  = sp * (P"→" + P"->") * sp
@@ -78,7 +81,13 @@ local function parse_tm(label, ntapes)
             .. #ts
     end
     for _, t in ipairs(ts) do
-        if t[1] == "λ" or t[1] == "ε" then t[1] = "B" end    -- λ=B
+        -- blank: ⊔ is the course notation, B the book's alias
+        if t[1] == "⊔" or t[1] == "B" then t[1] = "B" end
+        if t[2] == "⊔" or t[2] == "B" then t[2] = "B" end
+        if t[1] == "λ" or t[1] == "ε"
+           or t[1] == "eps" or t[1] == "\\lambda" then
+            return nil, "λ is not the blank — use ⊔"
+        end
         if t[2] == "λ" or t[2] == "ε" or t[2] == "~"
            or t[2] == "eps" or t[2] == "\\lambda" then
             t[2] = nil                                     -- λ/~ keep

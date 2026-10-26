@@ -2,8 +2,8 @@
 -- transition lists (Sudkamp "standard" TMs, generalised to k tapes).
 --   start: q0            final: q3 qf
 --   q0, a X R, q1        (read a, write X, move R, go to q1)
---   q1, b b R | B B L, q2    (tape-2 slot after '|')
--- Semantics: one-way-infinite tapes, blank B, input on tape 1 at
+--   q1, b b R | ⊔ ⊔ L, q2    (tape-2 slot after '|')
+-- Semantics: one-way-infinite tapes, blank ⊔ (B also accepted), input on tape 1 at
 -- positions 0..n-1, all heads at position 0.  A machine halts when no
 -- transition applies; it accepts iff it halts in a final state.
 -- Nondeterministic machines are explored by BFS (config cap).
@@ -29,7 +29,11 @@ local function parse_line(line)
             return nil, "bad tape clause '" .. trim(slot)
                 .. "' (want 'read write L|R|S')"
         end
-        if r == "λ" then r = "B" end
+        if r == "⊔" then r = "B" end   -- internal blank cell
+        if r == "λ" or r == "ε" then
+            return nil, "λ is not the blank — use ⊔"
+        end
+        if w == "⊔" then w = "B" end
         if w == "λ" or w == "~" then w = nil end  -- ~: keep symbol
         tapes[#tapes + 1] = { r = r, w = w, d = d }
     end
