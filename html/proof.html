@@ -293,6 +293,15 @@
             overflow: hidden;
         }
         .authost.given { height: 38rem; }
+        .givensvg svg { max-width: 100%; height: auto; }
+        .autrow { display: flex; gap: 14px; align-items: flex-start; }
+        .autrow .authost { flex: 1 1 auto; }
+        .autside { flex: 0 0 240px; }
+        .autside svg { max-width: 100%; height: auto; }
+        .autside .glabel {
+            font-family: "Monaco", "Consolas", monospace;
+            font-size: 0.8rem; color: var(--muted); display: block;
+        }
         /* the shadow :host rule forces min-height:600px (Anubis full
            panel); inside .authost the element must take the host's
            height instead, else it overflows onto the checkbar */
@@ -408,6 +417,19 @@
                     var app = document.getElementById(appId);
                     if (app && app.setReadOnly) app.setReadOnly(b);
                 });
+            },
+            /* read-only given machines render as small static SVGs —
+               no editor chrome, no scroll */
+            graphviz: function(dot, cb) {
+                if (!window.__gvP) {
+                    window.__gvP =
+                        import("../lib/graphviz.js").then(function(m) {
+                            return m.Graphviz.load();
+                        });
+                }
+                window.__gvP.then(function(g) {
+                    cb(g.dot(dot));
+                }).catch(function() { cb(""); });
             },
             aut_on_edit: function(appId, cb) {
                 landm._aut_script().then(function() {

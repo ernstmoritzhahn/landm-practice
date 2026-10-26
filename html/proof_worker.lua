@@ -166,7 +166,8 @@ return function(data)
                     elseif pdef.kind == "derivation" then
                         return GC.check_derivation(pdef, pd.texts)
                     elseif pdef.kind == "tree" then
-                        return GC.check_tree(pdef, pd.text)
+                        return GC.check_tree(pdef,
+                                             pd.texts or pd.text)
                     elseif pdef.kind == "pattern" then
                         return GC.check_pattern(pdef, pd.text)
                     end

@@ -289,6 +289,13 @@ local function parse_tree(s)
         if c == "(" or c == ")" or c == "," then
             return nil, "expected a symbol, got '" .. c .. "'"
         end
+        -- symbols are single UTF-8 chars (λ, subscripts are typed
+        -- as base letter + digit, e.g. Q0 → two chars is fine only
+        -- for the multi-char path below)
+        local b = c:byte()
+        if b >= 0xF0 then c = s:sub(i, i + 3); i = i + 3
+        elseif b >= 0xE0 then c = s:sub(i, i + 2); i = i + 2
+        elseif b >= 0xC0 then c = s:sub(i, i + 1); i = i + 1 end
         local nd = { sym = c, children = {} }
         i = i + 1
         ws()
@@ -348,7 +355,8 @@ local function check_tree_node(nd, grammar, vars, syms)
     local found = false
     for rule, _ in pairs(grammar:get_rules()) do
         if tostring(rule.lhs) == nd.sym
-            and tostring(rule.rhs) == rhs_s then
+            and ((rule.rhs:len() == 0 and rhs_s == "")
+                 or tostring(rule.rhs) == rhs_s) then
             found = true; break
         end
     end
@@ -360,8 +368,9 @@ local function check_tree_node(nd, grammar, vars, syms)
     return nil, table.concat(yield)
 end
 
--- part: {grammar=text, target=word}
-function M.check_tree(part, text)
+-- part: {grammar=text, target=word, count=N, distinct=bool}
+-- input: list of textarea strings (one per tree)
+local function check_one_tree(part, text)
     text = text or ""
     if not text:match("%S") then
         return fail("enter the tree in bracket notation, e.g. "
@@ -382,6 +391,34 @@ function M.check_tree(part, text)
     if yield ~= target then
         return fail("the leaves spell '" .. (yield ~= "" and yield
             or "λ") .. "', not '" .. target .. "'")
+    end
+    return { ok = true }
+end
+
+function M.check_tree(part, texts)
+    if type(texts) == "string" then texts = { texts } end
+    texts = texts or {}
+    local want = part.count or 1
+    local norm = {}
+    for d = 1, want do
+        local r = check_one_tree(part, texts[d] or "")
+        if not r.ok then
+            if want > 1 and r.msg then
+                r.msg = "tree #" .. d .. ": " .. r.msg
+            end
+            return r
+        end
+        norm[d] = (texts[d] or ""):gsub("%s", "")
+    end
+    if part.distinct and want >= 2 then
+        local same = true
+        for d = 2, want do
+            if norm[d] ~= norm[1] then same = false end
+        end
+        if same then
+            return fail("the two trees are identical — that does "
+                .. "not show ambiguity")
+        end
     end
     return { ok = true }
 end

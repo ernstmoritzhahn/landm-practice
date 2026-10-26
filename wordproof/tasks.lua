@@ -1380,18 +1380,22 @@ parts_task{
         .. "letter other than a becomes a λ-step.  Draw the two "
         .. "NFA-λ.",
     given = {
-        { kind="aut", model=M1_MODEL, readonly=true,
+        { kind="aut", model=M1_MODEL, readonly=true, label="M1",
           alphabet="a,b", aut_type="dfa" },
-        { kind="aut", model=M2_MODEL, readonly=true,
+        { kind="aut", model=M2_MODEL, readonly=true, label="M2",
           alphabet="a,b", aut_type="nfa" },
     },
     parts = {
         { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) left",
-          label="M1 restricted to {a}",
+          label="M1 restricted to {a}  — click “insert M1” to copy "
+             .. "M1 into the editor, then turn b-steps into λ-steps",
+          copy = 1,
           reference=lazy(function() return project(M1_STR, {a=true})
               end) },
         { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) right",
-          label="M2 restricted to {a}",
+          label="M2 restricted to {a}  — click “insert M2” to copy "
+             .. "M2 into the editor, then turn b-steps into λ-steps",
+          copy = 2,
           reference=lazy(function() return project(M2_STR, {a=true})
               end) },
     },
@@ -1403,14 +1407,15 @@ parts_task{
     desc = "Draw the product automaton M1 × M2 (states are pairs "
         .. "q_ij; a state is accepting when BOTH components accept).",
     given = {
-        { kind="aut", model=M1_MODEL, readonly=true,
+        { kind="aut", model=M1_MODEL, readonly=true, label="M1",
           alphabet="a,b", aut_type="dfa" },
-        { kind="aut", model=M2_MODEL, readonly=true,
+        { kind="aut", model=M2_MODEL, readonly=true, label="M2",
           alphabet="a,b", aut_type="nfa" },
     },
     parts = {
         { kind="aut", aut_type="nfa", alphabet="a,b", sub="b)",
-          label="the product M1 × M2",
+          label="the product M1 × M2 (name the states q00, q01, …)",
+          show_given = {1, 2},
           reference=lazy(function()
               return AUT.intersec_regular(
                   AUT.parse_nfa(M1_STR), AUT.parse_nfa(M2_STR))
@@ -1462,6 +1467,10 @@ parts_task{
           target="aa", mode="leftmost", count=2, distinct=true,
           label="Give TWO different leftmost derivations of aa "
              .. "(they prove ambiguity)" },
+        { kind="tree", sub="d.c)", grammar=GR_D, target="aa",
+          count=2, distinct=true,
+          label="The derivation trees of your derivations in (b), "
+             .. "bracket notation — a λ-leaf is A(λ)" },
         { kind="regexp", sub="d.d)", ref_aut=function()
               return AUT.grammar_to_nfa(AUT.parse_rules(GR_D))
           end,
@@ -1538,8 +1547,10 @@ local function g2n_task(id, letter, gtext, hint)
         parts = {
             { kind="aut", aut_type="nfa", alphabet="a,b",
               sub=letter .. ")",
-              label="an NFA M with L(M) = L(G) — the construction "
-                 .. "takes variables as states",
+              label="an NFA M with L(M) = L(G) — name the states "
+                 .. "after the variables (S, A, …; the extra "
+                 .. "accepting sink for terminating rules is "
+                 .. "conventionally Z)",
               reference=gnfa(gtext) },
         },
     }
@@ -1584,7 +1595,8 @@ local function n2g_task(id, letter, aut_str, model, atype, alpha,
         id = id, letter = letter,
         title = "NFA to regular grammar",
         desc = "Construct a regular grammar G with L(G) = L(M). "
-            .. "Variables are the states, e.g. Q0 -> aQ1 | λ.  "
+            .. "Variables are the states in UPPERCASE — write Q0 for "
+            .. "state q0 (lowercase q0 would be a terminal!).  "
             .. (extra_desc or ""),
         given = { kind="aut", model=model, readonly=true,
                   alphabet=alpha, aut_type=atype },
@@ -1724,6 +1736,8 @@ local function view_part(pd, pi)
         v.seeds_locked = pd.seeds_locked
         v.takeover_from = pd.takeover_from
         v.check = pd.check
+        v.copy = pd.copy
+        v.show_given = pd.show_given
     elseif pd.kind == "choice" then
         v.slots = pd.slots
     elseif pd.kind == "pumping" then
@@ -1745,6 +1759,7 @@ local function view_part(pd, pi)
         v.target = pd.target
     elseif pd.kind == "tree" then
         v.target = pd.target
+        v.count = pd.count or 1
     elseif pd.kind == "pattern" then
         v.vars = pd.vars
     end
@@ -1785,7 +1800,8 @@ local function view_given(g)
         return { kind="table", symbols=syms, rows=rows }
     elseif g.kind == "aut" then
         return { kind="aut", model=g.model, readonly=g.readonly,
-                 alphabet=g.alphabet, aut_type=g.aut_type }
+                 alphabet=g.alphabet, aut_type=g.aut_type,
+                 label=g.label }
     elseif g.kind == "text" then
         return { kind="text", text=g.text }
     end

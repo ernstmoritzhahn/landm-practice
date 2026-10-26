@@ -327,6 +327,56 @@ local function acc_mark(pv, q)
     return m
 end
 
+-- model -> graphviz dot for the compact static rendering of a given
+-- machine (keeps the student's mental picture of the sheet's diagram:
+-- same state names, same labels; layout is graphviz's own)
+local function model_dot(model)
+    local by_id = {}
+    for _, s in ipairs(model.states or {}) do by_id[s.id] = s end
+    local d = { 'digraph G { rankdir=LR; bgcolor="transparent";'
+        .. ' node [shape=circle, width=0.45, fixedsize=true,'
+        .. ' fontsize=12]; edge [fontsize=11, arrowsize=0.7];' }
+    d[#d + 1] = '__start [shape=point, width=0.02, label=""];'
+    local edges = {}
+    for _, s in ipairs(model.states or {}) do
+        d[#d + 1] = '"' .. s.name .. '" ['
+            .. (s.accepting and 'shape=doublecircle,' or '') .. '];'
+        if s.initial then
+            d[#d + 1] = '__start -> "' .. s.name .. '";'
+        end
+    end
+    local seen = {}
+    for _, t in ipairs(model.transitions or {}) do
+        local f = by_id[t.from] and by_id[t.from].name
+        local tt = by_id[t.to] and by_id[t.to].name
+        if f and tt then
+            local key = f .. "\1" .. tt
+            local lab = (t.label == "" or t.label == "λ")
+                and "λ" or t.label
+            edges[key] = edges[key] and (edges[key] .. "," .. lab)
+                or lab
+            seen[key] = { f, tt }
+        end
+    end
+    for k, e in pairs(seen) do
+        d[#d + 1] = '"' .. e[1] .. '" -> "' .. e[2]
+            .. '" [label="' .. edges[k] .. '"];'
+    end
+    d[#d + 1] = "}"
+    return table.concat(d, "\n")
+end
+
+local function mount_given_svg(host, model, label)
+    if label then
+        host:appendChild(text("span", label, "glabel"))
+    end
+    local svgdiv = el("div", "givensvg")
+    host:appendChild(svgdiv)
+    landm_call("graphviz", model_dot(model), function(svg)
+        if svg and svg ~= "" then svgdiv.innerHTML = svg end
+    end)
+end
+
 local function render_given(g)
     local box = el("div", "givenbox")
     if g[1] then
@@ -357,9 +407,7 @@ local function render_given(g)
         end
         box:appendChild(tb)
     elseif g.kind == "aut" then
-        local host = el("div", "authost given")
-        box:appendChild(host)
-        mount_aut(host, aut_cfg(g), true)
+        mount_given_svg(box, g.model, g.label)
     end
     return box
 end
@@ -810,10 +858,46 @@ local function render_part(pv, pi)
     local rec = { kind = pv.kind, st = st }
     state.parts[pi] = rec
     if pv.kind == "aut" then
+        local row = el("div", "autrow")
+        box:appendChild(row)
         local host = el("div", "authost")
-        box:appendChild(host)
+        row:appendChild(host)
         rec.app = mount_aut(host, aut_cfg(pv), false, pi)
         rec.aut_type = pv.aut_type
+        -- mini views of the relevant given machines, next to the
+        -- editor, plus an "insert" button that copies one in
+        local gv = state.view and state.view.given
+        local side
+        local function sidehost()
+            if not side then
+                side = el("div", "autside")
+                row:appendChild(side)
+            end
+            return side
+        end
+        for _, gi in ipairs(pv.show_given or {}) do
+            local g = gv and gv[gi]
+            if g and g.kind == "aut" and g.model then
+                mount_given_svg(sidehost(), g.model,
+                                g.label or "given")
+            end
+        end
+        if pv.copy then
+            local g = gv and gv[pv.copy]
+            if g and g.kind == "aut" and g.model then
+                mount_given_svg(sidehost(), g.model,
+                                g.label or "given")
+                local btn = el("button", "seedbtn")
+                btn.textContent = "insert "
+                    .. (g.label or "the given automaton")
+                btn:addEventListener("click", function()
+                    landm_call("aut_load", rec.app,
+                               json.encode(g.model))
+                    dirty(st)()
+                end)
+                sidehost():appendChild(btn)
+            end
+        end
         if pv.seeds and #pv.seeds > 0 then
             local sr = el("div", "wordrow")
             sr:appendChild(text("span",
@@ -1053,8 +1137,8 @@ local function render_part(pv, pi)
         box:appendChild(r)
         rec.classes = cinp
         rec.cells["classes"] = { td = cst }
-    elseif pv.kind == "grammar" or pv.kind == "tree"
-        or pv.kind == "pattern" then
+    elseif pv.kind == "grammar" or pv.kind == "pattern"
+        or (pv.kind == "tree" and (pv.count or 1) <= 1) then
         local r = el("div", "wordrow")
         local rst = el("span", "st")
         local ta = document:createElement("textarea")
@@ -1074,21 +1158,23 @@ local function render_part(pv, pi)
         end
         rec.text, rec.expr_st = ta, rst
         rec.cells = { text = { td = rst } }
-    elseif pv.kind == "derivation" then
+    elseif pv.kind == "derivation" or pv.kind == "tree" then
         rec.fields, rec.cells = {}, {}
         for d = 1, (pv.count or 1) do
             local r = el("div", "wordrow")
             if (pv.count or 1) > 1 then
                 r:appendChild(text("span",
-                    "derivation #" .. d .. ":", "wlabel"))
+                    (pv.kind == "tree" and "tree #"
+                     or "derivation #") .. d .. ":", "wlabel"))
             end
             local rst = el("span", "st")
             local ta = document:createElement("textarea")
             ta.className = "grammartext"
             ta:setAttribute("spellcheck", "false")
             ta.rows, ta.cols = 5, 52
-            ta.placeholder = "S\nSAB\nAB\n…\n"
-                .. (pv.target or "")
+            ta.placeholder = pv.kind == "tree"
+                and "S(a b S(…) c c)" or
+                ("S\nSAB\nAB\n…\n" .. (pv.target or ""))
             ta:addEventListener("input", dirty(rst))
             r:appendChild(ta); r:appendChild(rst)
             box:appendChild(r)
@@ -1142,10 +1228,10 @@ save_local = function()
                 for wi,inp in ipairs(p.sets) do pr.sets[wi] = inp.value end
             elseif p.kind == "regexp" then
                 pr.expr = p.expr.value
-            elseif p.kind == "grammar" or p.kind == "tree"
-                or p.kind == "pattern" then
+            elseif p.kind == "grammar" or p.kind == "pattern"
+                or (p.kind == "tree" and not p.fields) then
                 pr.text = p.text and p.text.value or ""
-            elseif p.kind == "derivation" then
+            elseif p.kind == "derivation" or p.kind == "tree" then
                 pr.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
                     pr.texts[d] = ta.value
@@ -1261,12 +1347,12 @@ local function restore_local()
                         inp.value = (pr.wit or {})[k] or ""
                     end
                     if pr.classes then p.classes.value = pr.classes end
-                elseif p.kind == "grammar" or p.kind == "tree"
-                    or p.kind == "pattern" then
+                elseif p.kind == "grammar" or p.kind == "pattern"
+                    or (p.kind == "tree" and not p.fields) then
                     if pr.text and p.text then
                         p.text.value = pr.text
                     end
-                elseif p.kind == "derivation" then
+                elseif p.kind == "derivation" or p.kind == "tree" then
                     for d, ta in ipairs(p.fields or {}) do
                         ta.value = (pr.texts or {})[d] or ""
                     end
@@ -1557,10 +1643,10 @@ send_check = function(only_pi)
                 pd.gen = p.gen and {
                     u = p.gen.u.value, v = p.gen.v.value,
                     w = p.gen.w.value, i = p.gen.i.value } or nil
-            elseif p.kind == "grammar" or p.kind == "tree"
-                or p.kind == "pattern" then
+            elseif p.kind == "grammar" or p.kind == "pattern"
+                or (p.kind == "tree" and not p.fields) then
                 pd.text = p.text and p.text.value or ""
-            elseif p.kind == "derivation" then
+            elseif p.kind == "derivation" or p.kind == "tree" then
                 pd.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
                     pd.texts[d] = ta.value
