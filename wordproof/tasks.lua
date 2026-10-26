@@ -508,22 +508,25 @@ local R21d_DFA = "({q0,q1,q2,q3,q4,q5,qe},{a,b},"
     .. "(q3,a,q3),(q3,b,q4),(q4,a,q3),(q4,b,q5),(q5,a,q3),(q5,b,q5),"
     .. "(qe,a,qe),(qe,b,qe)},q0,{q5})"                          -- aa(a|b)+bb
 
-parts_task{
-    id = "2.1m", letter = "M",
-    title = "Construct DFA from RE",
-    desc = "For each of the following regular expressions E, draw the "
-        .. "state diagram of a DFA that accepts L(E).",
-    parts = {
-        { kind="aut", aut_type="dfa", alphabet="a,b",
-          label="E = (ab)*ba", reference=R21a_DFA },
-        { kind="aut", aut_type="dfa", alphabet="a,b",
-          label="E = (ab*a)*", reference=R21b_DFA },
-        { kind="aut", aut_type="dfa", alphabet="a,b",
-          label="E = ((aa)+bb)*", reference=R21c_DFA },
-        { kind="aut", aut_type="dfa", alphabet="a,b",
-          label="E = aa(a∪b)+bb", reference=R21d_DFA },
-    },
-}
+local function re2dfa(id, letter, re_str, ref)
+    parts_task{
+        id = id, letter = letter,
+        title = "Construct DFA from RE:  E = " .. re_str,
+        desc = "Draw the state diagram of a DFA that accepts L(E), "
+            .. "where E = " .. re_str .. ".",
+        parts = {
+            { kind="aut", aut_type="dfa", alphabet="a,b",
+              sub=letter .. ")",
+              label="state diagram of a DFA accepting L(E)",
+              reference=ref },
+        },
+    }
+end
+
+re2dfa("2.1a", "A", "(ab)*ba",    R21a_DFA)
+re2dfa("2.1b", "B", "(ab*a)*",    R21b_DFA)
+re2dfa("2.1c", "C", "((aa)+bb)*", R21c_DFA)
+re2dfa("2.1d", "D", "aa(a∪b)+bb", R21d_DFA)
 
 -- ======================================================================
 -- 2.2  RE -> NFA-lambda, STEPWISE: each part is an NFA-λ construction
@@ -539,7 +542,7 @@ local function nfa_step(label, reference, seeds, alphabet)
 end
 
 parts_task{
-    id = "2.2n", letter = "N",
+    id = "2.2n", letter = "E",
     variants = { {id="2.2n", label="free form"},
                  {id="2.2n-g", label="guided"} },
     title = "From RE to NFA-λ: (ab)* ∪ a*",
@@ -563,7 +566,7 @@ parts_task{
 }
 
 parts_task{
-    id = "2.2o", letter = "O",
+    id = "2.2o", letter = "F",
     variants = { {id="2.2o", label="free form"},
                  {id="2.2o-g", label="guided"} },
     title = "From RE to NFA-λ: (abc)*a*",
@@ -587,7 +590,7 @@ parts_task{
 }
 
 parts_task{
-    id = "2.2p", letter = "P",
+    id = "2.2p", letter = "G",
     variants = { {id="2.2p", label="free form"},
                  {id="2.2p-g", label="guided"} },
     title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
@@ -644,7 +647,7 @@ local function sstep(sid, reference, alphabet)
 end
 
 parts_task{
-    id = "2.2n-g", letter = "N",
+    id = "2.2n-g", letter = "E",
     title = "From RE to NFA-λ: (ab)* ∪ a*",
     desc = "Guided variant: each composition step embeds the automata "
         .. "of the earlier steps as locked components (the navy "
@@ -674,7 +677,7 @@ parts_task{
 }
 
 parts_task{
-    id = "2.2o-g", letter = "O",
+    id = "2.2o-g", letter = "F",
     title = "From RE to NFA-λ: (abc)*a*",
     desc = "Guided variant for E = (abc)* ∪ a* over {a, b, c} — "
         .. "locked components from the previous steps, entered via "
@@ -703,7 +706,7 @@ parts_task{
 }
 
 parts_task{
-    id = "2.2p-g", letter = "P",
+    id = "2.2p-g", letter = "G",
     title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
     desc = "(extra) Guided variant for E = (ba ∪ bb)* ∪ (ab ∪ aa)* — "
         .. "locked components, entered via their initial and left via "
@@ -771,7 +774,7 @@ local Q_DFA = "({S0,S1,S12,SE},{a,b,c},"
     .. "(SE,a,SE),(SE,b,SE),(SE,c,SE)},S0,{S0,S1,S12})"
 
 parts_task{
-    id = "2.3q", letter = "Q",
+    id = "2.3q", letter = "H",
     title = "Determinise an NFA-λ",
     desc = "Let M be the following NFA-λ.  Determinise it following "
         .. "the algorithm from the lecture (or Algorithm 5.6.3 in the "
@@ -797,7 +800,7 @@ parts_task{
 
 -- (extra) the "aa twice, separately" problem: RE -> NFA -> DFA
 parts_task{
-    id = "2.3u", letter = "U",
+    id = "2.3u", letter = "I",
     title = "(extra) aa twice, separately",
     desc = "(extra) Let L be the language of words over {a, b} in "
         .. "which the substring aa occurs at least twice separately "
@@ -821,7 +824,7 @@ parts_task{
 -- ======================================================================
 -- the 2.4a machine is Exercise 5.3 again — K_DFA/K_MODEL from sheet 1
 parts_task{
-    id = "2.4r", letter = "R",
+    id = "2.4r", letter = "J",
     title = "Complement of a DFA",
     desc = "Construct a finite automaton that accepts the complement "
         .. "of the language accepted by the finite automaton M below "
@@ -857,7 +860,7 @@ local S_MODEL = {
 }
 
 parts_task{
-    id = "2.4s", letter = "S",
+    id = "2.4s", letter = "K",
     title = "Complement of an NFA",
     desc = "Construct a finite automaton that accepts the complement "
         .. "of the language accepted by the finite automaton M below.  "
@@ -877,7 +880,7 @@ parts_task{
 -- 2.5  NFA -> RE (state elimination): the 5.23 machine again
 -- ======================================================================
 parts_task{
-    id = "2.5t", letter = "T",
+    id = "2.5t", letter = "L",
     title = "From NFA to regular expression",
     desc = "Use the algorithm from the lecture (state elimination) to "
         .. "obtain a regular expression for the language accepted by "
@@ -900,41 +903,48 @@ parts_task{
 -- instantiates at k=3 and enumerates all decompositions |uv|≤k,
 -- |v|≥1; each split needs an i with uv^iw ∉ L.
 
-local function pstep(sub, lang, label)
-    return { kind="pumping", sub=sub, lang=lang, label=label }
+local PUMP_DESC = "Play the adversary role of the pumping proof "
+    .. "yourself: first give a word z(k) that is in L and at least "
+    .. "k long for EVERY k (write e.g. a^k b^k — a^{k+1}, a^{2k}, "
+    .. "a^3 work too).  'decompose' then lists every legal split "
+    .. "z = uvw with |uv| ≤ k and |v| ≥ 1 for k = 3 — pick a "
+    .. "pumping index i for EACH split so that uv^iw leaves L "
+    .. "(you can redo the example at other values of k).  Then "
+    .. "write the GENERAL decomposition yourself: u, v, w as "
+    .. "patterns in k and your own parameters — every legal "
+    .. "split has u = sym^p, v = sym^q with p ≥ 0, q ≥ 1 and "
+    .. "p+q ≤ k — plus a pumping index i(k,q).  The checker "
+    .. "verifies uvw ≡ z(k), legality, coverage of every legal "
+    .. "split, and uv^iw ∉ L — symbolically for all k ≥ 1 when "
+    .. "it can, sampled otherwise."
+
+local function ptask(id, letter, lang, label)
+    parts_task{
+        id = id, letter = letter,
+        title = "Pumping lemma: " .. label,
+        desc = PUMP_DESC,
+        parts = {
+            { kind="pumping", sub=letter .. ")", lang=lang,
+              label="L = " .. label },
+        },
+    }
 end
 
+ptask("3.1a", "A", "eq_ab",  "{w ∈ {a,b}* | #a(w) = #b(w)}")
+ptask("3.1b", "B", "parens", "matched parentheses over {(,)}")
+ptask("3.1c", "C", "pal",    "palindromes over {a,b}")
+ptask("3.1d", "D", "ww",     "{ww | w ∈ {a,b}*}")
+ptask("3.1e", "E", "anbm_lt", "{aⁿbᵐ | n < m}   (extra)")
+ptask("3.1f", "F", "aibjc",  "{aⁱbʲc²ʲ | i,j ≥ 0}   (extra)")
+
 parts_task{
-    id = "3.1p", letter = "P",
-    title = "Pumping lemma: proving non-regularity",
-    desc = "Play the adversary role of the pumping proof yourself: "
-        .. "first give a word z(k) that is in L and at least k long "
-        .. "for EVERY k (write e.g. a^k b^k — a^{k+1}, a^{2k}, a^3 "
-        .. "work too).  'decompose' then lists every legal split "
-        .. "z = uvw with |uv| ≤ k and |v| ≥ 1 for k = 3 — pick a "
-        .. "pumping index i for EACH split so that uv^iw leaves L "
-        .. "(you can redo the example at other values of k).  Then "
-        .. "write the GENERAL decomposition yourself: u, v, w as "
-        .. "patterns in k and your own parameters — every legal "
-        .. "split has u = sym^p, v = sym^q with p ≥ 0, q ≥ 1 and "
-        .. "p+q ≤ k — plus a pumping index i(k,q).  The checker "
-        .. "verifies uvw ≡ z(k), legality, coverage of every legal "
-        .. "split, and uv^iw ∉ L — symbolically for all k ≥ 1 when "
-        .. "it can, sampled otherwise.",
+    id = "3.1g", letter = "G",
+    title = "Pumping lemma: non-palindromes",
+    desc = "L = {w ∈ {a,b}* | w ≠ w^R} is NOT proven non-regular "
+        .. "by a direct pumping argument — reason via closure "
+        .. "properties instead.",
     parts = {
-        pstep("a)", "eq_ab",
-              "L = {w ∈ {a,b}* | #a(w) = #b(w)}"),
-        pstep("b)", "parens",
-              "L = matched parentheses over {(,)}"),
-        pstep("c)", "pal",
-              "L = palindromes over {a,b}"),
-        pstep("d)", "ww",
-              "L = {ww | w ∈ {a,b}*}"),
-        pstep("e)", "anbm_lt",
-              "L = {aⁿbᵐ | n < m}   (extra)"),
-        pstep("f)", "aibjc",
-              "L = {aⁱbʲc²ʲ | i,j ≥ 0}   (extra)"),
-        { kind="choice", sub="g)",
+        { kind="choice", sub="G)",
           label="L = {w ∈ {a,b}* | w ≠ w^R} (non-palindromes): "
              .. "which argument proves L non-regular?",
           slots = {
@@ -943,7 +953,7 @@ parts_task{
                 { id="comp",  label="Suppose L regular. Then "
                     .. "L̄ is regular (closure under complement), "
                     .. "but L̄ is the palindromes — contradiction "
-                    .. "with part c)." },
+                    .. "with part C)." },
                 { id="pump",  label="Direct pumping: choose "
                     .. "z = a^k b a^{k+1} ∈ L and pump with i = 2." },
                 { id="incl",  label="L ⊆ {a,b}* and {a,b}* is "
@@ -1119,89 +1129,143 @@ local function sc_pair(goal)
 end
 
 parts_task{
-    id = "3.2c", letter = "h–l",
-    title = "Closure properties",
-    desc = "Two closure arguments, then the constructions carried "
-        .. "out on a concrete machine.",
+    id = "3.2h", letter = "H",
+    title = "Closure: words from L ending with aa",
+    desc = "Let L be a regular language over Σ = {a,b,c}.  Show "
+        .. "that L' is regular as well.",
     parts = {
-        { kind="regexp", sub="h)",
+        { kind="regexp", sub="H)",
           label="L' = {w ∈ L | w ends with aa}.  Give a regular "
              .. "expression Ê over {a,b,c} for the CONDITION, i.e. "
              .. "L(Ê) = Σ*aa (then L' = L ∩ L(Ê))",
           reference="(a|b|c)*aa" },
-        { kind="regexp", sub="i)",
-          label="L' = {w ∉ L | w has no a}.  Give Ê over {a,b,c} "
-             .. "with L(Ê) = {words without a} (then L' = L̄ ∩ L(Ê))",
-          reference="(b|c)*" },
-        { kind="choice", sub="h)+i)",
-          label="Which closure properties prove parts h) and i)?",
-          slots = {
-            { key="c", label="used properties",
-              options = {
-                { id="inter",   label="h): ∩;  i): complement + ∩" },
-                { id="un",      label="h): ∪;  i): complement + ∪" },
-                { id="concat",  label="h): concatenation;  i): ∩" },
-                { id="star",    label="h): star;  i): complement" } } } },
-          sel_check = function(sel)
-              if sel.c == "inter" then
-                  return { ok=true, kind="ok",
-                    msg="∩ (h) and complement + ∩ (i) — right" }
-              end
-              return { ok=false, kind="fail",
-                       msg="think again: h) intersects L with a "
-                        .. "regular condition; i) needs the "
-                        .. "complement too" }
-          end },
-        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="j)", reference="(ab)*(λ|a)",
-          label="prefixes of L(M): build an NFA-λ accepting "
-             .. "{u | ∃v: uv ∈ L(M)} for the given M" },
-        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="k)", reference="(ba)*",
-          label="reversals: build an NFA-λ accepting "
-             .. "{w^R | w ∈ L(M)}   (extra)" },
-        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
-          sub="l)", reference="(a|b)*(ab)*",
-          label="words having a suffix in L(M): build an NFA-λ "
-             .. "accepting {uv | v ∈ L(M)} = Σ*·L(M)   (extra)" },
     },
-    given = { kind="aut", model={
-        type="dfa", alphabet="a,b",
-        states={ {id=1,name="q0",x=120,y=140,initial=true,accepting=true},
-                 {id=2,name="q1",x=300,y=140},
-                 {id=3,name="q2",x=210,y=320} },
-        transitions={ {id=1,from=1,to=2,label="a"},
-                      {id=2,from=1,to=3,label="b"},
-                      {id=3,from=2,to=3,label="a"},
-                      {id=4,from=2,to=1,label="b"},
-                      {id=5,from=3,to=3,label="a,b"} } },
-        readonly=true, alphabet="a,b", aut_type="dfa" },
 }
 
 parts_task{
-    id = "3.2e", letter = "m–q",
-    title = "Regular and non-regular languages can mix",
-    desc = "Give example languages L1, L2 over {a,b} satisfying "
-        .. "each combination of conditions (choose from the "
-        .. "palette).",
+    id = "3.2i", letter = "I",
+    title = "Closure: words not in L without an a",
+    desc = "Let L be a regular language over Σ = {a,b,c}.  Show "
+        .. "that L' is regular as well.",
     parts = {
-        { kind="choice", sub="m)",
-          label="L1 regular, L2 non-regular, L1 ∪ L2 regular",
-          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
-          sel_check = sc_pair("ureg") },
-        { kind="choice", sub="n)",
-          label="L1 regular, L2 non-regular, L1 ∪ L2 non-regular",
-          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
-          sel_check = sc_pair("unon") },
-        { kind="choice", sub="o)",
-          label="L1 regular, L2 non-regular, L1 ∩ L2 regular",
-          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
-          sel_check = sc_pair("ireg") },
-        { kind="choice", sub="p)",
-          label="L1, L2 both non-regular, L1 ∪ L2 regular",
-          slots = { pal_slot("l1","L1"), pal_slot("l2","L2") },
-          sel_check = sc_pair("nnureg") },
-        { kind="choice", sub="q)",
+        { kind="regexp", sub="I)",
+          label="L' = {w ∉ L | w has no a}.  Give Ê over {a,b,c} "
+             .. "with L(Ê) = {words without a} (then L' = L̄ ∩ L(Ê))",
+          reference="(b|c)*" },
+        { kind="choice", sub="H)+I)",
+          label="Which closure properties prove parts H) and I)?",
+          slots = {
+            { key="c", label="used properties",
+              options = {
+                { id="inter",   label="H): ∩;  I): complement + ∩" },
+                { id="un",      label="H): ∪;  I): complement + ∪" },
+                { id="concat",  label="H): concatenation;  I): ∩" },
+                { id="star",    label="H): star;  I): complement" } } } },
+          sel_check = function(sel)
+              if sel.c == "inter" then
+                  return { ok=true, kind="ok",
+                    msg="∩ (H) and complement + ∩ (I) — right" }
+              end
+              return { ok=false, kind="fail",
+                       msg="think again: H) intersects L with a "
+                        .. "regular condition; I) needs the "
+                        .. "complement too" }
+          end },
+    },
+}
+
+-- the concrete machine for the prefix/reversal/suffix constructions
+local M32_MODEL = {
+    type="dfa", alphabet="a,b",
+    states={ {id=1,name="q0",x=120,y=140,initial=true,accepting=true},
+             {id=2,name="q1",x=300,y=140},
+             {id=3,name="q2",x=210,y=320} },
+    transitions={ {id=1,from=1,to=2,label="a"},
+                  {id=2,from=1,to=3,label="b"},
+                  {id=3,from=2,to=3,label="a"},
+                  {id=4,from=2,to=1,label="b"},
+                  {id=5,from=3,to=3,label="a,b"} } }
+local M32_GIVEN = { kind="aut", model=M32_MODEL, readonly=true,
+                    alphabet="a,b", aut_type="dfa" }
+
+parts_task{
+    id = "3.2j", letter = "J",
+    title = "Prefixes of L(M)",
+    desc = "Let M be the DFA below, L = L(M).  Show that the "
+        .. "prefix language P = {u | ∃v: uv ∈ L} is regular by "
+        .. "constructing an automaton for it.",
+    given = M32_GIVEN,
+    parts = {
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="J)", reference="(ab)*(λ|a)",
+          label="build an NFA-λ accepting {u | ∃v: uv ∈ L(M)} "
+             .. "for the given M" },
+    },
+}
+
+parts_task{
+    id = "3.2k", letter = "K",
+    title = "(extra) Reversals of L(M)",
+    desc = "(extra) Let M be the DFA below, L = L(M).  Show that "
+        .. "L^R = {w^R | w ∈ L} is regular by constructing an "
+        .. "automaton for it.",
+    given = M32_GIVEN,
+    parts = {
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="K)", reference="(ba)*",
+          label="build an NFA-λ accepting {w^R | w ∈ L(M)} "
+             .. "for the given M" },
+    },
+}
+
+parts_task{
+    id = "3.2l", letter = "L",
+    title = "(extra) Words having a suffix in L(M)",
+    desc = "(extra) Let M be the DFA below, L = L(M).  Show that "
+        .. "{uv | v ∈ L} = Σ*·L is regular by constructing an "
+        .. "automaton for it.",
+    given = M32_GIVEN,
+    parts = {
+        { kind="aut", aut_type="nfa-eps", alphabet="a,b",
+          sub="L)", reference="(a|b)*(ab)*",
+          label="build an NFA-λ accepting {uv | v ∈ L(M)} = "
+             .. "Σ*·L(M) for the given M" },
+    },
+}
+
+local PAL_DESC = "Give example languages L1, L2 over {a,b} "
+    .. "satisfying the conditions (choose from the palette)."
+
+local function paltask(id, letter, label, slots, check)
+    parts_task{
+        id = id, letter = letter,
+        title = "Examples: " .. label,
+        desc = PAL_DESC,
+        parts = {
+            { kind="choice", sub=letter .. ")", label=label,
+              slots = slots, sel_check = check },
+        },
+    }
+end
+
+local function l1l2() return { pal_slot("l1","L1"),
+                               pal_slot("l2","L2") } end
+
+paltask("3.2m", "M", "L1 regular, L2 non-regular, L1 ∪ L2 regular",
+        l1l2(), sc_pair("ureg"))
+paltask("3.2n", "N", "L1 regular, L2 non-regular, L1 ∪ L2 non-regular",
+        l1l2(), sc_pair("unon"))
+paltask("3.2o", "O", "L1 regular, L2 non-regular, L1 ∩ L2 regular",
+        l1l2(), sc_pair("ireg"))
+paltask("3.2p", "P", "L1, L2 both non-regular, L1 ∪ L2 regular",
+        l1l2(), sc_pair("nnureg"))
+
+parts_task{
+    id = "3.2q", letter = "Q",
+    title = "(extra) L1 non-regular but L1* regular",
+    desc = PAL_DESC,
+    parts = {
+        { kind="choice", sub="Q)",
           label="L1 non-regular but L1* regular   (extra)",
           slots = { pal_slot("l1","L1") },
           sel_check = function(sel)
@@ -1256,7 +1320,7 @@ local DC = require "wordproof.dfa_check"
 
 -- the lemma as a multiple-argument choice
 local LEMMA_PART = {
-    kind="choice", sub="r)",
+    kind="choice", sub="R)",
     label="Lemma: if q_i ~ q_j are equivalent states and "
        .. "δ̂(q_i,u)=q_m, δ̂(q_j,u)=q_n — why are q_m, q_n "
        .. "equivalent?",
@@ -1290,10 +1354,9 @@ local LEMMA_PART = {
     end,
 }
 
-local function mtask(id, letter, dfa_str, states, extra_part)
+local function mtask(id, letter, dfa_str, states)
     local ncls = #DC.dfa_equiv_classes(dfa_str, states)
     local ps = {}
-    if extra_part then ps[#ps+1] = extra_part end
     ps[#ps+1] = { kind="min_table", reference=dfa_str, states=states,
         sub="a)+b)", label="Mark every distinguishable pair "
          .. "(tick the box), give a distinguishing word for each "
@@ -1306,7 +1369,7 @@ local function mtask(id, letter, dfa_str, states, extra_part)
     parts_task{
         id = id, letter = letter,
         title = "DFA minimisation",
-        desc = "item s) of the sheet — Algorithm 5.7.2: a pair "
+        desc = "item S) of the sheet — Algorithm 5.7.2: a pair "
             .. "{p,q} is distinguishable when exactly one of p,q "
             .. "is final, or when some letter moves it into a "
             .. "distinguishable pair.",
@@ -1315,9 +1378,17 @@ local function mtask(id, letter, dfa_str, states, extra_part)
     }
 end
 
-mtask("3.3a", "s.1", D1, Q6, LEMMA_PART)
-mtask("3.3b", "s.2", D2, Q6)
-mtask("3.3c", "s.3", D3, Q7)
+parts_task{
+    id = "3.3r", letter = "R",
+    title = "Equivalent states",
+    desc = "About the equivalence of states in a DFA — the lemma "
+        .. "behind state merging in the minimisation algorithm.",
+    parts = { LEMMA_PART },
+}
+
+mtask("3.3a", "S.1", D1, Q6)
+mtask("3.3b", "S.2", D2, Q6)
+mtask("3.3c", "S.3", D3, Q7)
 
 -- ======================================================================
 -- SHEET 4 — projection & product, context-free grammars,
@@ -1410,7 +1481,7 @@ end
 local function lazy(fn) return fn end
 
 parts_task{
-    id = "4.1a", letter = "a",
+    id = "4.1a", letter = "A",
     title = "Projection onto {a}",
     desc = "Project each machine onto {a}: every transition on a "
         .. "letter other than a becomes a λ-step.  Draw the two "
@@ -1422,13 +1493,13 @@ parts_task{
           alphabet="a,b", aut_type="nfa" },
     },
     parts = {
-        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) left",
+        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="A) left",
           label="M1 restricted to {a}  — click “insert M1” to copy "
              .. "M1 into the editor, then turn b-steps into λ-steps",
           copy = 1, structure = true,
           reference=lazy(function() return project(M1_STR, {a=true})
               end) },
-        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="a) right",
+        { kind="aut", aut_type="nfa-eps", alphabet="a", sub="A) right",
           label="M2 restricted to {a}  — click “insert M2” to copy "
              .. "M2 into the editor, then turn b-steps into λ-steps",
           copy = 2, structure = true,
@@ -1438,7 +1509,7 @@ parts_task{
 }
 
 parts_task{
-    id = "4.1b", letter = "b",
+    id = "4.1b", letter = "B",
     title = "Product M1 × M2",
     desc = "Draw the product automaton M1 × M2 (states are pairs "
         .. "q_ij; a state is accepting when BOTH components accept).",
@@ -1449,7 +1520,7 @@ parts_task{
           alphabet="a,b", aut_type="nfa" },
     },
     parts = {
-        { kind="aut", aut_type="nfa", alphabet="a,b", sub="b)",
+        { kind="aut", aut_type="nfa", alphabet="a,b", sub="B)",
           label="the product M1 × M2 (name the states q00, q01, …)",
           show_given = {1, 2}, structure = true,
           reference=lazy(function()
@@ -1466,21 +1537,21 @@ local GR_F_REF = "S -> aAASb | \nA -> a | "
 local GR_G = "S -> aSA | \nA -> bA | "
 
 parts_task{
-    id = "4.2c", letter = "c",
+    id = "4.2c", letter = "C",
     title = "A context-free grammar",
     given = { kind="text",
               text="G:\n  S -> abSc | A\n  A -> cAd | cd" },
     parts = {
-        { kind="derivation", sub="c.a)", grammar=GR_C,
+        { kind="derivation", sub="C.a)", grammar=GR_C,
           target="ababccddcc", mode="any",
           label="Give the derivation of ababccddcc — one sentential "
              .. "form per line, or a chain S ⇒ abSc ⇒ … "
              .. "(typing => or -> produces ⇒)" },
-        { kind="tree", sub="c.b)", grammar=GR_C,
+        { kind="tree", sub="C.b)", grammar=GR_C,
           target="ababccddcc",
           label="The derivation tree, in bracket notation "
              .. "S(a b S(…) c c) — a λ-leaf is A() or A(λ)" },
-        { kind="pattern", sub="c.c)", grammar=GR_C, vars="n,m",
+        { kind="pattern", sub="C.c)", grammar=GR_C, vars="n,m",
           label="L(G) in set notation: a block pattern like "
              .. "(ab)^n c^m d^m c^n, with domain guards after | "
              .. "(e.g. | n>=0, m>0)",
@@ -1489,24 +1560,24 @@ parts_task{
 }
 
 parts_task{
-    id = "4.2d", letter = "d",
+    id = "4.2d", letter = "D",
     title = "Derivations and ambiguity",
     given = { kind="text",
               text="G:\n  S -> SAB | λ\n  A -> aA | a\n"
                    .. "  B -> bB | λ" },
     parts = {
-        { kind="derivation", sub="d.a)", grammar=GR_D,
+        { kind="derivation", sub="D.a)", grammar=GR_D,
           target="abbaab", mode="leftmost",
           label="Give a LEFTMOST derivation of abbaab" },
-        { kind="derivation", sub="d.b)", grammar=GR_D,
+        { kind="derivation", sub="D.b)", grammar=GR_D,
           target="aa", mode="leftmost", count=2, distinct=true,
           label="Give TWO different leftmost derivations of aa "
              .. "(they prove ambiguity)" },
-        { kind="tree", sub="d.c)", grammar=GR_D, target="aa",
+        { kind="tree", sub="D.c)", grammar=GR_D, target="aa",
           count=2, distinct=true,
           label="The derivation trees of your derivations in (b), "
              .. "bracket notation — a λ-leaf is A(λ)" },
-        { kind="regexp", sub="d.d)", ref_aut=function()
+        { kind="regexp", sub="D.d)", ref_aut=function()
               return AUT.grammar_to_nfa(AUT.parse_rules(GR_D))
           end,
           label="A regular expression for L(G)  (e.g. a+b* style)" },
@@ -1514,7 +1585,7 @@ parts_task{
 }
 
 parts_task{
-    id = "4.2e", letter = "e",
+    id = "4.2e", letter = "E",
     title = "Tree to derivations",
     given = { kind="text",
               text="G:\n  S -> AB\n  A -> aA | a\n"
@@ -1522,20 +1593,20 @@ parts_task{
                    .. "derivation tree DT:\n"
                    .. "  S(A(aA(a)) B(A(a) B(b)))" },
     parts = {
-        { kind="derivation", sub="e.a)", grammar=GR_E,
+        { kind="derivation", sub="E.a)", grammar=GR_E,
           target="aaab", mode="leftmost",
           label="A leftmost derivation generating DT" },
-        { kind="derivation", sub="e.b)", grammar=GR_E,
+        { kind="derivation", sub="E.b)", grammar=GR_E,
           target="aaab", mode="rightmost",
           label="A rightmost derivation generating DT" },
     },
 }
 
 parts_task{
-    id = "4.2f", letter = "f",
+    id = "4.2f", letter = "F",
     title = "Construct a grammar",
     parts = {
-        { kind="grammar", sub="f)", grammar_ref=GR_F_REF,
+        { kind="grammar", sub="F)", grammar_ref=GR_F_REF,
           context_free=true,
           label="Construct a grammar over {a,b} with "
              .. "L(G) = {a^m b^n | 0 ≤ n ≤ m ≤ 3n} "
@@ -1544,20 +1615,20 @@ parts_task{
 }
 
 parts_task{
-    id = "4.2g", letter = "g",
+    id = "4.2g", letter = "G",
     title = "Ambiguous and unambiguous",
     given = { kind="text",
               text="G:\n  S -> aSA | λ\n  A -> bA | λ" },
     parts = {
-        { kind="regexp", sub="g.1)", ref_aut=function()
+        { kind="regexp", sub="G.1)", ref_aut=function()
               return AUT.grammar_to_nfa(AUT.parse_rules(GR_G))
           end,
           label="A regular expression (or set term) for L(G)" },
-        { kind="derivation", sub="g.2)", grammar=GR_G,
+        { kind="derivation", sub="G.2)", grammar=GR_G,
           target="aab", mode="leftmost", count=2, distinct=true,
           label="Show G is ambiguous: TWO different leftmost "
              .. "derivations of aab" },
-        { kind="grammar", sub="g.3)", grammar_ref=GR_G,
+        { kind="grammar", sub="G.3)", grammar_ref=GR_G,
           context_free=true,
           label="An equivalent UNAMBIGUOUS grammar (language "
              .. "equality is checked; the unambiguity is your "
@@ -1591,9 +1662,9 @@ local function g2n_task(id, letter, gtext, hint)
     }
 end
 
-g2n_task("4.3h", "h", "S -> aA\nA -> aA | bA | b")
-g2n_task("4.3i", "i", "S -> aS | bA | λ\nA -> aA | bS")
-g2n_task("4.3j", "j", "S -> aA\nA -> aA | bB\nB -> bB | λ",
+g2n_task("4.3h", "H", "S -> aA\nA -> aA | bA | b")
+g2n_task("4.3i", "I", "S -> aS | bA | λ\nA -> aA | bS")
+g2n_task("4.3j", "J", "S -> aA\nA -> aA | bB\nB -> bB | λ",
          "(extra)")
 
 -- ---------- 4.4: NFA -> regular grammar ----------
@@ -1648,9 +1719,9 @@ local function n2g_task(id, letter, aut_str, model, atype, alpha,
     }
 end
 
-n2g_task("4.4k", "k", NFA_K_STR, NFA_K_MODEL, "nfa", "a,b")
-n2g_task("4.4l", "l", NFA_L_STR, M1_MODEL, "dfa", "a,b")
-n2g_task("4.4m", "m", NFA_M_STR, NFA_M_MODEL, "nfa-eps", "a,b,c",
+n2g_task("4.4k", "K", NFA_K_STR, NFA_K_MODEL, "nfa", "a,b")
+n2g_task("4.4l", "L", NFA_L_STR, M1_MODEL, "dfa", "a,b")
+n2g_task("4.4m", "M", NFA_M_STR, NFA_M_MODEL, "nfa-eps", "a,b,c",
          "(extra) The machine has a λ-step — the grammar "
          .. "construction needs a plain NFA, so remove it first.")
 
@@ -1685,24 +1756,24 @@ local function norm_task(id, letter, gtext, form, form_desc, extra)
 end
 
 -- §1 noncontracting
-norm_task("5.1a", "a",
+norm_task("5.1a", "A",
     "S -> aS | bS | B\nB -> bb | C | λ\nC -> cC | λ",
     "essentially_noncontracting",
     "G_L: a nonrecursive start symbol and essentially "
         .. "noncontracting (only the new start symbol may have λ)",
     "regexp")
-norm_task("5.1b", "b",
+norm_task("5.1b", "B",
     "S -> ABC | aBC\nA -> aA | BC\nB -> bB | λ\nC -> cC | λ",
     "essentially_noncontracting",
     "G_L: essentially noncontracting", "regexp")
 
 -- §2 chain rules
-norm_task("5.2c", "c",
+norm_task("5.2c", "C",
     "S -> AS | A\nA -> aA | bB | C\nB -> bB | b\nC -> cC | B",
     "no_chain",
     "G_C without chain rules (the grammar has no λ-rules, "
         .. "but you may need a nonrecursive start symbol S')")
-norm_task("5.2d", "d",
+norm_task("5.2d", "D",
     "S -> AB | C\nA -> aA | B\nB -> bB | C\nC -> cC | a | A",
     "no_chain",
     "G_C without chain rules (extra)")
@@ -1725,43 +1796,43 @@ local function useless_task(id, letter, gtext)
         },
     }
 end
-useless_task("5.3e", "e",
+useless_task("5.3e", "E",
     "S -> AA | CD | bB\nA -> aA | a\nB -> bB | bC\nC -> cB\n"
     .. "D -> dD | d")
-useless_task("5.3f", "f",
+useless_task("5.3f", "F",
     "S -> ACH | BB\nA -> aA | aF\nB -> CFH | b\nC -> aC | DH\n"
     .. "D -> aD | BD | Ca\nF -> bB | b\nH -> dH | d")
 
 -- §4 CNF
-norm_task("5.4g", "g",
+norm_task("5.4g", "G",
     "S -> aA | ABa\nA -> AA | a\nB -> AbB | bb",
     "cnf",
     "Chomsky normal form (rules A -> BC or A -> a)")
-norm_task("5.4h", "h",
+norm_task("5.4h", "H",
     "S -> aAbB | ABC | a\nA -> aA | a\nB -> bBcC | b\nC -> abc",
     "cnf",
     "Chomsky normal form (rules A -> BC or A -> a)")
 
 -- §5 CYK
 parts_task{
-    id = "5.5i", letter = "i",
+    id = "5.5i", letter = "I",
     title = "The CYK parsing algorithm",
     given = { kind="text",
         text="G (CNF):\n  S -> CA | BD\n  A -> a\n  B -> b | c\n"
             .. "  C -> AE\n  D -> EB | b\n  E -> BD | CA" },
     parts = {
-        { kind="cyk", sub="i.a)  word: acba",
+        { kind="cyk", sub="I.a)  word: acba",
           grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
               .. "D -> EB | b\nE -> BD | CA",
           word="acba",
           label="the X_{i,j} matrix for acba — a set of "
              .. "variables per cell, - or ∅ for empty" },
-        { kind="cyk", sub="i.a)  word: baca",
+        { kind="cyk", sub="I.a)  word: baca",
           grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
               .. "D -> EB | b\nE -> BD | CA",
           word="baca",
           label="the X_{i,j} matrix for baca" },
-        { kind="choice", sub="i.b)",
+        { kind="choice", sub="I.b)",
           label="do the words belong to L(G)?",
           slots = {
               { key="acba", label="acba",
@@ -1783,13 +1854,13 @@ parts_task{
                    .. "matrix: the word is in L(G) iff it "
                    .. "contains S" }
           end },
-        { kind="tree", sub="i.b)",
+        { kind="tree", sub="I.b)",
           grammar="S -> CA | BD\nA -> a\nB -> b | c\nC -> AE\n"
               .. "D -> EB | b\nE -> BD | CA",
           target="acba",
           label="the derivation tree for the accepted word "
              .. "(bracket notation)" },
-        { kind="choice", sub="i.c)", optional=true,
+        { kind="choice", sub="I.c)", optional=true,
           label="(extra) is CYK top-down or bottom-up?",
           slots = {
               { key="dir", label="CYK is",
@@ -1857,12 +1928,12 @@ local PDA_FMT = "draw the state diagram — each transition label "
     .. "(extended PDA); mark the initial and the final states"
 
 parts_task{
-    id = "6.1a", letter = "a",
+    id = "6.1a", letter = "A",
     title = "PDA for {a^i b^j | 0 ≤ i ≤ j}",
     desc = "Give a small nondeterministic PDA and a "
         .. "deterministic PDA.",
     parts = {
-    { kind="aut", aut_type="pda", sub="a.1)", deterministic=false,
+    { kind="aut", aut_type="pda", sub="A.1)", deterministic=false,
       alphabet="a,b", stack_alphabet="A,Z",
       label = "a small NONDETERMINISTIC PDA — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -1871,7 +1942,7 @@ parts_task{
           "({q0,q1},{a,b},{A},"
           .. "{(q0,a λ/A,q0),(q0,λ λ/λ,q1),(q1,b A/λ,q1),"
           .. "(q1,b λ/λ,q1)},q0,{q0,q1})") },
-    { kind="aut", aut_type="pda", sub="a.2)", deterministic=true,
+    { kind="aut", aut_type="pda", sub="A.2)", deterministic=true,
       alphabet="a,b", stack_alphabet="A,Z",
       label = "a DETERMINISTIC PDA — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -1886,10 +1957,10 @@ parts_task{
 }
 
 parts_task{
-    id = "6.1b", letter = "b",
+    id = "6.1b", letter = "B",
     title = "PDA for {a^i b^j | 0 ≤ i ≤ j ≤ 2i}",
     parts = {
-    { kind="aut", aut_type="pda", sub="b)",
+    { kind="aut", aut_type="pda", sub="B)",
       alphabet="a,b", stack_alphabet="A",
       label = "PDA — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -1902,10 +1973,10 @@ parts_task{
 }
 
 parts_task{
-    id = "6.1c", letter = "c",
+    id = "6.1c", letter = "C",
     title = "PDA for {a^i b^j | i ≠ j}",
     parts = {
-    { kind="aut", aut_type="pda", sub="c)",
+    { kind="aut", aut_type="pda", sub="C)",
       alphabet="a,b", stack_alphabet="A,Z",
       label = "PDA — hint: first push a bottom marker Z so you "
           .. "can test for an empty stack — " .. PDA_FMT,
@@ -1921,10 +1992,10 @@ parts_task{
 }
 
 parts_task{
-    id = "6.1d", letter = "d",
+    id = "6.1d", letter = "D",
     title = "PDA for {wdw^R | w in {a,b,c}*}, stack ≤ 2 symbols",
     parts = {
-    { kind="aut", aut_type="pda", sub="d)", max_stack=2,
+    { kind="aut", aut_type="pda", sub="D)", max_stack=2,
       alphabet="a,b,c,d", stack_alphabet="A,B",
       label = "PDA with at most TWO stack symbols (a,b,c,d; "
           .. "code a, b, c e.g. as B, BA, BAA) — " .. PDA_FMT,
@@ -1949,7 +2020,7 @@ local PDA_M_GIVEN = { type="pda", alphabet="a,b,c",
                   {id=3, from=1, to=2, label="b λ/λ"},
                   {id=4, from=2, to=2, label="c A/λ"} } }
 parts_task{
-    id = "6.1e", letter = "e",
+    id = "6.1e", letter = "E",
     title = "L(M), L_F(M), L_E(M) and conversions",
     given = {
         { kind="text",
@@ -1964,16 +2035,16 @@ parts_task{
               .. "L_E(M) = empty stack only." },
     },
     parts = {
-    { kind="grammar", sub="e.a)",
+    { kind="grammar", sub="E.a)",
       label = "grammar for L(M) — words vbc^i with i = #_b(v)",
       grammar_ref = "S -> aS | bSc | b" },
-    { kind="grammar", sub="e.b)",
+    { kind="grammar", sub="E.b)",
       label = "grammar for L_F(M) — i ≤ #_b(v)",
       grammar_ref = "S -> aS | bSX | b\nX -> cX | λ" },
-    { kind="grammar", sub="e.c)",
+    { kind="grammar", sub="E.c)",
       label = "grammar for L_E(M) — L(M) ∪ a+",
       grammar_ref = "S -> T | A\nT -> aT | bTc | b\nA -> aA | a" },
-    { kind="aut", aut_type="pda", sub="e.d)",
+    { kind="aut", aut_type="pda", sub="E.d)",
       alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M1 with L_F(M1) = L_E(M1) = L(M) — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -1983,7 +2054,7 @@ parts_task{
           .. "{(qs,λ λ/Z,q0),(q0,a λ/λ,q0),(q0,b λ/A,q0),"
           .. "(q0,b λ/λ,q1),(q1,c A/λ,q1),(q1,λ Z/λ,qf)},"
           .. "qs,{qf})") },
-    { kind="aut", aut_type="pda", sub="e.e)",
+    { kind="aut", aut_type="pda", sub="E.e)",
       alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M2 with L(M2) = L_F(M) — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -1993,7 +2064,7 @@ parts_task{
           .. "{(q0,a λ/λ,q0),(q0,b λ/A,q0),(q0,b λ/λ,q1),"
           .. "(q1,c A/λ,q1),(q1,λ λ/λ,qf),(qf,λ A/λ,qf)},"
           .. "q0,{qf})") },
-    { kind="aut", aut_type="pda", sub="e.f)",
+    { kind="aut", aut_type="pda", sub="E.f)",
       alphabet="a,b,c", stack_alphabet="A,Z",
       label = "M3 with L(M3) = L_E(M) — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -2007,7 +2078,7 @@ parts_task{
 }
 
 parts_task{
-    id = "6.2f", letter = "f",
+    id = "6.2f", letter = "F",
     title = "GNF grammar to PDA",
     given = {
         { kind="text",
@@ -2017,7 +2088,7 @@ parts_task{
               .. "pushing whole strings is fine)." },
     },
     parts = {
-    { kind="aut", aut_type="pda", sub="f)",
+    { kind="aut", aut_type="pda", sub="F)",
       alphabet="a,b,c", stack_alphabet="S,A,B",
       label = "PDA for L(G) — " .. PDA_FMT,
       checks = { labels=true, alphabet=true, one_initial=true,
@@ -2115,7 +2186,7 @@ local CP_I = "pumping index i — an integer or an expression in "
     .. "k, m=|v|, n=|x| (e.g. 0, 2, m)"
 
 parts_task{
-    id = "7.1a", letter = "a",
+    id = "7.1a", letter = "A",
     title = "L = {a^k | k is a square}",
     desc = "Show with the pumping lemma for CFLs that L is not "
         .. "context-free.  Give a witness z(k) (block list, e.g. "
@@ -2124,7 +2195,7 @@ parts_task{
         text = "z = uvwxy with |vwx| ≤ k and |vx| > 0 must satisfy "
             .. "uv^iwx^iy ∉ L for some i ≥ 0." },
     parts = {
-        { kind="cpump", sub="a)", alphabet="a",
+        { kind="cpump", sub="A)", alphabet="a",
           z_hint = "a^{k*k}",
           lang_test = lt_square,
           cases = {
@@ -2135,13 +2206,13 @@ parts_task{
 }
 
 parts_task{
-    id = "7.1b", letter = "b",
+    id = "7.1b", letter = "B",
     title = "L = {a^i b^j c^i d^j}",
     desc = "z = a^k b^k c^k d^k is the canonical witness — since "
         .. "|vwx| ≤ k, vx can touch at most two adjacent blocks.  "
         .. "Give i for every case (" .. CP_I .. ").",
     parts = {
-        { kind="cpump", sub="b)", alphabet="a,b,c,d",
+        { kind="cpump", sub="B)", alphabet="a,b,c,d",
           z_hint = "a^k b^k c^k d^k",
           lang_test = lt_abcd,
           cases = {
@@ -2164,12 +2235,12 @@ parts_task{
 }
 
 parts_task{
-    id = "7.1c", letter = "c",
+    id = "7.1c", letter = "C",
     title = "L = {a^i b^{2i} a^i}   (extra)",
     desc = "z = a^k b^{2k} a^k; vx touches at most two adjacent "
         .. "blocks — five cases (" .. CP_I .. ").",
     parts = {
-        { kind="cpump", sub="c)", alphabet="a,b",
+        { kind="cpump", sub="C)", alphabet="a,b",
           z_hint = "a^k b^{2k} a^k",
           lang_test = lt_a2ba,
           cases = {
@@ -2188,13 +2259,13 @@ parts_task{
 }
 
 parts_task{
-    id = "7.1d", letter = "d",
+    id = "7.1d", letter = "D",
     title = "L = finite prefixes of abaabaaab…  (extra extra)",
     desc = "The witness is fixed: z = ab aab aaab … a^k b.  "
         .. "By symmetry it suffices to look at v — give i for each "
         .. "form v can take (" .. CP_I .. ").",
     parts = {
-        { kind="cpump", sub="d)", alphabet="a,b",
+        { kind="cpump", sub="D)", alphabet="a,b",
           zgen = infword_z,
           lang_test = lt_infword,
           cases = {
@@ -2234,7 +2305,7 @@ local REJ_ABCD = { "a", "b", "c", "d", "ab", "cd", "abc", "abcdx",
     "aabbcd", "acbd", "bbdd", "aacdd", "abbcd", "abcbd", "adc" }
 
 parts_task{
-    id = "7.2e", letter = "e",
+    id = "7.2e", letter = "E",
     title = "Standard TM for {a^i b^j c^i d^j}",
     desc = "Give a standard (single-tape, deterministic or not) "
         .. "Turing machine recognising L.  Draw the state diagram: "
@@ -2244,7 +2315,7 @@ parts_task{
         .. "first input symbol; a machine halts when no transition "
         .. "applies and accepts in a final state.",
     parts = {
-        { kind="aut", aut_type="tm", sub="e)", alphabet="a,b,c,d",
+        { kind="aut", aut_type="tm", sub="E)", alphabet="a,b,c,d",
           accept = words_accept_abcd(),
           reject = { "a","b","c","d","ab","cd","abc","abcdd",
               "aabbc","abdc","aabbcd","acbd","aacdd",
@@ -2267,12 +2338,12 @@ local function words_accept_prefix(maxn)
 end
 
 parts_task{
-    id = "7.2f", letter = "f",
+    id = "7.2f", letter = "F",
     title = "Standard TM for the prefix language",
     desc = "Recognise the finite prefixes of abaabaaab… "
         .. "(drawn like in 7.2e).",
     parts = {
-        { kind="aut", aut_type="tm", sub="f)", alphabet="a,b,c,d",
+        { kind="aut", aut_type="tm", sub="F)", alphabet="a,b,c,d",
           accept = { "a","ab","aba","abaab","abaaba","abaabaa",
               "abaabaaa","abaabaaab","abaabaaaba","abaabaaabaa",
               "abaabaaabaaa","abaabaaabaaab","abaabaaabaaaab",
@@ -2289,13 +2360,13 @@ parts_task{
 }
 
 parts_task{
-    id = "7.3g", letter = "g",
+    id = "7.3g", letter = "G",
     title = "Multi-tape TM for {a^i b^j c^i d^j}  (extra)",
     desc = "Give a TWO-tape TM; tape 1 may only move right or "
         .. "stay.  Each label carries one 'r w d' clause per tape, "
         .. "separated by '|' (e.g. \"a a R | B X S\").",
     parts = {
-        { kind="aut", aut_type="tm-2", sub="g)", alphabet="a,b,c,d",
+        { kind="aut", aut_type="tm-2", sub="G)", alphabet="a,b,c,d",
           tapes = 2, tape1_no_L = true,
           accept = words_accept_abcd(),
           reject = { "a","b","c","d","ab","cd","abc","abcdd",
@@ -2308,11 +2379,11 @@ parts_task{
 }
 
 parts_task{
-    id = "7.3h", letter = "h",
+    id = "7.3h", letter = "H",
     title = "Multi-tape TM for the prefix language  (extra extra)",
     desc = "Two tapes, tape 1 only R/S (same format as 7.3g).",
     parts = {
-        { kind="aut", aut_type="tm-2", sub="h)", alphabet="a,b,c,d",
+        { kind="aut", aut_type="tm-2", sub="H)", alphabet="a,b,c,d",
           tapes = 2, tape1_no_L = true, optional = true,
           accept = { "a","ab","aba","abaab","abaaba","abaabaa",
               "abaabaaa","abaabaaab","abaabaaabaaab",
@@ -2329,13 +2400,13 @@ parts_task{
 -- Unrestricted grammars + undecidability.
 
 parts_task{
-    id = "8.1a", letter = "a",
+    id = "8.1a", letter = "A",
     title = "Unrestricted grammar for {a^i b^j a^i b^j}",
     desc = "Give an unrestricted (type-0) grammar.  Idea: generate "
         .. "a^i b^j E^{j-1} a^i b context-freely, let the Es travel "
         .. "right and turn into b.",
     parts = {
-        { kind="grammar", sub="a)",
+        { kind="grammar", sub="A)",
           label = "unrestricted grammar",
           grammar_ref = "S -> A | B | aCab\nA -> aaA | λ\n"
               .. "B -> bbB | λ\nC -> aCa | bD\nD -> bDE | λ\n"
@@ -2345,12 +2416,12 @@ parts_task{
 }
 
 parts_task{
-    id = "8.1b", letter = "b",
+    id = "8.1b", letter = "B",
     title = "Unrestricted grammar for {a^i b^i c^i d^i}  (extra)",
     desc = "Generate {a^{i+1} b D^i c d} first, let D produce a b "
         .. "on meeting c and continue as E; E turns into cd on d.",
     parts = {
-        { kind="grammar", sub="b)",
+        { kind="grammar", sub="B)",
           label = "unrestricted grammar",
           grammar_ref = "S -> aCcd | λ\nC -> aCD | b\n"
               .. "Db -> bD\nDc -> bcE\nEc -> cE\nEd -> cdd",
@@ -2361,33 +2432,33 @@ parts_task{
 local G_102 = "S -> aAbc | λ\nA -> aAbC | λ\nCb -> bC\nCc -> cc"
 
 parts_task{
-    id = "8.1c", letter = "c",
+    id = "8.1c", letter = "C",
     title = "The grammar of 10.2 generates {a^i b^i c^i}",
     desc = "Grammar: S → aAbc | λ,  A → aAbC | λ,  Cb → bC,  "
         .. "Cc → cc.",
     parts = {
-        { kind="pattern", sub="c.1)",
+        { kind="pattern", sub="C.1)",
           label = "L(G) in set notation (e.g. a^n b^n c^n | n>=0)",
           grammar = G_102,
           maxlen = 13,
           vars = { "n" } },
-        { kind="derivation", sub="c.2)", target = "aaabbbccc",
+        { kind="derivation", sub="C.2)", target = "aaabbbccc",
           grammar = G_102,
           label = "derive aaabbbccc — chain the sentential forms "
               .. "with ⇒ (mind the Cb→bC reordering steps)" },
-        { kind="derivation", sub="c.3)", target = "aabbcc",
+        { kind="derivation", sub="C.3)", target = "aabbcc",
           grammar = G_102,
           label = "derive aabbcc" },
     }
 }
 
 parts_task{
-    id = "8.1d", letter = "d",
+    id = "8.1d", letter = "D",
     title = "10.5 — the language a TM-grammar recognises",
     desc = "The grammar in the teacher notes simulates a Turing "
         .. "machine (rules S, T[, A…, X…, q0…, q1…, q2…, E_R, E_L).",
     parts = {
-        { kind="regexp", sub="d.1)",
+        { kind="regexp", sub="D.1)",
           label = "the language M recognises, as a regular "
               .. "expression",
           reference = "b(ab)*(λ|b(a|b)*)" },
@@ -2415,12 +2486,12 @@ local function mc_result(want, ok_msg, no_msg)
 end
 
 parts_task{
-    id = "8.2e", letter = "e",
+    id = "8.2e", letter = "E",
     title = "The n-step halting problem",
     desc = "Given M and w, decide whether M halts within n "
         .. "transitions on w.",
     parts = {
-        mc("e.1)", "decidable or undecidable?",
+        mc("E.1)", "decidable or undecidable?",
            {
              {"a","undecidable — it reduces to the halting problem"},
              {"b","undecidable — n can be arbitrarily large"},
@@ -2439,7 +2510,7 @@ parts_task{
              .. "after at most n+1 steps",
              "think again — simulating M on w can simply be "
              .. "stopped after n transitions")),
-        mc("e.2)", "why?",
+        mc("E.2)", "why?",
            {
              {"a","it would solve the ordinary halting problem"},
              {"b","it is a subproblem of the halting problem"},
@@ -2465,12 +2536,12 @@ parts_task{
 }
 
 parts_task{
-    id = "8.2f", letter = "f",
+    id = "8.2f", letter = "F",
     title = "Halting problem for a fixed M (12.3)",
     desc = "L is r.e. but not recursive; M recognises L.  "
         .. "Is 'does M halt on w?' decidable?",
     parts = {
-        mc("f.1)", "decidable or undecidable?",
+        mc("F.1)", "decidable or undecidable?",
            {
              {"a","decidable — M is fixed, so the answers can be "
              .. "hard-coded into a table"},
@@ -2494,7 +2565,7 @@ parts_task{
              "correct — a halting decider for M would decide L",
              "think again — with a halting oracle for M you could "
              .. "decide L, which is not recursive")),
-        mc("f.2)", "which argument proves it?",
+        mc("F.2)", "which argument proves it?",
            { {"a","H_M + M give a decider for L — contradiction "
              .. "with L not recursive"},
              {"b","the universal halting problem reduces to it "
@@ -2523,13 +2594,13 @@ parts_task{
 }
 
 parts_task{
-    id = "8.2g", letter = "g",
+    id = "8.2g", letter = "G",
     title = "Why the subproblem argument fails (12.9)",
     desc = "'The blank tape problem is a subproblem of the "
         .. "halting problem, which is undecidable, therefore it "
         .. "is undecidable.'",
     parts = {
-        mc("g)", "why is this not valid?",
+        mc("G)", "why is this not valid?",
            {
              {"a","subproblems are always decidable"},
              {"b","the blank tape problem is actually decidable"},
@@ -2558,13 +2629,13 @@ parts_task{
 }
 
 parts_task{
-    id = "8.2h", letter = "h",
+    id = "8.2h", letter = "H",
     title = "Reduction: blank-tape ≤ Q",
     desc = "R transforms P into P' which first erases its input, "
         .. "then behaves like P iff the input was 101, else "
         .. "diverges.  What does the reduction show?",
     parts = {
-        mc("h)", "the correct conclusion",
+        mc("H)", "the correct conclusion",
            {
              {"a","Q is decidable because blank-tape reduces "
              .. "to it"},
@@ -2610,7 +2681,7 @@ M.sheets = {
     { id="sheet2", title="Sheet 2",
       groups = {
         { id="2.1", title="Exercise 2.1",
-          subtasks = {"2.1m"} },
+          subtasks = {"2.1a","2.1b","2.1c","2.1d"} },
         { id="2.2", title="Exercise 2.2",
           subtasks = {"2.2n","2.2o","2.2p"} },
         { id="2.3", title="Exercise 2.3",
@@ -2623,11 +2694,13 @@ M.sheets = {
     { id="sheet3", title="Sheet 3",
       groups = {
         { id="3.1", title="Exercise 3.1",
-          subtasks = {"3.1p"} },
+          subtasks = {"3.1a","3.1b","3.1c","3.1d","3.1e","3.1f",
+                      "3.1g"} },
         { id="3.2", title="Exercise 3.2",
-          subtasks = {"3.2c","3.2e"} },
+          subtasks = {"3.2h","3.2i","3.2j","3.2k","3.2l","3.2m",
+                      "3.2n","3.2o","3.2p","3.2q"} },
         { id="3.3", title="Exercise 3.3",
-          subtasks = {"3.3a","3.3b","3.3c"} },
+          subtasks = {"3.3r","3.3a","3.3b","3.3c"} },
       }},
     { id="sheet4", title="Sheet 4",
       groups = {
