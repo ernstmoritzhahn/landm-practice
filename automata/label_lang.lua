@@ -17,7 +17,22 @@
 --   tm    -> {r=sym, w=sym|nil (keep), d="L"|"R"|"S"}
 --   tm-N  -> { {r,w,d}, ... } with exactly N clauses
 local lpeg = require "lpeg"
-local util = require "lib.util"
+-- no lib.util dependency: this file is also staged into the
+-- editor's wasm VFS, which does not carry lib/ — keep it standalone
+local function split(str, sep)
+    local out, i = {}, 1
+    while true do
+        local a, b = str:find(sep, i, true)
+        if not a then break end
+        out[#out + 1] = str:sub(i, a - 1)
+        i = b + 1
+    end
+    out[#out + 1] = str:sub(i)
+    return out
+end
+local function trim(s)
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
 local M = {}
 
 local P, S, C, Ct = lpeg.P, lpeg.S, lpeg.C, lpeg.Ct
@@ -104,8 +119,8 @@ end
 -- not parse as one clause (so "a, A -> AA" stays a single clause).
 local function parse_many(atype, label)
     local segs = {}
-    for _, s in ipairs(util.split(label or "", ";")) do
-        s = util.trim(s)
+    for _, s in ipairs(split(label or "", ";")) do
+        s = trim(s)
         if s ~= "" then segs[#segs + 1] = s end
     end
     if #segs == 0 then
@@ -120,11 +135,11 @@ local function parse_many(atype, label)
         elseif seg:find(",") then
             -- comma-separated space-form clauses ("b A/λ,b λ/λ"):
             -- every piece must parse as a full clause
-            for _, cs in ipairs(util.split(seg, ",")) do
-                if util.trim(cs) ~= "" then
+            for _, cs in ipairs(split(seg, ",")) do
+                if trim(cs) ~= "" then
                     local ct, cw = M.parse(atype, cs)
                     if not ct then
-                        return nil, "'" .. util.trim(cs)
+                        return nil, "'" .. trim(cs)
                             .. "': " .. tostring(cw)
                     end
                     out[#out + 1] = ct
