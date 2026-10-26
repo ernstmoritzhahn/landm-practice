@@ -592,9 +592,21 @@ function M.check_aut(part, model_json, expect_type)
         want = 0
         for _ in pairs(ref:get_states()) do want = want + 1 end
         if n_student ~= want then
-            return { ok=false, kind="warn",
-                     msg="accepts the right language, but M has "
-                      .. want .. " states — yours has " .. n_student }
+            -- no exact-size requirement: a correct-language automaton
+            -- IS a correct answer — the size difference is a note,
+            -- not an error (the reference is unnamed; say "a DFA",
+            -- not "M" — no M was introduced in the task)
+            local msg
+            if n_student > want then
+                msg = "accepts the right language — correct; a DFA "
+                   .. "with " .. want .. " states exists (yours has "
+                   .. n_student .. ")"
+            else
+                msg = "accepts the right language — correct; even "
+                   .. "smaller than the reference (yours has "
+                   .. n_student .. " states, it has " .. want .. ")"
+            end
+            return { ok=true, kind="warn", msg=msg }
         end
     elseif n_student ~= want then
         return { ok=false, kind="warn",
