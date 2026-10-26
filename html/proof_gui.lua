@@ -292,6 +292,7 @@ end
 local aut_id_seq = 0
 local pending_aut = {}      -- editor boots only once the host is in the DOM
 local send_check            -- forward decl: per-part buttons call it
+local paint_st              -- forward decl: send_check marks pending
 
 local function mount_aut(host, cfg_tbl, readonly, pi)
     -- ids, not element handles, cross the Lua<->JS bridge
@@ -1786,6 +1787,9 @@ send_check = function(only_pi)
                 for k, inp in pairs(p.wit or {}) do pd.wit[k] = inp.value end
             end
             parts[#parts+1] = pd
+            -- the check can take seconds in the worker (bounded PDA/TM
+            -- searches) — mark it so the page does not look dead
+            if p.st then paint_st(p.st, "pending", "checking…") end
             end
         end
         data.parts = parts
@@ -1842,7 +1846,7 @@ local KIND = {
     empty          = { "pending","□" },
 }
 
-local function paint_st(st, kind, extra)
+paint_st = function(st, kind, extra)
     local k = KIND[kind] or KIND.pending
     st.className = "st " .. k[1]
     st.innerHTML = ""

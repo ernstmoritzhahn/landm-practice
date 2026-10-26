@@ -26,7 +26,7 @@ return function(automata)
     -- a cap, not as exhaustion
     local max_conf_size = 4000
 
-    function automata.make_word_generator(automaton)
+    function automata.make_word_generator(automaton, deadline)
         local entry = automata.acceptance_map[automaton:get_type()]
         local make_initial_conf = entry.make_initial_conf
 
@@ -34,6 +34,7 @@ return function(automata)
         local initial_conf = make_initial_conf(automaton, init_word, "generation")
 
         local capped = false
+        local steps = 0
         local function generate_words()
             local time_not_found = 0
             local configurations = {}
@@ -69,6 +70,12 @@ return function(automata)
                 end
                 if num_configurations >= max_configurations
                         or conf_bytes >= max_conf_bytes then
+                    capped = true
+                    break
+                end
+                steps = steps + 1
+                if deadline and steps % 256 == 0
+                        and os.clock() > deadline then
                     capped = true
                     break
                 end

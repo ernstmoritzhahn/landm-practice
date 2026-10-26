@@ -190,14 +190,20 @@ local function check_pda_obj(part, pda, notes)
     local ref = part.pda_ref
     if type(ref) == "function" then ref = ref() end
     if not ref then return { ok = false, msg = "no reference PDA" } end
-    local ok, cmp, cex1, cex2 = pcall(
-        automata.compare_languages, ref, pda)
+    -- bounded comparison: PDA equivalence is undecidable, so the
+    -- bounded search runs under a CPU deadline — in the wasm worker a
+    -- stack-growing student PDA would otherwise grind for minutes
+    local budget = part.time_budget or 12
+    local ok, cmp, cex1, cex2, trunc = pcall(
+        automata.compare_languages, ref, pda, os.clock() + budget)
     if not ok then
         return { ok = false, msg = "comparison failed: "
             .. tostring(cmp) }
     end
     if cmp == "=" then
-        return { ok = true, msg = "✓ languages are equal"
+        return { ok = true, msg = (trunc
+                and "✓ no difference found (bounded search)"
+                or  "✓ languages are equal")
             .. (#notes > 0 and (" — " .. table.concat(notes, "; "))
                 or "") }
     end

@@ -53,7 +53,7 @@ return function(automata)
         return trace
     end
 
-    function automata.is_accepted_by_nondeterministic(automaton, word, make_initial_conf)
+    function automata.is_accepted_by_nondeterministic(automaton, word, make_initial_conf, deadline)
         local initial_conf = make_initial_conf(automaton, word, "acceptance")
         local reachable_to_prececessors = {}
         local num_reachable = 0
@@ -96,6 +96,10 @@ return function(automata)
                 end
             end
             step = step + 1
+            if deadline and step % 256 == 0
+                    and os.clock() > deadline then
+                return false, nil, "capped"
+            end
             if step == limit or num_reachable >= conf_limit
                     or conf_bytes >= conf_byte_limit then
                 -- search capped: "false" here means "not found within
@@ -114,7 +118,7 @@ return function(automata)
 
     automata.acceptance_map = {}
 
-    function automata.is_accepted(automaton, word)
+    function automata.is_accepted(automaton, word, deadline)
         assert(type(word) == "string" or automata.is_token_sequence(word))
         local map
         if type(word) == "string" then
@@ -127,7 +131,7 @@ return function(automata)
         local entry = automata.acceptance_map[automaton:get_type()]
         local make_initial_conf = entry.make_initial_conf
         if entry.nondeterministic then
-            return automata.is_accepted_by_nondeterministic(automaton, word, make_initial_conf)
+            return automata.is_accepted_by_nondeterministic(automaton, word, make_initial_conf, deadline)
         else
             return automata.is_accepted_by_deterministic(automaton, word, make_initial_conf)
         end

@@ -686,7 +686,7 @@ return function(automata)
         return new_dfa
     end
 
-    function automata.compare_languages(l1, l2)
+    function automata.compare_languages(l1, l2, deadline)
         assert(l1)
         assert(l2)
         l1 = to_dfa_if_possible(l1)
@@ -694,7 +694,7 @@ return function(automata)
         if automata.is_finished_dfa(l1) and automata.is_finished_dfa(l2) then
             return automata.compare_dfa(l1, l2)
         else
-            local l1words, l2words = automata.make_word_generator(l1), automata.make_word_generator(l2)
+            local l1words, l2words = automata.make_word_generator(l1, deadline), automata.make_word_generator(l2, deadline)
             local l1done
             local l2done
             -- generators report "capped" when the explored configuration
@@ -706,10 +706,14 @@ return function(automata)
                 if (l1done or cex1) and (l2done or cex2) then
                     break
                 end
+                if deadline and os.clock() > deadline then
+                    l1truncated, l2truncated = true, true
+                    break
+                end
                 if not l1done and not cex1 then
                     local word1, gen_capped = l1words()
                     if word1 then
-                        local acceptance1, _, capped = automata.is_accepted(l2, word1)
+                        local acceptance1, _, capped = automata.is_accepted(l2, word1, deadline)
                         -- a capped search is not a rejection: only a
                         -- definite non-member counts as a witness
                         if acceptance1 == false and not capped then
@@ -723,7 +727,7 @@ return function(automata)
                 if not l2done and not cex2 then
                     local word2, gen_capped = l2words()
                     if word2 then
-                        local acceptance2, _, capped = automata.is_accepted(l1, word2)
+                        local acceptance2, _, capped = automata.is_accepted(l1, word2, deadline)
                         if acceptance2 == false and not capped then
                             cex2 = word2
                         end
