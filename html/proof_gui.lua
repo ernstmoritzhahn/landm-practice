@@ -344,24 +344,32 @@ end
 -- machine (keeps the student's mental picture of the sheet's diagram:
 -- same state names, same labels; layout is graphviz's own)
 local function model_dot(model)
-    local by_id = {}
-    for _, s in ipairs(model.states or {}) do by_id[s.id] = s end
+    -- tolerate shorthand models: states may be name strings and
+    -- transitions may reference them by name via from/target
+    local by_id, seq = {}, {}
+    for i, s in ipairs(model.states or {}) do
+        if type(s) ~= "table" then s = { id = i, name = s } end
+        by_id[s.id] = s
+        if s.name then by_id[s.name] = s end
+        seq[#seq + 1] = s
+    end
     local d = { 'digraph G { rankdir=LR; bgcolor="transparent";'
         .. ' node [shape=circle, width=0.45, fixedsize=true,'
         .. ' fontsize=12]; edge [fontsize=11, arrowsize=0.7];' }
     d[#d + 1] = '__start [shape=point, width=0.02, label=""];'
     local edges = {}
-    for _, s in ipairs(model.states or {}) do
-        d[#d + 1] = '"' .. s.name .. '" ['
+    for _, s in ipairs(seq) do
+        d[#d + 1] = '"' .. tostring(s.name) .. '" ['
             .. (s.accepting and 'shape=doublecircle,' or '') .. '];'
         if s.initial then
-            d[#d + 1] = '__start -> "' .. s.name .. '";'
+            d[#d + 1] = '__start -> "' .. tostring(s.name) .. '";'
         end
     end
     local seen = {}
     for _, t in ipairs(model.transitions or {}) do
         local f = by_id[t.from] and by_id[t.from].name
-        local tt = by_id[t.to] and by_id[t.to].name
+        local tt = by_id[t.to or t.target]
+                  and by_id[t.to or t.target].name
         if f and tt then
             local key = f .. "\1" .. tt
             local lab = (t.label == "" or t.label == "λ")

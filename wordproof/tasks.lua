@@ -1940,16 +1940,14 @@ parts_task{
 }
 
 -- the PDA M of exercise e, shown as a diagram (aut-shaped given)
-local PDA_M_GIVEN = {
-    alphabet = {"a","b","c"}, initial="q0", accepting={"q1"},
-    states = {"q0","q1"},
-    transitions = {
-        { from="q0", label="a λ/λ", target="q0" },
-        { from="q0", label="b λ/A", target="q0" },
-        { from="q0", label="b λ/λ", target="q1" },
-        { from="q1", label="c A/λ", target="q1" },
-    },
-}
+local PDA_M_GIVEN = { type="pda", alphabet="a,b,c",
+    stack_alphabet="A",
+    states={ {id=1, name="q0", x=110, y=150, initial=true},
+             {id=2, name="q1", x=330, y=150, accepting=true} },
+    transitions={ {id=1, from=1, to=1, label="a λ/λ"},
+                  {id=2, from=1, to=1, label="b λ/A"},
+                  {id=3, from=1, to=2, label="b λ/λ"},
+                  {id=4, from=2, to=2, label="c A/λ"} } }
 parts_task{
     id = "6.1e", letter = "e",
     title = "L(M), L_F(M), L_E(M) and conversions",
