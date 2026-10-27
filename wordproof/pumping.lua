@@ -21,33 +21,62 @@ local M = {}
 
 -- exponent forms: linear in the variables k,p,q plus a constant:
 --  k | N | Nk | k+N | k-p-q | 2q | p+1 | ...   ->  {k,p,q,c} coeffs
+--  parenthesised subexpressions work too:  k-(p+q), 2(k-p),
+--  2q+(k-p-q);  an optional leading sign is allowed.
 local function parse_exp(s)
     s = (s or ""):gsub("%s", "")
     if s == "" then return nil end
-    local r = { k = 0, p = 0, q = 0, c = 0 }
-    local pos, sgn = 1, 1
-    while pos <= #s do
-        local sgn2 = s:sub(pos, pos)
-        if sgn2 == "+" then
+    local pos = 1
+    local expr                            -- fwd decl (atom recurses)
+    local function atom()
+        local numstr = s:match("^%d*", pos)
+        pos = pos + #numstr
+        local num = tonumber(numstr)      -- nil when ""
+        local ch = s:sub(pos, pos)
+        if ch == "(" then
             pos = pos + 1
-        elseif sgn2 == "-" then
-            sgn, pos = -1, pos + 1
-        elseif pos > 1 then
-            return nil
+            local r = expr()
+            if not r or s:sub(pos, pos) ~= ")" then return nil end
+            pos = pos + 1
+            local n = num or 1            -- N·(expr)
+            return { k = n * r.k, p = n * r.p,
+                     q = n * r.q, c = n * r.c }
         end
-        local num, var =
-            s:match("^(%d*)([kpq])", pos)
-        if var then
-            r[var] = r[var] + sgn * ((num == "") and 1 or tonumber(num))
-            pos = pos + #num + 1
-        else
-            local digits = s:match("^(%d+)", pos)
-            if not digits then return nil end
-            r.c = r.c + sgn * tonumber(digits)
-            pos = pos + #digits
+        if ch:match("[kpq]") then
+            pos = pos + 1
+            local t = { k = 0, p = 0, q = 0, c = 0 }
+            t[ch] = num or 1
+            return t
         end
-        if pos <= #s then sgn = 1 end
+        if num then return { k = 0, p = 0, q = 0, c = num } end
+        return nil
     end
+    expr = function()
+        local r = { k = 0, p = 0, q = 0, c = 0 }
+        local sgn = 1
+        local ch = s:sub(pos, pos)
+        if ch == "+" then pos = pos + 1
+        elseif ch == "-" then sgn, pos = -1, pos + 1 end
+        while pos <= #s do
+            local t = atom()
+            if not t then return nil end
+            r.k = r.k + sgn * t.k
+            r.p = r.p + sgn * t.p
+            r.q = r.q + sgn * t.q
+            r.c = r.c + sgn * t.c
+            sgn = 1
+            local c2 = s:sub(pos, pos)
+            if c2 == "+" or c2 == "-" then
+                if c2 == "-" then sgn = -1 end
+                pos = pos + 1
+            else
+                break
+            end
+        end
+        return r
+    end
+    local r = expr()
+    if not r or pos <= #s then return nil end
     return r
 end
 
@@ -59,7 +88,7 @@ end
 --  ^{expr}, ^(expr) or ^expr (chars from [0-9kpq+-]).
 --  Unicode dashes are normalised to '-' so keyboard-composed
 --  input does not break parsing.
-local function scan_blocks(s, check)
+local function scan_blocks(s, check, allow_zero)
     s = (s or ""):gsub("λ", " ")
        :gsub("\\lambda", " "):gsub("\\lamda", " ")
        :gsub("lambda", " "):gsub("lamda", " ")
@@ -82,34 +111,50 @@ local function scan_blocks(s, check)
                 local open = s:sub(i, i)
                 if open == "{" or open == "(" then
                     local close = open == "{" and "}" or ")"
-                    local j = s:find(close, i + 1, true)
-                    if not j then
+                    -- scan to the matching close; nested parens
+                    -- inside the body are balanced out
+                    local j, depth = i + 1, 0
+                    while j <= n do
+                        local cj = s:sub(j, j)
+                        if cj == close and depth == 0 then break end
+                        if cj == "(" then depth = depth + 1
+                        elseif cj == ")" then depth = depth - 1 end
+                        j = j + 1
+                    end
+                    if j > n then
                         return nil, "missing '" .. close .. "'"
                     end
                     body, i = s:sub(i + 1, j - 1), j + 1
                 else
+                    -- bare exponent: NO parentheses in the
+                    -- charset — a bare '(' or ')' may be a symbol
+                    -- of the pattern itself (the parens language)
+                    -- and must start a new block
                     local j = i
                     while j <= n
                         and s:sub(j, j):match("[0-9kpq+%-]") do
                         j = j + 1
                     end
                     body, i = s:sub(i, j - 1), j
-                    if body == "" then
-                        return nil, "empty exponent after '^'"
-                            .. " (got '" .. s:sub(i, i) .. "')"
-                    end
+                end
+                if body == "" then
+                    return nil, "empty exponent — drop the block "
+                        .. "or give it a length (e.g. b^{k-p-q})"
                 end
                 e = parse_exp(body)
                 if not e then
                     return nil, "bad exponent '" .. body
-                        .. "' (linear in k, p, q plus a constant)"
+                        .. "' (linear in k, p, q plus a constant; "
+                        .. "parentheses allowed)"
                 end
                 if check then
                     local cerr = check(sym, e, body)
                     if cerr then return nil, cerr end
                 end
             end
-            if e.k == 0 and e.p == 0 and e.q == 0 and e.c == 0 then
+            if not allow_zero
+               and e.k == 0 and e.p == 0 and e.q == 0
+               and e.c == 0 then
                 return nil, "'" .. sym .. "^0' is always empty"
             end
             blocks[#blocks + 1] = { sym = sym, k = e.k,
@@ -134,9 +179,26 @@ function M.parse_pattern(s)
 end
 
 -- same grammar, but p and q allowed (for the student-written
--- decomposition u(k,p,q) · v(k,q) · w(k,p,q))
+-- decomposition u(k,p,q) · v(k,q) · w(k,p,q) and the pumped word).
+-- Zero-exponent blocks are allowed here: the honest unexpanded
+-- form u·v^i·w may legitimately contain e.g. a^{0q} when i = 0 —
+-- they contribute nothing and are filtered out at comparison.
 function M.parse_pattern_pq(s)
-    return scan_blocks(s)
+    return scan_blocks(s, nil, true)
+end
+
+-- drop zero-exponent blocks (a^{0q}, a^0): they contribute no
+-- letters — legal in the student's unexpanded forms, invisible
+-- in the merged run structure
+local function nonzero(b)
+    return b.k ~= 0 or b.p ~= 0 or b.q ~= 0 or b.c ~= 0
+end
+local function dropzero(blocks)
+    local out = {}
+    for _, b in ipairs(blocks) do
+        if nonzero(b) then out[#out + 1] = b end
+    end
+    return out
 end
 
 -- merge adjacent same-symbol blocks (needed for the symbolic checks:
@@ -547,16 +609,9 @@ local function parse_iexpr(s)
     s = (s or ""):gsub("%s", "")
     if s == "" then return nil end
     if s:find("-") then return nil end   -- i ≥ 0 required anyway
-    local r = { c = 0, k = 0, p = 0, q = 0 }
-    for term in s:gmatch("[^+]+") do
-        local n, var = term:match("^(%d*)([kpq])$")
-        if var then
-            r[var] = r[var] + (n == "" and 1 or tonumber(n))
-        else
-            local d = term:match("^(%d+)$")
-            if d then r.c = r.c + tonumber(d) else return nil end
-        end
-    end
+    local r = parse_exp(s)               -- parentheses allowed
+    if not r then return nil end
+    if r.k < 0 or r.p < 0 or r.q < 0 or r.c < 0 then return nil end
     return r
 end
 local function iexpr_eval(i, k, p, q)
@@ -860,7 +915,7 @@ function M.check_general(lang_id, z_str, gen, part)
     for _, b in ipairs(ub) do cat[#cat + 1] = b end
     for _, b in ipairs(vb) do cat[#cat + 1] = b end
     for _, b in ipairs(wb) do cat[#cat + 1] = b end
-    local cm = merge(cat)
+    local cm = merge(dropzero(cat))
     if #cm ~= #mb then
         return { ok = false, kind = "fail",
                  msg = "uvw has " .. #cm .. " block(s), z has " .. #mb
@@ -1001,13 +1056,18 @@ function M.check_general(lang_id, z_str, gen, part)
             return { ok = false, kind = "fail",
                      msg = "uv^i w = " .. pwerr }
         end
-        local pm = merge(pwb)
-        local bad = (#pm ~= #pb) and "block count differs"
-        for j = 1, #pb do
+        -- zero-exponent blocks contribute nothing (v^0, a^{0q},
+        -- stray λ-annotated pieces) — drop them on both sides
+        local pmz, pbz = dropzero(merge(pwb)), {}
+        for _, b in ipairs(pb) do
+            if not poly_zero(b.poly) then pbz[#pbz + 1] = b end
+        end
+        local bad = (#pmz ~= #pbz) and "block count differs"
+        for j = 1, #pbz do
             if not bad
-               and (pm[j].sym ~= pb[j].sym
-                    or not poly_zero(poly_sub(block_poly(pm[j]),
-                                              pb[j].poly))) then
+               and (pmz[j].sym ~= pbz[j].sym
+                    or not poly_zero(poly_sub(block_poly(pmz[j]),
+                                              pbz[j].poly))) then
                 bad = "block " .. j .. " differs"
             end
         end
@@ -1018,7 +1078,7 @@ function M.check_general(lang_id, z_str, gen, part)
                 local truth = M.expand_params(ub, k, p, q)
                     .. (M.expand_params(vb, k, p, q)):rep(ii)
                     .. M.expand_params(wb, k, p, q)
-                local got = M.expand_params(pm, k, p, q)
+                local got = M.expand_params(pmz, k, p, q)
                 if got ~= truth then
                     return { k = k, p = p, q = q,
                              truth = truth, got = got }
