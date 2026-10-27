@@ -404,6 +404,8 @@ local function aut_cfg(v)
              -- practice pages let students toggle the warnings
              -- (default on; Anubis omits the flag and stays locked)
              checks_editable = true,
+             -- and run words through their machines (Anubis omits it)
+             sim      = true,
              initial  = v.initial or v.model }
 end
 
