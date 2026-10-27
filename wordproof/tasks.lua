@@ -92,7 +92,8 @@ local docs_words = {
     ["IH"]        = "the induction hypothesis",
 }
 local docs_num = {
-    ["def f"]     = "f(0) = 1,   f(n+1) = 1 + k·f(n)",
+    ["def f"]     = "f(0) = 1,   f(n+1) = 1 + k·f(n),   f(n) = #{w : |w| ≤ n}",
+    ["case split"] = "w = λ  or  w = a·v  with a ∈ Σ and |v| ≤ n",
     ["IH"]        = "the induction hypothesis",
     ["arith"]     = "arithmetic and sum algebra",
 }
@@ -255,9 +256,12 @@ local function fdef(t)
 end
 
 local cites_c = {
-    ["def f"]   = {fdef},
-    ["IH"]      = {"IH"},
-    ["arith"]   = C.rule_bundles.arith,
+    ["def f"]      = {fdef},
+    -- the word decomposition w = λ | w = av is a normal-form identity
+    -- on card terms, so this citation needs no extra rules
+    ["case split"] = {},
+    ["IH"]         = {"IH"},
+    ["arith"]      = C.rule_bundles.arith,
 }
 
 def_task{
@@ -272,7 +276,7 @@ def_task{
     require_ih = true,
     cite_map = cites_c,
     cite_docs = docs_num,
-    cites = {"def f","IH","arith"},
+    cites = {"def f","case split","IH","arith"},
     ih_str = "f(n) = sum(i,0,n;k^i)",
     f_eval = f_eval,
     sections = {
@@ -281,7 +285,7 @@ def_task{
           expect_first="f(0)", expect_last="sum(i,0,0;k^i)",
           rows = {
             { tmpl="f(0)",             fixed=true },
-            { tmpl="?",                cite="def f" },    -- 1
+            { tmpl="?",                cite="def f" },    -- #{λ} or 1
             { tmpl="?",                cite="arith" },    -- k^0
             { tmpl="sum(i,0,0;k^i)",   cite="arith", fixed=true },
           }},
@@ -289,6 +293,8 @@ def_task{
           expect_first="f(n+1)", expect_last="sum(i,0,n+1;k^i)",
           rows = {
             { tmpl="f(n+1)",              fixed=true },
+            { tmpl="?",                cite="def f" },    -- #{w:|w|≤n+1}
+            { tmpl="1 + k·?",             cite="case split" },-- #{v:|v|≤n}
             { tmpl="1 + k·?",             cite="def f" },  -- f(n)
             { tmpl="1 + k·?",             cite="IH" },     -- sum(i,0,n;k^i)
             { tmpl="1 + ?",               cite="arith" },  -- sum(i,0,n;k^(i+1))

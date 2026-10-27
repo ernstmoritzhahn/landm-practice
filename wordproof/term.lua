@@ -702,6 +702,25 @@ local function ambient(t, no_merge)
             return M.nadd{M.num(1), M.nmul{M.nvar(t.al),
                 M.card(t.v, "≤", M.num(t.hi.n - 1), t.al, t.fn)}}
         end
+        if t.hi.k=="nadd" then
+            -- #{v : |v| ≤ (E+c)}, c>0: the case split w = λ | w = av
+            -- (a∈Σ, |v| ≤ E+c-1) is a term identity — peel one layer
+            local rest, dec, hit = {}, nil, false
+            for _,x in ipairs(t.hi.ts) do
+                if x.k=="num" and x.n>0 and not hit then
+                    hit = true
+                    if x.n>1 then dec = M.num(x.n-1) end
+                else
+                    rest[#rest+1] = x
+                end
+            end
+            if hit then
+                if dec then rest[#rest+1] = dec end
+                local inner = #rest==1 and rest[1] or M.nadd(rest)
+                return M.nadd{M.num(1), M.nmul{M.nvar(t.al),
+                    M.card(t.v, "≤", inner, t.al, t.fn)}}
+            end
+        end
         if t.fn then return M.fapp(t.fn, t.hi) end
     end
 end
