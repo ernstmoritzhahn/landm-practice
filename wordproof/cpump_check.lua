@@ -161,7 +161,7 @@ local function eval_i(expr, env)
     return v
 end
 
-function M.check_cpump(part, z_text, i_map)
+function M.check_cpump(part, z_text, i_map, why_sel)
     local lang_test = part.lang_test
     local zfn
     if part.zgen then
@@ -224,6 +224,20 @@ function M.check_cpump(part, z_text, i_map)
             end
         end)
         if bad then return { ok = false, msg = bad } end
+    end
+    -- the reason: which defining property of L does the pumped
+    -- word violate?  (options are authored per task; the checker
+    -- just verifies the pick)
+    if part.why and part.why.correct then
+        if not (why_sel or ""):match("%S") then
+            return { ok = false, msg = "state why uv^iwx^iy leaves "
+                .. "L — which defining property of L is violated "
+                .. "in every case?" }
+        elseif why_sel ~= part.why.correct then
+            return { ok = false, msg = "that reason does not show "
+                .. "uv^iwx^iy ∉ L — which defining property of L "
+                .. "fails in every case?" }
+        end
     end
     for idx in ipairs(part.cases) do
         if matched[idx] then ncases = ncases + 1 end

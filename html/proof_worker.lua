@@ -182,7 +182,8 @@ return function(data)
                     elseif pdef.kind == "tm" then
                         return TC.check_tm(pdef, pd.text)
                     elseif pdef.kind == "cpump" then
-                        return CC.check_cpump(pdef, pd.z, pd.is)
+                        return CC.check_cpump(pdef, pd.z, pd.is,
+                                              pd.why)
                     end
                     return { ok=false, msg="unknown part kind" }
                 end)

@@ -796,29 +796,74 @@ local PUMP_DESC = "Fill in the schema of a pumping-lemma proof — "
     .. "the form u = sym^p, v = sym^q with p ≥ 0, q ≥ 1, p+q ≤ k: "
     .. "write u, v, w as patterns in the parameters.  Then choose "
     .. "the pumping index i beating them all — concretely for each "
-    .. "listed split, and for all k as i(k,q).  The checker "
-    .. "verifies uvw ≡ z(k), legality, coverage of every legal "
-    .. "split, and uv^iw ∉ L — symbolically for all k ≥ 1 when "
-    .. "it can, sampled otherwise."
+    .. "listed split, and for all k as i(k,q) — and finish the "
+    .. "argument: 'uv^i w = ⟨general form⟩ ∉ L, since ⟨which "
+    .. "defining property of L fails⟩'.  The checker verifies "
+    .. "uvw ≡ z(k), legality, coverage of every legal split, the "
+    .. "pumped word as a pattern, the reason, and uv^iw ∉ L — "
+    .. "symbolically for all k ≥ 1 when it can, sampled otherwise."
 
-local function ptask(id, letter, lang, label)
+-- reason clauses for the final '… since ___' slot: which defining
+-- property of L does the pumped word violate?  `correct` is the id
+-- the checker requires; the others are true-but-irrelevant or
+-- plainly-wrong distractors.
+local function why(correct, ...)
+    return { correct = correct, opts = { ... } }
+end
+local WY_SHORT = { id="short",
+    label="the pumped word is too short (|w| < k)" }
+local WY_PAL   = { id="pal",
+    label="the pumped word is not a palindrome" }
+local WY_NAB   = { id="nab",
+    label="#a ≠ #b in the pumped word" }
+local WY_SQ    = { id="sq",
+    label="the length |uv^iwx^iy| is not a square" }
+
+local function ptask(id, letter, lang, label, whyopts)
     parts_task{
         id = id, letter = letter,
         title = "Pumping lemma: " .. label,
         desc = PUMP_DESC,
         parts = {
             { kind="pumping", sub=letter .. ")", lang=lang,
-              label="L = " .. label },
+              label="L = " .. label, why = whyopts },
         },
     }
 end
 
-ptask("3.1a", "A", "eq_ab",  "{w ∈ {a,b}* | #a(w) = #b(w)}")
-ptask("3.1b", "B", "parens", "matched parentheses over {(,)}")
-ptask("3.1c", "C", "pal",    "palindromes over {a,b}")
-ptask("3.1d", "D", "ww",     "{ww | w ∈ {a,b}*}")
-ptask("3.1e", "E", "anbm_lt", "{aⁿbᵐ | n < m}   (extra)")
-ptask("3.1f", "F", "aibjc",  "{aⁱbʲc²ʲ | i,j ≥ 0}   (extra)")
+ptask("3.1a", "A", "eq_ab",  "{w ∈ {a,b}* | #a(w) = #b(w)}",
+      why("ab",
+          { id="ab",  label="#a(uv^iw) ≠ #b(uv^iw)" },
+          WY_SHORT, WY_PAL))
+ptask("3.1b", "B", "parens", "matched parentheses over {(,)}",
+      why("bal",
+          { id="ord", label="a ')' precedes its '(' in uv^iw" },
+          { id="bal", label="the balance fails: uv^iw has more "
+                .. "'(' than ')'" },
+          WY_SHORT))
+ptask("3.1c", "C", "pal",    "palindromes over {a,b}",
+      why("pal",
+          WY_NAB,
+          { id="pal", label="uv^iw ≠ (uv^iw)^R — not a "
+                .. "palindrome" },
+          { id="par", label="|uv^iw| is odd — wrong parity" }))
+ptask("3.1d", "D", "ww",     "{ww | w ∈ {a,b}*}",
+      why("half",
+          { id="pal", label="uv^iw is not a palindrome" },
+          { id="half", label="the two halves of uv^iw differ — "
+                .. "it is not of the form zz" },
+          WY_NAB))
+ptask("3.1e", "E", "anbm_lt", "{aⁿbᵐ | n < m}   (extra)",
+      why("ge",
+          { id="ord", label="a 'b' comes before an 'a' — the "
+                .. "a*b* order broke" },
+          { id="ge",  label="#a(uv^iw) ≥ #b(uv^iw) — n < m "
+                .. "fails" },
+          WY_PAL))
+ptask("3.1f", "F", "aibjc",  "{aⁱbʲc²ʲ | i,j ≥ 0}   (extra)",
+      why("bc",
+          { id="bc",  label="#c(uv^iw) ≠ 2·#b(uv^iw)" },
+          WY_NAB, WY_PAL))
 
 parts_task{
     id = "3.1g", letter = "G",
@@ -2081,6 +2126,10 @@ parts_task{
         { kind="cpump", sub="A)", alphabet="a",
           z_hint = "a^{k*k}",
           lang_test = lt_square,
+          why = why("sq",
+              { id="sq",   label="|uv^iwx^iy| is no square — it "
+                    .. "lands strictly between k² and (k+1)²" },
+              WY_NAB, WY_PAL),
           cases = {
             { desc="v,x ⊆ a-block (the only possibility)",
               match=function() return true end },
@@ -2098,6 +2147,11 @@ parts_task{
         { kind="cpump", sub="B)", alphabet="a,b,c,d",
           z_hint = "a^k b^k c^k d^k",
           lang_test = lt_abcd,
+          why = why("pair",
+              { id="pair", label="pumping changes the a- or "
+                    .. "b-count without the matching c- or "
+                    .. "d-count  (#a ≠ #c or #b ≠ #d)" },
+              WY_SQ, WY_PAL),
           cases = {
             { desc="vx in the a-block",
               match=touch_case({1}) },
@@ -2126,6 +2180,10 @@ parts_task{
         { kind="cpump", sub="C)", alphabet="a,b",
           z_hint = "a^k b^{2k} a^k",
           lang_test = lt_a2ba,
+          why = why("ends",
+              { id="ends", label="the first and last a-blocks "
+                    .. "differ, or #b ≠ 2·#a" },
+              WY_NAB, WY_PAL),
           cases = {
             { desc="vx in the first a-block",
               match=touch_case({1}) },
@@ -2152,6 +2210,10 @@ parts_task{
           zgen = infword_z,
           z_fixed = "ab aab aaab … a^k b",
           lang_test = lt_infword,
+          why = why("pref",
+              { id="pref", label="the word no longer fits the "
+                    .. "ab, aab, aaab, … prefix scheme" },
+              WY_NAB, WY_SQ),
           cases = {
             { desc="v or x contains ≥ 2 b's",
               match=function(sp)
@@ -2689,6 +2751,7 @@ local function view_part(pd, pi)
         v.slots = pd.slots
     elseif pd.kind == "pumping" then
         v.lang = pd.lang
+        v.why_opts = pd.why and pd.why.opts
     elseif pd.kind == "min_table" then
         v.states = pd.states
     elseif pd.kind == "trace" or pd.kind == "accept" then
@@ -2705,6 +2768,7 @@ local function view_part(pd, pi)
         v.z_hint = pd.z_hint
         v.z_fixed = pd.z_fixed
         v.has_z = (pd.zgen == nil)
+        v.why_opts = pd.why and pd.why.opts
         v.cases = {}
         for i, c in ipairs(pd.cases or {}) do
             v.cases[i] = { desc = c.desc }

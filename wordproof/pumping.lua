@@ -789,11 +789,16 @@ function M.general_case(mb)
 end
 
 -- full general check over the STUDENT-written decomposition
---   gen = { u = "a^p", v = "a^q", w = "a^{k-p-q}b^k", i = "2" }
+--   gen = { u = "a^p", v = "a^q", w = "a^{k-p-q}b^k", i = "2",
+--           pw = "a^{k+q}b^k", why = "<reason option id>" }
 -- verified: uvw ≡ z(k) as a poly identity, legality |v| ≥ 1 /
 -- |uv| ≤ k on the legal domain, coverage of every legal split,
--- then uv^iw ∉ L — symbolically where possible, else sampled.
-function M.check_general(lang_id, z_str, gen)
+-- the pumped word uv^iw ≡ pw as a pattern, the reason, and
+-- uv^iw ∉ L — symbolically where possible, else sampled.
+-- returns nil when the witness has no closed-form step at all
+-- (first block does not dominate) and nothing was filled in.
+function M.check_general(lang_id, z_str, gen, part)
+    gen = gen or {}
     local lang = M.LANGS[lang_id]
     if not lang then
         return { ok = false, kind = "fail", msg = "unknown language" }
@@ -811,6 +816,19 @@ function M.check_general(lang_id, z_str, gen)
         return { ok = false, kind = "fail", msg = "|z(k)| < k" }
     end
     local gcase = M.general_case(mb)
+    -- the closed-form step exists only when z's first block
+    -- dominates the first-k window; then it is required — the
+    -- schema is the proof, not an optional extra
+    local filled = (gen.u or ""):match("%S") or (gen.v or ""):match("%S")
+        or (gen.w or ""):match("%S") or (gen.i or ""):match("%S")
+        or (gen.pw or ""):match("%S") or (gen.why or ""):match("%S")
+    if not filled then
+        if gcase.err then return nil end
+        return { ok = false, kind = "fail",
+                 msg = "the general step is missing — write u, v, w "
+                    .. "as patterns (step 2) and choose i, the "
+                    .. "pumped word and the reason (step 3)" }
+    end
     if gcase.err then
         return { ok = false, kind = "fail", msg = gcase.err }
     end
@@ -968,6 +986,81 @@ function M.check_general(lang_id, z_str, gen)
             pb[#pb + 1] = { sym = b.sym, poly = b.poly }
         end
     end
+
+    -- (5b) 'Then uv^i w = …' — the student's pumped word must equal
+    --     u·v^i·w as a pattern over the legal domain.  A linear
+    --     pattern in k, p, q can express it only when i is
+    --     constant; with a parameter-dependent i the exponent is
+    --     quadratic, so the field is optional (but still checked)
+    --     in that case.
+    local iconst = iexpr.k == 0 and (iexpr.p or 0) == 0
+        and iexpr.q == 0
+    if (gen.pw or ""):match("%S") then
+        local pwb, pwerr = M.parse_pattern_pq(gen.pw)
+        if not pwb then
+            return { ok = false, kind = "fail",
+                     msg = "uv^i w = " .. pwerr }
+        end
+        local pm = merge(pwb)
+        local bad = (#pm ~= #pb) and "block count differs"
+        for j = 1, #pb do
+            if not bad
+               and (pm[j].sym ~= pb[j].sym
+                    or not poly_zero(poly_sub(block_poly(pm[j]),
+                                              pb[j].poly))) then
+                bad = "block " .. j .. " differs"
+            end
+        end
+        if bad then
+            local cx = each_domain_point(legal, function(k, p, q)
+                local ii = iexpr_eval(iexpr, k, p, q)
+                if ii ~= math.floor(ii) or ii < 0 then return nil end
+                local truth = M.expand_params(ub, k, p, q)
+                    .. (M.expand_params(vb, k, p, q)):rep(ii)
+                    .. M.expand_params(wb, k, p, q)
+                local got = M.expand_params(pm, k, p, q)
+                if got ~= truth then
+                    return { k = k, p = p, q = q,
+                             truth = truth, got = got }
+                end
+            end)
+            local msg = "your 'uv^i w =' does not equal u·v^i·w"
+            if cx then
+                msg = msg .. " — e.g. at k=" .. cx.k .. ", p="
+                    .. cx.p .. ", q=" .. cx.q .. ":  u·v^i·w = '"
+                    .. cx.truth .. "', your pattern gives '"
+                    .. cx.got .. "'"
+            end
+            if not iconst then
+                msg = msg .. "  (with a parameter-dependent i the "
+                    .. "pumped word is not a linear pattern in "
+                    .. "k, p, q — a constant i is usually what the "
+                    .. "proof wants)"
+            end
+            return { ok = false, kind = "fail", msg = msg }
+        end
+    elseif iconst then
+        return { ok = false, kind = "fail",
+                 msg = "state the pumped word:  uv^i w = ?" }
+    end
+
+    -- (5c) the reason: which defining property of L does the
+    --     pumped word violate?  options are authored per task;
+    --     the checker just verifies the pick
+    local want_why = part and part.why and part.why.correct
+    if want_why then
+        if not (gen.why or ""):match("%S") then
+            return { ok = false, kind = "fail",
+                     msg = "state why uv^iw ∉ L — which defining "
+                        .. "property of L does the pumped word "
+                        .. "violate?" }
+        elseif gen.why ~= want_why then
+            return { ok = false, kind = "fail",
+                     msg = "that is not the reason uv^iw leaves L "
+                        .. "— which defining property of L fails?" }
+        end
+    end
+
     local prov = lang.gen and lang.gen(pb, legal)
     if prov == true then
         return { ok = true, kind = "ok",
@@ -1024,7 +1117,7 @@ end
 
 -- full check: z valid + every split row has a working i.
 -- is_tbl[ri] = the student's pumping index for split row ri.
-function M.check(lang_id, z_str, is_tbl, K, gen)
+function M.check(lang_id, z_str, is_tbl, K, gen, part)
     K = K or 3
     local lang = M.LANGS[lang_id]
     if not lang then
@@ -1070,15 +1163,11 @@ function M.check(lang_id, z_str, is_tbl, K, gen)
             end
         end
     end
-    -- the general decomposition (all k): student-written u, v, w, i
-    local genres
-    if type(gen) == "table"
-       and ((gen.u or ""):match("%S") or (gen.v or ""):match("%S")
-            or (gen.w or ""):match("%S") or (gen.i or ""):match("%S"))
-    then
-        genres = M.check_general(lang_id, z_str, gen)
-        if not genres.ok then all_ok = false end
-    end
+    -- the general decomposition (all k): student-written u, v, w,
+    -- i, pumped word and reason — required whenever the witness
+    -- admits a closed form (check_general returns nil otherwise)
+    local genres = M.check_general(lang_id, z_str, gen, part)
+    if genres and not genres.ok then all_ok = false end
     if all_ok then
         return { ok = true, kind = "ok", rows = rows,
                  gen = genres, msg = "z(k) ∈ L, |z| ≥ k, and every decomposition "

@@ -1264,9 +1264,10 @@ local function render_part(pv, pi)
         local sp = el("div")
         box:appendChild(sp)
         box:appendChild(text("div",
-            "Then uv^i w ∉ L — the pumping property fails, hence "
-            .. "L cannot be regular.", "phint"))
+            "The pumping property fails — hence L cannot be "
+            .. "regular.", "phint"))
         rec.z, rec.z_st = zinp, zst
+        rec.why_opts = pv.why_opts
         rec.genbox, rec.splitbox = gb, sp
         rec.i_inps, rec.row_st = {}, {}
         rec.cells = { z = { td = zst } }
@@ -1458,10 +1459,36 @@ local function render_part(pv, pi)
             rec.cpump_i[i] = inp
             rec.cells["i" .. i] = { td = rst }
         end
-        box:appendChild(text("div",
-            "Then uv^iwx^iy ∉ L in every case — by the pumping "
-            .. "lemma for context-free languages, L cannot be "
-            .. "context-free.", "phint"))
+        -- 3) conclusion: the reason the pumped word leaves L in
+        -- every case (the 'why' of the proof), then the schema's
+        -- final inference
+        if pv.why_opts and #pv.why_opts > 0 then
+            local r = el("div", "wordrow")
+            r:appendChild(text("span",
+                "3)  Then uv^iwx^iy ∉ L in every case, since",
+                "wlabel"))
+            local sel = document:createElement("select")
+            local o0 = document:createElement("option")
+            o0.value, o0.textContent = "", "— why? —"
+            sel:appendChild(o0)
+            for _, o in ipairs(pv.why_opts) do
+                local oo = document:createElement("option")
+                oo.value, oo.textContent = o.id, o.label
+                sel:appendChild(oo)
+            end
+            sel:addEventListener("change", dirty(nil))
+            r:appendChild(sel)
+            box:appendChild(r)
+            rec.cpump_why = sel
+            box:appendChild(text("div",
+                "— by the pumping lemma for context-free "
+                .. "languages, L cannot be context-free.", "phint"))
+        else
+            box:appendChild(text("div",
+                "Then uv^iwx^iy ∉ L in every case — by the "
+                .. "pumping lemma for context-free languages, L "
+                .. "cannot be context-free.", "phint"))
+        end
     end
     -- the input-syntax hint for THIS part kind only, right where the
     -- input happens (a global footer used to mix them all together)
@@ -1525,6 +1552,7 @@ save_local = function()
                 for i, inp in ipairs(p.cpump_i or {}) do
                     pr.is[i] = inp.value
                 end
+                pr.why = p.cpump_why and p.cpump_why.value or ""
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pr.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
@@ -1538,7 +1566,9 @@ save_local = function()
                 pr.k = p.ksel and p.ksel.value or nil
                 pr.gen = p.gen and {
                     u = p.gen.u.value, v = p.gen.v.value,
-                    w = p.gen.w.value, i = p.gen.i.value } or nil
+                    w = p.gen.w.value, i = p.gen.i.value,
+                    pw = p.gen.pw and p.gen.pw.value or "",
+                    why = p.gen.why and p.gen.why.value or "" } or nil
                 pr.is = {}
                 for ri, inp in ipairs(p.i_inps) do pr.is[ri] = inp.value end
             elseif p.kind == "min_table" then
@@ -1660,6 +1690,9 @@ local function restore_local()
                     end
                     for i, inp in ipairs(p.cpump_i or {}) do
                         inp.value = (pr.is or {})[i] or ""
+                    end
+                    if p.cpump_why and pr.why then
+                        p.cpump_why.value = pr.why
                     end
                 end
             end
@@ -2007,7 +2040,9 @@ send_check = function(only_pi)
                 for ri, inp in ipairs(p.i_inps) do pd.is[ri] = inp.value end
                 pd.gen = p.gen and {
                     u = p.gen.u.value, v = p.gen.v.value,
-                    w = p.gen.w.value, i = p.gen.i.value } or nil
+                    w = p.gen.w.value, i = p.gen.i.value,
+                    pw = p.gen.pw and p.gen.pw.value or "",
+                    why = p.gen.why and p.gen.why.value or "" } or nil
             elseif p.kind == "grammar" or p.kind == "normalise"
                 or p.kind == "pda" or p.kind == "tm"
                 or p.kind == "pattern"
@@ -2019,6 +2054,7 @@ send_check = function(only_pi)
                 for i, inp in ipairs(p.cpump_i or {}) do
                     pd.is[i] = inp.value
                 end
+                pd.why = p.cpump_why and p.cpump_why.value or ""
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pd.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
@@ -2185,8 +2221,34 @@ local function render_splits(pi, res)
             .. "(a number or an expression in the parameters):",
             "wlabel"))
         i_inp = grow(p.splitbox, "i =", "e.g. 2, q+1, k+1", "i")
+        -- conclusion row: the general pumped word and the reason
+        -- it leaves L — the 'why' that a proof sketch needs
+        local pr = el("div", "wordrow")
+        pr:appendChild(text("span", "Then  uv^i w =", "wlabel"))
+        local pw_inp = mk_input("expr", 18, dirty(gst))
+        pw_inp.placeholder = "e.g. a^{k+q}b^k"
+        if pend.pw then pw_inp.value = pend.pw end
+        pr:appendChild(pw_inp)
+        pr:appendChild(text("span", "∉ L,   since", "wlabel"))
+        local wsel
+        if p.why_opts and #p.why_opts > 0 then
+            wsel = document:createElement("select")
+            local o0 = document:createElement("option")
+            o0.value, o0.textContent = "", "— why? —"
+            wsel:appendChild(o0)
+            for _, o in ipairs(p.why_opts) do
+                local oo = document:createElement("option")
+                oo.value, oo.textContent = o.id, o.label
+                wsel:appendChild(oo)
+            end
+            if pend.why then wsel.value = pend.why end
+            wsel:addEventListener("change", dirty(gst))
+            pr:appendChild(wsel)
+        end
+        p.splitbox:appendChild(pr)
         p.splitbox:appendChild(gst)
-        p.gen = { u = u_inp, v = v_inp, w = w_inp, i = i_inp }
+        p.gen = { u = u_inp, v = v_inp, w = w_inp, i = i_inp,
+                  pw = pw_inp, why = wsel }
         p.gen_st = gst
     elseif gen.err then
         p.splitbox:appendChild(text("div",
