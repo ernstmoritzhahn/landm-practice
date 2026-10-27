@@ -530,16 +530,21 @@ re2dfa("2.1d", "D", "aa(a∪b)+bb", R21d_DFA)
 
 -- ======================================================================
 -- 2.2  RE -> NFA-lambda, STEPWISE: each part is an NFA-λ construction
---      checked against its own sub-expression; `seeds` lists earlier
---      parts whose automaton can be inserted into this part's editor,
---      so composition happens visibly on the canvas (insert dropdown).
+--      checked against its own sub-expression.  The step chains are
+--      GENERATED from the regex (wordproof/re_steps.lua): atoms first,
+--      then every composite sub-expression in postorder.  Free-form
+--      parts list earlier parts for the insert dropdown (`seeds`);
+--      guided parts embed operand stages as locked components
+--      (`seeds_locked`) followed by optional simplify slots.  The same
+--      generator can serve arbitrary/random expressions later.
 -- ======================================================================
 
-local function nfa_step(label, reference, seeds, alphabet)
-    return { kind="aut", aut_type="nfa-eps",
-             alphabet=alphabet or "a,b",
-             label=label, reference=reference, seeds=seeds }
-end
+local RE_STEPS = require "wordproof.re_steps"
+local free_E, guided_E = RE_STEPS.parts("(ab)*|a*",
+    { first_hint = "insert both, then connect" })
+local free_F, guided_F = RE_STEPS.parts("(abc)*|a*",
+    { alphabet = "a,b,c" })
+local free_G, guided_G = RE_STEPS.parts("(ba|bb)*|(ab|aa)*")
 
 parts_task{
     id = "2.2n", letter = "E",
@@ -553,16 +558,7 @@ parts_task{
         .. "part lets you place a copy of an earlier part's automaton "
         .. "on the canvas to compose it further.  You may omit "
         .. "obviously unnecessary λ-steps.",
-    parts = {
-        nfa_step("E = a", "a"),
-        nfa_step("E = b", "b"),
-        nfa_step("E = ab — from the NFAs for a and b "
-            .. "(insert both, then connect)", "ab", {1,2}),
-        nfa_step("E = (ab)* — from the NFA for ab", "(ab)*", {3}),
-        nfa_step("E = a* — from the NFA for a", "a*", {1}),
-        nfa_step("E = (ab)* ∪ a* — from the NFAs for (ab)* and a*",
-                 "(ab)*|a*", {4,5}),
-    },
+    parts = free_E,
 }
 
 parts_task{
@@ -572,21 +568,7 @@ parts_task{
     title = "From RE to NFA-λ: (abc)*a*",
     desc = "The same stepwise construction for "
         .. "E = (abc)* ∪ a* over {a, b, c}.",
-    parts = {
-        nfa_step("E = a", "a", nil, "a,b,c"),
-        nfa_step("E = b", "b", nil, "a,b,c"),
-        nfa_step("E = c", "c", nil, "a,b,c"),
-        nfa_step("E = ab — from the NFAs for a and b", "ab",
-                 {1,2}, "a,b,c"),
-        nfa_step("E = abc — from the NFAs for ab and c", "abc",
-                 {4,3}, "a,b,c"),
-        nfa_step("E = (abc)* — from the NFA for abc", "(abc)*",
-                 {5}, "a,b,c"),
-        nfa_step("E = a* — from the NFA for a", "a*",
-                 {1}, "a,b,c"),
-        nfa_step("E = (abc)* ∪ a* — from the NFAs for (abc)* and a*",
-                 "(abc)*|a*", {6,7}, "a,b,c"),
-    },
+    parts = free_F,
 }
 
 parts_task{
@@ -596,24 +578,7 @@ parts_task{
     title = "(extra) From RE to NFA-λ: (ba∪bb)* ∪ (ab∪aa)*",
     desc = "(extra) The same stepwise construction for "
         .. "E = (ba ∪ bb)* ∪ (ab ∪ aa)*.",
-    parts = {
-        nfa_step("E = a", "a"),
-        nfa_step("E = b", "b"),
-        nfa_step("E = ba — from the NFAs for b and a", "ba", {2,1}),
-        nfa_step("E = bb — from the NFA for b (insert twice)", "bb", {2}),
-        nfa_step("E = ba ∪ bb — from the NFAs for ba and bb",
-                 "ba|bb", {3,4}),
-        nfa_step("E = (ba ∪ bb)* — from the NFA for ba ∪ bb",
-                 "(ba|bb)*", {5}),
-        nfa_step("E = ab — from the NFAs for a and b", "ab", {1,2}),
-        nfa_step("E = aa — from the NFA for a (insert twice)", "aa", {1}),
-        nfa_step("E = ab ∪ aa — from the NFAs for ab and aa",
-                 "ab|aa", {7,8}),
-        nfa_step("E = (ab ∪ aa)* — from the NFA for ab ∪ aa",
-                 "(ab|aa)*", {9}),
-        nfa_step("E = (ba ∪ bb)* ∪ (ab ∪ aa)* — from the two "
-            .. "*-constructions", "(ba|bb)*|(ab|aa)*", {6,10}),
-    },
+    parts = free_G,
 }
 
 -- ----------------------------------------------------------------------
@@ -625,26 +590,6 @@ parts_task{
 -- step is followed by an optional simplify slot whose content — taken
 -- over from the compose editor, then reduced by hand — becomes the
 -- effective automaton the next step embeds.
-
-local function gstep(sid, label, reference, seeds, alphabet)
-    return { kind="aut", aut_type="nfa-eps",
-             alphabet=alphabet or "a,b",
-             label=label, reference=reference, sub=sid .. ")",
-             sid=sid, seeds_locked=seeds,
-             -- atoms have no components to embed, but compose still
-             -- runs the composable-form check: a stage only counts
-             -- when it can serve as a later component
-             check = "compose" }
-end
-
-local function sstep(sid, reference, alphabet)
-    return { kind="aut", aut_type="nfa-eps",
-             alphabet=alphabet or "a,b",
-             label="optional: simplify — 'take over' adopts the "
-                .. "automaton above; simplify it by hand",
-             sub=sid .. "')",
-             takeover_from=sid, reference=reference, optional=true }
-end
 
 parts_task{
     id = "2.2n-g", letter = "E",
@@ -658,22 +603,7 @@ parts_task{
         .. "earlier steps automatically; an optional simplify slot "
         .. "lets you reduce a step's automaton, and the simplified "
         .. "version is what the next step embeds.",
-    parts = {
-        gstep("a", "E = a", "a"),
-        gstep("b", "E = b", "b"),
-        gstep("ab", "E = ab — compose the given components", "ab",
-              {"a","b"}),
-        sstep("ab", "ab"),
-        gstep("abS", "E = (ab)* — compose on the given component",
-              "(ab)*", {"ab"}),
-        sstep("abS", "(ab)*"),
-        gstep("aS", "E = a* — compose on the given component", "a*",
-              {"a"}),
-        sstep("aS", "a*"),
-        gstep("u", "E = (ab)* ∪ a* — compose the two components",
-              "(ab)*|a*", {"abS","aS"}),
-        sstep("u", "(ab)*|a*"),
-    },
+    parts = guided_E,
 }
 
 parts_task{
@@ -683,26 +613,7 @@ parts_task{
         .. "locked components from the previous steps, entered via "
         .. "their initial and left via their final state; optional "
         .. "simplify slots feed the next step.",
-    parts = {
-        gstep("a", "E = a", "a", nil, "a,b,c"),
-        gstep("b", "E = b", "b", nil, "a,b,c"),
-        gstep("c", "E = c", "c", nil, "a,b,c"),
-        gstep("ab", "E = ab — compose the given components", "ab",
-              {"a","b"}, "a,b,c"),
-        sstep("ab", "ab", "a,b,c"),
-        gstep("abc", "E = abc — compose the given components", "abc",
-              {"ab","c"}, "a,b,c"),
-        sstep("abc", "abc", "a,b,c"),
-        gstep("abcS", "E = (abc)* — compose on the given component",
-              "(abc)*", {"abc"}, "a,b,c"),
-        sstep("abcS", "(abc)*", "a,b,c"),
-        gstep("aS", "E = a* — compose on the given component", "a*",
-              {"a"}, "a,b,c"),
-        sstep("aS", "a*", "a,b,c"),
-        gstep("u", "E = (abc)* ∪ a* — compose the two components",
-              "(abc)*|a*", {"abcS","aS"}, "a,b,c"),
-        sstep("u", "(abc)*|a*", "a,b,c"),
-    },
+    parts = guided_F,
 }
 
 parts_task{
@@ -711,35 +622,7 @@ parts_task{
     desc = "(extra) Guided variant for E = (ba ∪ bb)* ∪ (ab ∪ aa)* — "
         .. "locked components, entered via their initial and left via "
         .. "their final state.",
-    parts = {
-        gstep("a", "E = a", "a"),
-        gstep("b", "E = b", "b"),
-        gstep("ba", "E = ba — compose the given components", "ba",
-              {"b","a"}),
-        sstep("ba", "ba"),
-        gstep("bb", "E = bb — compose on the given component "
-              .. "(embedded twice)", "bb", {"b","b#2"}),
-        gstep("bab", "E = ba ∪ bb — compose the given components",
-              "ba|bb", {"ba","bb"}),
-        sstep("bab", "ba|bb"),
-        gstep("babS", "E = (ba ∪ bb)* — compose on the given component",
-              "(ba|bb)*", {"bab"}),
-        sstep("babS", "(ba|bb)*"),
-        gstep("ab", "E = ab — compose the given components", "ab",
-              {"a","b"}),
-        sstep("ab", "ab"),
-        gstep("aa", "E = aa — compose on the given component "
-              .. "(embedded twice)", "aa", {"a","a#2"}),
-        gstep("aba", "E = ab ∪ aa — compose the given components",
-              "ab|aa", {"ab","aa"}),
-        sstep("aba", "ab|aa"),
-        gstep("abaS", "E = (ab ∪ aa)* — compose on the given component",
-              "(ab|aa)*", {"aba"}),
-        sstep("abaS", "(ab|aa)*"),
-        gstep("u", "E = (ba ∪ bb)* ∪ (ab ∪ aa)* — compose the two "
-              .. "components", "(ba|bb)*|(ab|aa)*", {"babS","abaS"}),
-        sstep("u", "(ba|bb)*|(ab|aa)*"),
-    },
+    parts = guided_G,
 }
 
 -- ======================================================================
