@@ -1688,7 +1688,28 @@ local function render(view)
     if view.type == "parts" then
         checkbtn.textContent = "Check all"
         rulesbox_el.style.display = "none"
-        if view.given then
+        -- given material sits BESIDE the part tabs, not above them:
+        -- a single item or a mixed list goes into a sticky left
+        -- column (the transition table/M stays visible while
+        -- working); a pure multi-automaton list keeps its
+        -- side-by-side row on top (4.1's "M1 | M2")
+        local top_row = view.given and view.given[1] ~= nil
+        if top_row then
+            for _, item in ipairs(view.given) do
+                if item.kind ~= "aut" then top_row = false break end
+            end
+        end
+        local work = proof_el
+        if view.given and not top_row then
+            local split = el("div", "givensplit")
+            local col = el("div", "givencol")
+            col:appendChild(render_given(view.given))
+            local mainc = el("div", "givenmain")
+            split:appendChild(col)
+            split:appendChild(mainc)
+            proof_el:appendChild(split)
+            work = mainc
+        elseif view.given then
             proof_el:appendChild(render_given(view.given))
         end
         -- guided construction: stage id -> compose/simplify part
@@ -1725,12 +1746,12 @@ local function render(view)
                 state.part_tabs[pi] = b
                 strip:appendChild(b)
             end
-            proof_el:appendChild(strip)
+            work:appendChild(strip)
         end
         for pi,pv in ipairs(view.parts or {}) do
             local box = render_part(pv, pi)
             state.part_boxes[pi] = box
-            proof_el:appendChild(box)
+            work:appendChild(box)
         end
         boot_pending_aut()
         restore_local()
