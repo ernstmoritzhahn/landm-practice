@@ -2150,6 +2150,7 @@ parts_task{
     parts = {
         { kind="cpump", sub="D)", alphabet="a,b",
           zgen = infword_z,
+          z_fixed = "ab aab aaab … a^k b",
           lang_test = lt_infword,
           cases = {
             { desc="v or x contains ≥ 2 b's",
@@ -2702,6 +2703,7 @@ local function view_part(pd, pi)
         v.hint = pd.hint
     elseif pd.kind == "cpump" then
         v.z_hint = pd.z_hint
+        v.z_fixed = pd.z_fixed
         v.has_z = (pd.zgen == nil)
         v.cases = {}
         for i, c in ipairs(pd.cases or {}) do

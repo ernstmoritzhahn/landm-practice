@@ -1412,8 +1412,16 @@ local function render_part(pv, pi)
             rec.cells["d" .. d] = { td = rst }
         end
     elseif pv.kind == "cpump" then
+        -- CFL pumping as a proof schema (as in the slides/exam):
+        --   1) adversary gives k, we choose z ∈ L, |z| ≥ k
+        --   2) arbitrary z = uvwxy with |vwx| ≤ k, |vx| > 0 —
+        --      distinguish the cases vx can sit in, and choose a
+        --      pumping index i for each
         rec.cells, rec.cpump_i = {}, {}
         if pv.has_z then
+            box:appendChild(text("div",
+                "1)  Let k > 0 be given arbitrarily.  We choose "
+                .. "z ∈ L with |z| ≥ k:", "pstep"))
             local r = el("div", "wordrow")
             r:appendChild(text("span", "z(k) =", "wlabel"))
             local inp = mk_input(22)
@@ -1427,22 +1435,33 @@ local function render_part(pv, pi)
             box:appendChild(r)
             rec.cpump_z = inp
             rec.cells.z = { td = rst }
+        else
+            box:appendChild(text("div",
+                "1)  Let k > 0 be given arbitrarily.  The witness "
+                .. "is fixed:  z = " .. (pv.z_fixed or "z(k)")
+                .. "  ∈ L, |z| ≥ k.", "pstep"))
         end
+        box:appendChild(text("div",
+            "2)  Let z = uvwxy be an arbitrary decomposition with "
+            .. "|vwx| ≤ k and |vx| > 0.  Distinguish the cases — "
+            .. "for each, choose i ≥ 0 with uv^iwx^iy ∉ L:", "pstep"))
         for i, c in ipairs(pv.cases or {}) do
             local r = el("div", "wordrow")
             r:appendChild(text("span", "case " .. i .. " — "
-                .. c.desc, "wlabel"))
-            box:appendChild(r)
-            local r2 = el("div", "wordrow")
-            r2:appendChild(text("span", "i =", "wlabel"))
+                .. c.desc, "caselabel"))
+            r:appendChild(text("span", "i ="))
             local inp = mk_input(10)
             local rst = el("span", "st")
             inp:addEventListener("input", dirty(rst))
-            r2:appendChild(inp); r2:appendChild(rst)
-            box:appendChild(r2)
+            r:appendChild(inp); r:appendChild(rst)
+            box:appendChild(r)
             rec.cpump_i[i] = inp
             rec.cells["i" .. i] = { td = rst }
         end
+        box:appendChild(text("div",
+            "Then uv^iwx^iy ∉ L in every case — by the pumping "
+            .. "lemma for context-free languages, L cannot be "
+            .. "context-free.", "phint"))
     end
     -- the input-syntax hint for THIS part kind only, right where the
     -- input happens (a global footer used to mix them all together)
