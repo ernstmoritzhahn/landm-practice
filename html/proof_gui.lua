@@ -401,6 +401,9 @@ local function aut_cfg(v)
              alphabet = v.alphabet or "",
              stack_alphabet = v.stack_alphabet or "",
              checks   = v.checks,
+             -- practice pages let students toggle the warnings
+             -- (default on; Anubis omits the flag and stays locked)
+             checks_editable = true,
              initial  = v.initial or v.model }
 end
 
