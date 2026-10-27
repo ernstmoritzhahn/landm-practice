@@ -514,7 +514,14 @@ function M.parse(src, spec)
         return t
     end)
     if okn then return tn end
-    fail(werr)
+    -- report whichever parse got further before failing — e.g. in
+    -- f(m) the num path reaches 'm' ("not a number symbol", which the
+    -- fresh-variable mechanism recognises) while the word path stops
+    -- at 'f'
+    local nerr = (type(tn)=="table" and tn.__perr) or tostring(tn)
+    local wp = type(tw)=="table" and tw.pos or 0
+    local np = type(tn)=="table" and tn.pos or 0
+    fail(np > wp and nerr or werr)
 end
 
 function M.parse_eq(src, spec)

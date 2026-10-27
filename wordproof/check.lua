@@ -452,12 +452,34 @@ function M.check(task, input)
                 res.ih={kind="ok"}
                 local sv = detect_step_var(task, l)
                 if sv then step_var = sv; res.ih.step_var = sv end
-                if task.goal_lhs and task.goal_rhs
+                -- circularity: the IH may not rewrite a chain endpoint a
+                -- section must actually span — P(n+1) as the IH would
+                -- close the induction step in one hop.  The unstepped
+                -- goal is NOT the test: for same-variable induction
+                -- tasks the legitimate IH P(n) fires on it trivially.
+                local circ = false
+                local any_ep = false
+                for _,s in ipairs(task.sections or {}) do
+                    for _,key in ipairs{"expect_first","expect_last"} do
+                        local e = s[key]
+                        if e then
+                            any_ep = true
+                            if task.step_var and step_var ~= task.step_var then
+                                e = T.subst(e, task.step_var, T.nvar(step_var))
+                            end
+                            if fires_on(ih_fns, e) then circ = true end
+                        end
+                    end
+                end
+                if not any_ep and task.goal_lhs and task.goal_rhs
                    and (fires_on(ih_fns, task.goal_lhs)
                         or fires_on(ih_fns, task.goal_rhs)) then
+                    circ = true
+                end
+                if circ then
                     res.ok=false
                     res.ih={kind="circular",
-                            msg="the IH rewrites the claim itself — circular"}
+                            msg="the IH rewrites a chain endpoint — circular"}
                 end
             end
         end
