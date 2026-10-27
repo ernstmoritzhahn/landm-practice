@@ -223,7 +223,21 @@
             max-width: 46rem;
         }
 
+        #workrow {
+            display: flex;
+            gap: 1.8rem;
+            align-items: flex-start;
+        }
+        #workrow #proof { flex: 1 1 auto; min-width: 0; }
+
         #rulesbox {
+            flex: 0 1 auto;
+            min-width: 16rem;
+            max-width: 27rem;
+            position: sticky;
+            top: 0.6rem;
+            max-height: calc(100vh - 1.6rem);
+            overflow-y: auto;
             background: var(--btn-bg);
             border: 1px solid var(--hairline);
             padding: 0.8rem 1.2rem;
@@ -409,6 +423,7 @@
             font-size: 0.8rem;
             margin-top: 0.6rem;
         }
+        .hint code { color: #555; }
 
     </style>
 
@@ -564,9 +579,11 @@
         <div id="goal"></div>
         <div id="variant"></div>
     </div>
-    <div id="rulesbox"></div>
     <div id="ihrow"></div>
-    <div id="proof"></div>
+    <div id="workrow">
+        <div id="proof"></div>
+        <div id="rulesbox"></div>
+    </div>
 
     <div id="checkbar">
         <button id="check">Check proof</button>

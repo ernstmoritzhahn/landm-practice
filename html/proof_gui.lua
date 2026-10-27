@@ -327,7 +327,7 @@ local function render_regexp_block(view)
     r:appendChild(inp)
     r:appendChild(st)
     box:appendChild(r)
-    box:appendChild(text("div", REGEXP_SYNTAX_HINT, "hint"))
+    box:appendChild(el("div", "hint", REGEXP_SYNTAX_HINT))
     state.regexp_input, state.regexp_st = inp, st
     return box
 end
@@ -939,7 +939,7 @@ local function render_part(pv, pi)
         rec.app = mount_aut(host, aut_cfg(pv), false, pi)
         rec.aut_type = pv.aut_type
         local ah = aut_hint(pv.aut_type)
-        if ah then box:appendChild(text("div", ah, "hint")) end
+        if ah then box:appendChild(el("div", "hint", ah)) end
         -- mini views of the relevant given machines, next to the
         -- editor, plus an "insert" button that copies one in
         local gv = state.view and state.view.given
@@ -1077,7 +1077,7 @@ local function render_part(pv, pi)
             local inp = mk_input("expr", 30, dirty(rst), REGEXP_REPLACE)
             r:appendChild(inp); r:appendChild(rst)
             box:appendChild(r)
-            box:appendChild(text("div", REGEXP_SYNTAX_HINT, "hint"))
+            box:appendChild(el("div", "hint", REGEXP_SYNTAX_HINT))
             rec.re, rec.re_st = inp, rst
         end
     elseif pv.kind == "trace" then
@@ -1386,7 +1386,7 @@ local function render_part(pv, pi)
     -- the input-syntax hint for THIS part kind only, right where the
     -- input happens (a global footer used to mix them all together)
     local ph = PART_HINT[pv.kind]
-    if ph then box:appendChild(text("div", ph, "hint")) end
+    if ph then box:appendChild(el("div", "hint", ph)) end
     return box
 end
 
@@ -1799,7 +1799,7 @@ local function render(view)
     end
     -- term-input syntax applies to every hole below — it sits at the
     -- top of the work area, not as a detached footer line
-    proof_el:appendChild(text("div", PROOF_SYNTAX_HINT, "hint"))
+    proof_el:appendChild(el("div", "hint", PROOF_SYNTAX_HINT))
     if view.free then
         ihrow_el:appendChild(text("span",
             "Induction hypothesis (IH):  ", "seclabel"))
