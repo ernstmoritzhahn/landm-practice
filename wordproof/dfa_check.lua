@@ -161,7 +161,12 @@ local function model_to_dfa(m, expect_type)
             end
         end
     end
-    -- totality (DFA only)
+    -- totality (DFA only): missing transitions are NOTES, not
+    -- problems.  A partial diagram still defines a language (a
+    -- missing transition rejects) — the worksheets' model
+    -- solutions draw partial machines too, so the language check
+    -- below runs and the gap is reported as a hint, not a fail.
+    local missing = {}
     if not is_nfa_type(expect_type) then
         local syms = {}
         for s, _ in pairs(dfa:get_symbols() or {}) do
@@ -170,13 +175,12 @@ local function model_to_dfa(m, expect_type)
         for _, nm in ipairs(names) do
             for _, sym in ipairs(syms) do
                 if not seen[nm .. "\0" .. sym] then
-                    problems[#problems + 1] = "missing " .. sym
-                        .. "-transition from " .. nm
+                    missing[#missing + 1] = nm .. "(" .. sym .. ")"
                 end
             end
         end
     end
-    return dfa, problems
+    return dfa, problems, missing
 end
 
 -- decoded editor model -> nfa/nfa-lambda, problems | nil, problems
@@ -546,11 +550,11 @@ function M.check_aut(part, model_json, expect_type)
         return require("wordproof.tm_check")
             .check_tm_model(part, model_json)
     end
-    local aut, problems
+    local aut, problems, missing
     if is_nfa_type(part.aut_type) then
         aut, problems = model_to_nfa(m, part.aut_type)
     else
-        aut, problems = model_to_dfa(m, part.aut_type)
+        aut, problems, missing = model_to_dfa(m, part.aut_type)
     end
     if not aut then
         return { ok=false, kind="fail", msg=table.concat(problems,"; ") }
@@ -558,6 +562,20 @@ function M.check_aut(part, model_json, expect_type)
     if #problems > 0 then
         return { ok=false, kind="fail",
                  msg=table.concat(problems, ";  ") }
+    end
+    -- a partial diagram is a hint, not a failure — the language
+    -- semantics (missing transition = reject) is checked normally
+    local note
+    if missing and #missing > 0 then
+        local bits = {}
+        for i = 1, math.min(3, #missing) do
+            bits[#bits + 1] = missing[i]
+        end
+        note = "the diagram is not total — no transition for "
+            .. table.concat(bits, ", ")
+            .. (#missing > 3 and ", …" or "")
+            .. "; a missing transition rejects, so a complete DFA "
+            .. "would route them to a non-accepting sink"
     end
     local ref, is_tuple = ref_any(part.reference)
     if part.complement then ref = complemented(ref) end
@@ -569,7 +587,8 @@ function M.check_aut(part, model_json, expect_type)
         if cex_r then parts[#parts+1] = "'" .. word_or_lam(cex_r)
             .. "' is in L but not accepted" end
         return { ok=false, kind="mismatch",
-                 msg=table.concat(parts, ";  ") }
+                 msg=table.concat(parts, ";  ")
+                    .. (note and "  (" .. note .. ")" or "") }
     end
     if part.structure then
         -- the exercise grades a CONSTRUCTION (projection, product):
@@ -581,10 +600,10 @@ function M.check_aut(part, model_json, expect_type)
                      msg="accepts the right language, but the "
                       .. "structure is not the construction: " .. why }
         end
-        return { ok=true }
+        return { ok=true, msg=note }
     end
     if not is_tuple or is_nfa_type(part.aut_type) then
-        return { ok=true }
+        return { ok=true, msg=note }
     end
     local n_student, want = 0, part.exact_states
     for _ in pairs(aut:get_states()) do n_student = n_student + 1 end
@@ -606,15 +625,17 @@ function M.check_aut(part, model_json, expect_type)
                    .. "smaller than the reference (yours has "
                    .. n_student .. " states, it has " .. want .. ")"
             end
+            if note then msg = msg .. ";  " .. note end
             return { ok=true, kind="warn", msg=msg }
         end
     elseif n_student ~= want then
         return { ok=false, kind="warn",
                  msg="accepts the right language, but it must have "
                   .. "exactly " .. want .. " states — yours has "
-                  .. n_student }
+                  .. n_student
+                  .. (note and ";  " .. note or "") }
     end
-    return { ok=true }
+    return { ok=true, msg=note }
 end
 
 -- part.check == "compose" (guided construction): the student wires
