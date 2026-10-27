@@ -328,16 +328,44 @@ local pending_aut = {}      -- editor boots only once the host is in the DOM
 local send_check            -- forward decl: per-part buttons call it
 local paint_st              -- forward decl: send_check marks pending
 
+local aut_host = {}   -- app_id -> host element id, for height fitting
+
 local function mount_aut(host, cfg_tbl, readonly, pi)
     -- ids, not element handles, cross the Lua<->JS bridge
     aut_id_seq = aut_id_seq + 1
     local host_id = "authost-" .. aut_id_seq
     local app_id  = "autapp-" .. aut_id_seq
     host.id = host_id
+    aut_host[app_id] = host_id
     pending_aut[#pending_aut + 1] =
         { host_id = host_id, app_id = app_id, pi = pi,
           cfg = json.encode(cfg_tbl), readonly = readonly }
     return app_id
+end
+
+-- size the editor host to its content: lowest state + room for
+-- loops/labels below, clamped to a workable range
+local function fit_aut_height(host_id, model)
+    local host = host_id and get(host_id)
+    if not (host and type(model) == "table"
+            and type(model.states) == "table") then return end
+    local ymax = 0
+    for _, s in ipairs(model.states) do
+        local y = tonumber(s.y) or 0
+        if y > ymax then ymax = y end
+    end
+    if ymax <= 0 then return end
+    local h = math.floor(ymax + 150 + 0.5)
+    if h < 300 then h = 300 elseif h > 620 then h = 620 end
+    host.style.height = tostring(h) .. "px"
+end
+
+local function fit_aut_app(app_id)
+    local s = app_id and landm_call("aut_state", app_id)
+    if type(s) == "string" and s ~= "" then
+        local ok, m = pcall(json.decode, s)
+        if ok then fit_aut_height(aut_host[app_id], m) end
+    end
 end
 
 local function boot_pending_aut()
@@ -347,11 +375,20 @@ local function boot_pending_aut()
             landm_call("aut_readonly", p.app_id, true)
         else
             local pi = p.pi
-            landm_call("aut_on_edit", p.app_id, function()
+            local app_id = p.app_id
+            landm_call("aut_on_edit", app_id, function()
+                fit_aut_app(app_id)
                 dirty(nil)()
                 if pi then refresh_dependents_of(pi) end
             end)
         end
+        -- initial fit: the seeded model is in cfg, the app may not
+        -- answer aut_state yet while wasm is still booting
+        local ok, cfg = pcall(json.decode, p.cfg)
+        if ok and cfg then
+            fit_aut_height(p.host_id, cfg.initial or cfg.model)
+        end
+        fit_aut_app(p.app_id)
     end
     pending_aut = {}
 end
@@ -541,6 +578,7 @@ local function insert_seed(rec, spi)
         end
     end
     landm_call("aut_load", rec.app, json.encode(cm))
+    fit_aut_app(rec.app)
 end
 
 -- ---------- guided construction: locked components + simplify ----------
@@ -793,6 +831,7 @@ local function refresh_components(pi)
         if sm then upsert_component(m, tag, sm) end
     end
     landm_call("aut_load", p.app, json.encode(m))
+    fit_aut_app(p.app)
 end
 
 -- auto-sync: an edit in a part that DEFINES a stage (its compose
@@ -854,6 +893,7 @@ local function takeover_simplify(pi)
         t.locked, t.seed = nil, nil
     end
     landm_call("aut_load", p.app, json.encode(m))
+    fit_aut_app(p.app)
     dirty(nil)()
     -- aut_load is dirty-suppressed, so the new stage content would
     -- not propagate by itself — refresh dependent parts explicitly
@@ -945,6 +985,7 @@ local function render_part(pv, pi)
                 btn:addEventListener("click", function()
                     landm_call("aut_load", rec.app,
                                json.encode(g.model))
+                    fit_aut_app(rec.app)
                     dirty(st)()
                 end)
                 lab:insertBefore(btn, chk)
@@ -983,6 +1024,7 @@ local function render_part(pv, pi)
                         end
                         landm_call("aut_load", rec.app,
                                    json.encode(m))
+                        fit_aut_app(rec.app)
                         dirty(st)()
                     end)
                     -- sits in the part's label row, just before the
@@ -1496,6 +1538,7 @@ local function restore_local()
                     if p.app and type(pr.aut) == "string"
                        and pr.aut ~= "" then
                         landm_call("aut_load", p.app, pr.aut)
+                        fit_aut_app(p.app)
                         p.restored = true
                     end
                     if p.re and pr.re then p.re.value = pr.re end
@@ -1763,6 +1806,9 @@ local function render(view)
         -- edges retarget onto renamed successors)
         if #appids > 0 then
             landm_call("aut_when_ready", json.encode(appids), function()
+                for _, aid in ipairs(appids) do
+                    fit_aut_app(aid)
+                end
                 for pi,pv in ipairs(view.parts or {}) do
                     if pv.seeds_locked and #pv.seeds_locked > 0 then
                         refresh_components(pi)
