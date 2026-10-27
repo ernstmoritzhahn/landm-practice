@@ -914,10 +914,26 @@ local function pair_enum(states)
     end
     return out
 end
+-- muted placeholder lines inside the proof-schema steps until the
+-- worker has enumerated the legal splits
+local function pump_idle(p)
+    if p.genbox then
+        p.genbox:appendChild(text("div",
+            "(press 'decompose' — the general form of every legal "
+            .. "split appears here)", "phint"))
+    end
+    if p.splitbox then
+        p.splitbox:appendChild(text("div",
+            "(press 'decompose' to enumerate every legal split "
+            .. "at a sample k)", "phint"))
+    end
+end
 local function clear_pump_rows(p)
+    if p.genbox then clear(p.genbox) end
     if p.splitbox then clear(p.splitbox) end
     p.i_inps, p.row_st = {}, {}
     p.gen, p.gen_st, p.last_k = nil, nil, nil
+    pump_idle(p)
 end
 local function request_splits(pi)
     local p = state.parts[pi]
@@ -1199,6 +1215,16 @@ local function render_part(pv, pi)
             rec.cells["sel_" .. slot.key] = { td = rst }
         end
     elseif pv.kind == "pumping" then
+        -- the fill-in slots sit inside the schema of a pumping
+        -- proof (as in the slides/exam):
+        --   1) adversary gives k, we choose z(k) ∈ L, |z| ≥ k
+        --   2) for arbitrary u,v,w with z(k)=uvw, |uv|≤k, |v|>0
+        --      every split has the general form u,v,w (patterns)
+        --   3) we choose i — concretely for each listed split and
+        --      symbolically — so that uv^iw ∉ L
+        box:appendChild(text("div",
+            "1)  Let k > 0 be given arbitrarily.  We choose "
+            .. "z ∈ L with |z| ≥ k:", "pstep"))
         local r = el("div", "wordrow")
         r:appendChild(text("span", "z(k) =", "wlabel"))
         local zst = el("span", "st")
@@ -1226,11 +1252,25 @@ local function render_part(pv, pi)
         r:appendChild(ksel); r:appendChild(zst)
         rec.ksel = ksel
         box:appendChild(r)
+        box:appendChild(text("div",
+            "2)  Let u, v, w be given arbitrarily, such that "
+            .. "z(k) = uvw, |uv| ≤ k and |v| > 0.  Then every legal "
+            .. "split has the form:", "pstep"))
+        local gb = el("div")
+        box:appendChild(gb)
+        box:appendChild(text("div",
+            "3)  We choose a pumping index i that beats EVERY such "
+            .. "split:", "pstep"))
         local sp = el("div")
         box:appendChild(sp)
-        rec.z, rec.z_st, rec.splitbox = zinp, zst, sp
+        box:appendChild(text("div",
+            "Then uv^i w ∉ L — the pumping property fails, hence "
+            .. "L cannot be regular.", "phint"))
+        rec.z, rec.z_st = zinp, zst
+        rec.genbox, rec.splitbox = gb, sp
         rec.i_inps, rec.row_st = {}, {}
         rec.cells = { z = { td = zst } }
+        pump_idle(rec)
     elseif pv.kind == "min_table" then
         local states = pv.states or {}
         rec.pairs = pair_enum(states)
@@ -2047,20 +2087,58 @@ paint_st = function(st, kind, extra)
     if extra then st:appendChild(text("span", "  " .. extra)) end
 end
 
--- worker answered a "pump_splits" request: build the i-table
+-- worker answered a "pump_splits" request: fill the schema steps —
+-- the general u,v,w form lands in genbox (step 2), the sample-k
+-- splits and the symbolic i in splitbox (step 3)
 local function render_splits(pi, res)
     local p = state.parts[pi]
     if not (p and p.splitbox) then return end
+    if p.genbox then clear(p.genbox) end
     clear(p.splitbox)
     p.i_inps, p.row_st = {}, {}
     if res.err then
         paint_st(p.z_st, "fail", res.err)
+        pump_idle(p)
         return
     end
     paint_st(p.z_st, "ok")
+    -- step 2: the general form every legal split has — only
+    -- expressible when the first block of z(k) dominates the
+    -- first-k window (the didactic trick of pumping proofs); then
+    -- every legal split has u = sym^p, v = sym^q for some p ≥ 0,
+    -- q ≥ 1, p+q ≤ k.  The student writes u, v, w as patterns.
+    local gen = res.gen or {}
+    local pend = p.pending_gen or {}
+    p.pending_gen = nil
+    local gst = el("span", "st")
+    local function grow(host, lab, ph, key)
+        local gr = el("div", "wordrow")
+        gr:appendChild(text("span", lab, "wlabel"))
+        local inp = mk_input("expr", 20, dirty(gst))
+        inp.placeholder = ph
+        if pend[key] then inp.value = pend[key] end
+        gr:appendChild(inp)
+        host:appendChild(gr)
+        return inp
+    end
+    local u_inp, v_inp, w_inp, i_inp
+    if gen.sym and p.genbox then
+        p.genbox:appendChild(text("div",
+            "u = " .. gen.sym .. "^p,  v = " .. gen.sym .. "^q  "
+            .. "for some p ≥ 0, q ≥ 1 with p+q ≤ k — write the "
+            .. "patterns:", "wlabel"))
+        u_inp = grow(p.genbox, "u =", "e.g. a^p", "u")
+        v_inp = grow(p.genbox, "v =", "e.g. a^q", "v")
+        w_inp = grow(p.genbox, "w =", "e.g. a^{k-p-q}b^k", "w")
+    elseif gen.err and p.genbox then
+        p.genbox:appendChild(text("div", gen.err, "wlabel"))
+    end
+    -- step 3: each concrete legal split at the sample k needs an
+    -- i; where a closed form exists the symbolic i covers all k
+    p.last_k = res.k
     p.splitbox:appendChild(text("div",
-        "z(" .. tostring(res.k) .. ") = " .. res.word ..
-        "  —  pick i ≠ 1 for every decomposition:", "wlabel"))
+        "for k = " .. tostring(res.k) .. ",  z(k) = " .. res.word ..
+        "  —  pick i ≠ 1 for every legal split:", "wlabel"))
     local function lam(s) return s == "" and "λ" or s end
     for ri, s in ipairs(res.splits or {}) do
         local r = el("div", "wordrow")
@@ -2082,43 +2160,19 @@ local function render_splits(pi, res)
         p.splitbox:appendChild(r)
         p.i_inps[ri], p.row_st[ri] = inp, rst
     end
-    -- the general decomposition (all k): only available when the
-    -- first block of z(k) dominates the first-k window — then every
-    -- legal split has v = sym^q for some 1 ≤ q ≤ k.  The student
-    -- writes u, v, w themselves as patterns in the parameters
-    -- (k, p, q).
-    p.last_k = res.k
-    local gen = res.gen or {}
     if gen.sym then
         p.splitbox:appendChild(text("div",
-            "general decomposition (all k):  write u, v, w as "
-            .. "patterns in the parameters — every legal split has "
-            .. "u = " .. gen.sym .. "^p, v = " .. gen.sym .. "^q "
-            .. "with p ≥ 0, q ≥ 1, p+q ≤ k.",
+            "and for all k — one i that beats every legal split "
+            .. "(a number or an expression in the parameters):",
             "wlabel"))
-        local pend = p.pending_gen or {}
-        p.pending_gen = nil
-        local gst = el("span", "st")
-        local function grow(lab, ph, key)
-            local gr = el("div", "wordrow")
-            gr:appendChild(text("span", lab, "wlabel"))
-            local inp = mk_input("expr", 20, dirty(gst))
-            inp.placeholder = ph
-            if pend[key] then inp.value = pend[key] end
-            gr:appendChild(inp)
-            p.splitbox:appendChild(gr)
-            return inp
-        end
-        local u_inp = grow("u =", "e.g. a^p", "u")
-        local v_inp = grow("v =", "e.g. a^q", "v")
-        local w_inp = grow("w =", "e.g. a^{k-p-q}b^k", "w")
-        local i_inp = grow("i(k,q) =", "e.g. 2, q+1, k+1", "i")
+        i_inp = grow(p.splitbox, "i =", "e.g. 2, q+1, k+1", "i")
         p.splitbox:appendChild(gst)
         p.gen = { u = u_inp, v = v_inp, w = w_inp, i = i_inp }
         p.gen_st = gst
     elseif gen.err then
         p.splitbox:appendChild(text("div",
-            "general decomposition: " .. gen.err, "wlabel"))
+            "(no closed form — the per-split i above is what gets "
+            .. "checked)", "phint"))
         p.gen = nil
     else
         p.gen = nil
