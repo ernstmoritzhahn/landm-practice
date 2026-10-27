@@ -29,6 +29,7 @@ local databtn, datadlg = get("databtn"), get("datadlg")
 -- so every hint only mentions the syntax that widget actually accepts
 local PROOF_SYNTAX_HINT =
     'input: <code>\\lambda</code> → λ ·\n' ..
+    '    <code>\\emptyset</code> → ∅ ·\n' ..
     '    concatenation = space or <code>·</code> ·\n' ..
     '    <code>w^R</code>, <code>w^(k+1)</code>, <code>w^k</code> ·\n' ..
     '    sum: <code>sum(i,0,n;k^i)</code> · <code>f(n)</code>'
@@ -37,17 +38,18 @@ local REGEXP_SYNTAX_HINT =
     ' or <code>|</code> or <code>U</code> ·' ..
     ' concatenation = juxtaposition ·' ..
     ' postfixes <code>*</code> <code>+</code> <code>^n</code> ·' ..
-    ' <code>∅</code> = empty language · <code>{ }</code> groups'
+    ' <code>\\emptyset</code> → ∅ = empty language ·' ..
+    ' <code>{ }</code> groups'
 local PART_HINT = {
     trace   = 'state sequence, e.g. <code>q0 q0 q1 q2</code>' ..
               ' (start state optional)',
     regexp  = REGEXP_SYNTAX_HINT,
     stable  = 'state sets: <code>{q0,q2}</code> or <code>q0,q2</code>' ..
-              ' · <code>∅</code> = empty set',
+              ' · <code>\\emptyset</code> → ∅ = empty set',
     closure = 'state set: <code>{q0,q2}</code> ·' ..
-              ' <code>∅</code> = empty set',
+              ' <code>\\emptyset</code> → ∅ = empty set',
     cyk     = 'cells: variable sets, e.g. <code>S,E</code> ·' ..
-              ' <code>-</code> = empty',
+              ' <code>-</code> or <code>\\emptyset</code> → ∅ = empty',
     min_table = 'equivalence classes as brace sets:' ..
               ' <code>{q0,q3} {q1}</code>',
     pumping = 'powered word: <code>a^k</code>, <code>(ab)^k</code>,' ..
