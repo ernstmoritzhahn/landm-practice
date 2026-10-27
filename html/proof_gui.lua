@@ -1008,7 +1008,10 @@ local function render_part(pv, pi)
                                    json.encode(m))
                         dirty(st)()
                     end)
-                    sidehost():appendChild(btn)
+                    -- sits in the part's label row, just before the
+                    -- Check button — the side column is for given
+                    -- machine previews, not actions
+                    lab:insertBefore(btn, chk)
                 end
             end
         end
