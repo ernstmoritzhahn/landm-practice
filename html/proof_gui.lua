@@ -72,29 +72,10 @@ local PART_HINT = {
               ' <code>-&gt;</code>/<code>=&gt;</code> type as ⇒',
     tree    = 'parenthesised, e.g. <code>S(a b S(…) c c)</code>',
 }
--- transition-label syntax inside the automaton editor, per machine type
-local AUT_HINT = {
-    dfa   = 'transition labels: comma list, e.g. <code>a,b</code>',
-    nfa   = 'transition labels: comma list, e.g. <code>a,b</code>',
-    ["nfa-eps"] = 'transition labels: comma list, e.g.' ..
-              ' <code>a,b</code> · <code>\\lambda</code> → λ = ε-move',
-    pda   = 'transition labels: <code>input pop/push</code>, e.g.' ..
-              ' <code>a A/AA</code> or <code>λ Z/λ</code> · several' ..
-              ' on one edge via <code>;</code> or <code>,</code> ·' ..
-              ' λ = no read/pop/push · a push may be a string',
-    tm    = 'transition labels: <code>read write move</code> with' ..
-              ' move ∈ {L,R,S}, e.g. <code>a A R</code> ·' ..
-              ' <code>⊔</code> = blank · <code>~</code> = keep symbol',
-}
-local function aut_hint(t)
-    local ntapes = t and t:match("^tm%-(%d+)$")
-    if ntapes then
-        return 'transition labels: one <code>read write move</code>' ..
-               ' clause per tape, separated by <code>|</code> — ' ..
-               ntapes .. ' tapes, e.g. <code>a a R | ⊔ X S</code>'
-    end
-    return AUT_HINT[t or "dfa"]
-end
+-- transition-label syntax lives INSIDE the automaton component now
+-- (the property panel shows it under the label field while a
+-- transition is selected — automata-ime/ui/aut/panel.lua
+-- LABEL_HINTS)
 
 local state = {
     sheets = nil,          -- tab structure from the worker
@@ -951,8 +932,6 @@ local function render_part(pv, pi)
         row:appendChild(host)
         rec.app = mount_aut(host, aut_cfg(pv), false, pi)
         rec.aut_type = pv.aut_type
-        local ah = aut_hint(pv.aut_type)
-        if ah then box:appendChild(el("div", "hint", ah)) end
         -- an "insert" button that copies a given machine in — the
         -- task-level givens stay visible above, so no side-column
         -- preview; the button lives in the label row beside Check
