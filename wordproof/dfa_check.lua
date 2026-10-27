@@ -68,8 +68,8 @@ local function eps_type(t)
     return t == "nfa-eps" or t == "nfa-lambda"
 end
 
--- decoded editor model -> dfa, problems | nil, problems (unusable)
-local function model_to_dfa(m, expect_type)
+-- decoded editor model -> dfa, problems, missing | nil, problems
+local function model_to_dfa(m, expect_type, partial_ok)
     local problems = {}
     if type(m) ~= "table" or not m.states or #m.states == 0 then
         return nil, {"no automaton drawn yet"}
@@ -161,11 +161,12 @@ local function model_to_dfa(m, expect_type)
             end
         end
     end
-    -- totality (DFA only): missing transitions are NOTES, not
-    -- problems.  A partial diagram still defines a language (a
-    -- missing transition rejects) — the worksheets' model
-    -- solutions draw partial machines too, so the language check
-    -- below runs and the gap is reported as a hint, not a fail.
+    -- totality (DFA only): every model DFA on the sheets is total
+    -- and an incomplete one loses exam points, so missing
+    -- transitions are problems by default.  Tasks that follow the
+    -- worksheets' rare partial-machine convention set partial_ok;
+    -- then the gaps come back as notes instead and the language
+    -- check judges the machine as drawn (missing = reject).
     local missing = {}
     if not is_nfa_type(expect_type) then
         local syms = {}
@@ -175,7 +176,12 @@ local function model_to_dfa(m, expect_type)
         for _, nm in ipairs(names) do
             for _, sym in ipairs(syms) do
                 if not seen[nm .. "\0" .. sym] then
-                    missing[#missing + 1] = nm .. "(" .. sym .. ")"
+                    if partial_ok then
+                        missing[#missing + 1] = nm .. "(" .. sym .. ")"
+                    else
+                        problems[#problems + 1] = "missing " .. sym
+                            .. "-transition from " .. nm
+                    end
                 end
             end
         end
@@ -554,7 +560,8 @@ function M.check_aut(part, model_json, expect_type)
     if is_nfa_type(part.aut_type) then
         aut, problems = model_to_nfa(m, part.aut_type)
     else
-        aut, problems, missing = model_to_dfa(m, part.aut_type)
+        aut, problems, missing =
+            model_to_dfa(m, part.aut_type, part.partial_ok)
     end
     if not aut then
         return { ok=false, kind="fail", msg=table.concat(problems,"; ") }
