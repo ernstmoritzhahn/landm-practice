@@ -95,6 +95,8 @@ local function scan_blocks(s, check, allow_zero)
         :gsub("\xe2\x88\x92", "-")   -- −  minus sign
         :gsub("\xe2\x80\x93", "-")   -- –  en dash
         :gsub("\xe2\x80\x94", "-")   -- —  em dash
+        :gsub("\xc2\xb7", " ")       -- ·  middle dot = block sep
+        :gsub("\xe2\x88\x99", " ")   -- ∙  bullet operator
     local blocks, i, n = {}, 1, #s
     while i <= n do
         local c = s:sub(i, i)
