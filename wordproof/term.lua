@@ -30,6 +30,9 @@ function M.fapp(fn,arg) return {k="fapp",fn=fn,arg=arg} end
 -- al-letter alphabet; rel is "≤" or "=".  al/fn name the alphabet-size
 -- variable and the counting function the task defines (spec.card).
 function M.card(v,rel,hi,al,fn) return {k="card",v=v,rel=rel,hi=hi,al=al,fn=fn} end
+-- #{w1, w2, …} — cardinality of an explicitly enumerated word set;
+-- sets deduplicate, so #{a,a} is 1 and #{w,u} stays symbolic.
+function M.cardset(elts) return {k="card", elts=elts} end
 
 local WORDK = {lam=1,lit=1,lvar=1,var=1,cat=1,rev=1,pow=1}
 local NUMK  = {num=1,nvar=1,nadd=1,nmul=1,npow=1,nsum=1,fapp=1,card=1}
@@ -70,7 +73,13 @@ local function shownum(e, parent_prec)
         return s
     elseif e.k=="fapp" then s=e.fn.."("..shownum(e.arg)..")"
     elseif e.k=="card" then
-        s="#{"..e.v.." : |"..e.v.."| "..e.rel.." "..shownum(e.hi).."}"
+        if e.elts then
+            local p={}
+            for _,x in ipairs(e.elts) do p[#p+1]=show(x) end
+            s="#{"..table.concat(p,", ").."}"
+        else
+            s="#{"..e.v.." : |"..e.v.."| "..e.rel.." "..shownum(e.hi).."}"
+        end
     elseif e.k=="hole" then s="□"
     else s="?" end
     if parent_prec and parent_prec>8 then s="("..s..")" end
@@ -148,6 +157,24 @@ local function t_eq(a,b)
     if a.k=="nsum" then return a.v==b.v and t_eq(a.lo,b.lo) and t_eq(a.hi,b.hi) and t_eq(a.body,b.body) end
     if a.k=="fapp" then return a.fn==b.fn and t_eq(a.arg,b.arg) end
     if a.k=="card" then
+        if a.elts or b.elts then
+            -- enumerated sets are unordered: compare as multisets —
+            -- every element of a must have a t_eq twin in b
+            if not (a.elts and b.elts) or #a.elts~=#b.elts then
+                return false
+            end
+            local used = {}
+            for _,x in ipairs(a.elts) do
+                local hit = false
+                for j,y in ipairs(b.elts) do
+                    if not used[j] and t_eq(x,y) then
+                        used[j]=true; hit=true; break
+                    end
+                end
+                if not hit then return false end
+            end
+            return true
+        end
         -- the bound word variable is a binder: alpha-equivalent
         return a.rel==b.rel and a.al==b.al and a.fn==b.fn
             and t_eq(a.hi,b.hi)
@@ -177,6 +204,11 @@ local function subst(t, name, repl)
     end
     if t.k=="fapp" then return M.fapp(t.fn, subst(t.arg,name,repl)) end
     if t.k=="card" then
+        if t.elts then
+            local p={}
+            for _,x in ipairs(t.elts) do p[#p+1]=subst(x,name,repl) end
+            return M.cardset(p)
+        end
         if t.v==name then return t end   -- binder shadows
         return M.card(t.v, t.rel, subst(t.hi,name,repl), t.al, t.fn)
     end
@@ -203,6 +235,13 @@ function M.fill_hole(t, hole)
     end
     if t.k=="fapp" then return M.fapp(t.fn, M.fill_hole(t.arg,hole)) end
     if t.k=="card" then
+        if t.elts then
+            local p={}
+            for _,x in ipairs(t.elts) do
+                p[#p+1]=M.fill_hole(x,hole)
+            end
+            return M.cardset(p)
+        end
         return M.card(t.v, t.rel, M.fill_hole(t.hi,hole), t.al, t.fn)
     end
     return t
@@ -304,7 +343,8 @@ function M.parse(src, spec)
         local parts = {}
         while true do
             local c = peek()
-            if c=="" or c==")" or c=="=" or c=="," or c==";" then break end
+            if c=="" or c==")" or c=="=" or c=="," or c==";"
+               or c=="}" then break end
             if c=="+" then break end
             if c=="*" then i=i+1  -- · as explicit concat operator
             else parts[#parts+1] = parse_wpost() end
@@ -329,36 +369,57 @@ function M.parse(src, spec)
         end
         if c=="#" then
             -- #{v : |v| ≤ nexpr} — cardinality of a length-bounded
-            -- word set; only where the task declares spec.card
+            -- word set, or #{w1, w2, …} — of an enumerated one; only
+            -- where the task declares spec.card
             if not spec.card then
                 fail("set cardinality #{…} is not defined here")
             end
             i=i+1
             if peek()~="{" then fail("expected { after #") end i=i+1
-            local bv=peek()
-            if not bv:match("%a") then
-                fail("expected a variable after #{")
+            -- "<letter> :" ahead -> the set-builder form; anything
+            -- else -> an enumerated word set
+            local builder = false
+            if peek():match("%a") then
+                local save = i
+                i=i+1; skipws()
+                builder = (peek()==":")
+                i = save
             end
-            i=i+1
-            if peek()~=":" then fail("expected : in #{…}") end i=i+1
-            if peek()~="|" then fail("expected |"..bv.."| in #{…}") end
-            i=i+1
-            if peek()~=bv then fail("expected |"..bv.."| in #{…}") end
-            i=i+1
-            if peek()~="|" then fail("expected closing | in #{…}") end
-            i=i+1
-            local relc=peek()
-            local rel
-            if relc=="\3" then rel="≤"
-            elseif relc=="=" then rel="="
-            else fail("expected ≤ or = in #{…}") end
-            i=i+1
-            local hi=parse_nexpr()
-            if peek()~="}" then
-                fail("expected } to close #{…}")
+            if builder then
+                local bv=peek(); i=i+1
+                if peek()~=":" then fail("expected : in #{…}") end i=i+1
+                if peek()~="|" then fail("expected |"..bv.."| in #{…}") end
+                i=i+1
+                if peek()~=bv then fail("expected |"..bv.."| in #{…}") end
+                i=i+1
+                if peek()~="|" then fail("expected closing | in #{…}") end
+                i=i+1
+                local relc=peek()
+                local rel
+                if relc=="\3" then rel="≤"
+                elseif relc=="=" then rel="="
+                else fail("expected ≤ or = in #{…}") end
+                i=i+1
+                local hi=parse_nexpr()
+                if peek()~="}" then
+                    fail("expected } to close #{…}")
+                end
+                i=i+1
+                return M.card(bv, rel, hi, spec.card.al, spec.card.fn)
             end
-            i=i+1
-            return M.card(bv, rel, hi, spec.card.al, spec.card.fn)
+            local elts = {}
+            while true do
+                local c2 = peek()
+                if c2=="}" or c2=="" or c2=="," then
+                    fail("expected a word in #{…}")
+                end
+                elts[#elts+1] = parse_word()
+                local sep = peek()
+                if sep=="}" then i=i+1; break end
+                if sep~="," then fail("expected , or } in #{…}") end
+                i=i+1
+            end
+            return M.cardset(elts)
         end
         if c=="\2" then i=i+1; goto do_sum end
         if c:match("%a") then
@@ -521,6 +582,14 @@ local function eval(t, env)
         return env.f(t.fn, eval(t.arg,env), env.nums)
     end
     if t.k=="card" then
+        if t.elts then
+            -- an enumerated set: count distinct evaluated words
+            local seen = {}
+            for _,x in ipairs(t.elts) do seen[eval(x,env)]=true end
+            local c = 0
+            for _ in pairs(seen) do c=c+1 end
+            return c
+        end
         local m = eval(t.hi, env)
         if t.rel=="=" then
             -- #{v : |v| = m} over the al-letter alphabet: al^m words
@@ -603,6 +672,23 @@ local function ambient(t, no_merge)
         if t.b.k=="npow" then return M.npow(t.b.b, M.nmul{t.b.e,t.e}) end
     end
     if t.k=="card" then
+        if t.elts then
+            -- count the enumerated set's DISTINCT words: a singleton
+            -- is 1 unconditionally; all-ground elements evaluate to
+            -- strings and deduplicate; anything containing variables
+            -- stays symbolic (w and u may coincide)
+            if #t.elts == 1 then return M.num(1) end
+            local seen = {}
+            for _,x in ipairs(t.elts) do
+                local ok,s = pcall(eval, x,
+                                   {words={}, letters={}, nums={}})
+                if not ok then return nil end
+                seen[s] = true
+            end
+            local c = 0
+            for _ in pairs(seen) do c=c+1 end
+            return M.num(c)
+        end
         -- #{v : |v| ≤ E} IS f(E) — the task's own definition, so the
         -- notations stay interchangeable; numeral bounds evaluate,
         -- #{v : |v| = E} = al^E unconditionally
@@ -696,7 +782,20 @@ nf = function(t, rs, no_merge, d)
         end
     elseif t.k=="fapp" then t=M.fapp(t.fn, nf(t.arg,rs,false,d+1))
     elseif t.k=="card" then
-        t=M.card(t.v, t.rel, nf(t.hi,rs,false,d+1), t.al, t.fn)
+        if t.elts then
+            local es = {}
+            for _,x in ipairs(t.elts) do es[#es+1]=nf(x,rs,false,d+1) end
+            table.sort(es, function(a,b) return show(a)<show(b) end)
+            local ded = {}
+            for _,x in ipairs(es) do
+                if not (#ded>0 and t_eq(ded[#ded], x)) then
+                    ded[#ded+1]=x
+                end
+            end
+            t=M.cardset(ded)
+        else
+            t=M.card(t.v, t.rel, nf(t.hi,rs,false,d+1), t.al, t.fn)
+        end
     end
     -- rules first, then ambient
     for _,r in ipairs(rs) do
@@ -773,7 +872,22 @@ local function expansions(t)
             for _,v in ipairs(expansions(x.hi)) do out[#out+1]=wrap(M.nsum(x.v,x.lo,v,x.body)) end
             for _,v in ipairs(expansions(x.lo)) do out[#out+1]=wrap(M.nsum(x.v,v,x.hi,x.body)) end
         elseif x.k=="fapp" then for _,v in ipairs(expansions(x.arg)) do out[#out+1]=wrap(M.fapp(x.fn,v)) end
-        elseif x.k=="card" then for _,v in ipairs(expansions(x.hi)) do out[#out+1]=wrap(M.card(x.v,x.rel,v,x.al,x.fn)) end
+        elseif x.k=="card" then
+            if x.elts then
+                for j,y in ipairs(x.elts) do
+                    for _,v in ipairs(expansions(y)) do
+                        local p={}
+                        for q,z in ipairs(x.elts) do
+                            p[q]=(q==j and v or z)
+                        end
+                        out[#out+1]=wrap(M.cardset(p))
+                    end
+                end
+            else
+                for _,v in ipairs(expansions(x.hi)) do
+                    out[#out+1]=wrap(M.card(x.v,x.rel,v,x.al,x.fn))
+                end
+            end
         end
     end
     walk(t, function(u) return u end)
@@ -816,7 +930,17 @@ local function each_child(t, fn)
     elseif t.k=="fapp" then
         fn(t.arg, function(v) return M.fapp(t.fn,v) end)
     elseif t.k=="card" then
-        fn(t.hi, function(v) return M.card(t.v,t.rel,v,t.al,t.fn) end)
+        if t.elts then
+            for j,y in ipairs(t.elts) do
+                fn(y, function(v)
+                    local p={}
+                    for q,z in ipairs(t.elts) do p[q]=(q==j and v or z) end
+                    return M.cardset(p)
+                end)
+            end
+        else
+            fn(t.hi, function(v) return M.card(t.v,t.rel,v,t.al,t.fn) end)
+        end
     end
 end
 M.each_child = each_child

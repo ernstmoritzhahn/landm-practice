@@ -1941,6 +1941,7 @@ local function render(view)
     -- top of the work area, not as a detached footer line
     proof_el:appendChild(el("div", "hint", PROOF_SYNTAX_HINT
         .. (view.card and ' · <code>#{w : |w| ≤ n}</code> = f(n)'
+                        .. ' · <code>#{λ}</code> = 1'
                        or '')))
     if view.free then
         ihrow_el:appendChild(text("span",
