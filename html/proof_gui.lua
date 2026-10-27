@@ -454,9 +454,22 @@ end
 local function render_given(g)
     local box = el("div", "givenbox")
     if g[1] then
-        for _, item in ipairs(g) do
-            box:appendChild(render_given(item))
+        -- consecutive automata share a flex row (M1 | M2 side by
+        -- side); text/table blocks keep the full width
+        local run
+        local function flush()
+            if run then box:appendChild(run); run = nil end
         end
+        for _, item in ipairs(g) do
+            if item.kind == "aut" then
+                if not run then run = el("div", "givenrow") end
+                run:appendChild(render_given(item))
+            else
+                flush()
+                box:appendChild(render_given(item))
+            end
+        end
+        flush()
         return box
     end
     if g.kind == "text" then
@@ -940,29 +953,13 @@ local function render_part(pv, pi)
         rec.aut_type = pv.aut_type
         local ah = aut_hint(pv.aut_type)
         if ah then box:appendChild(el("div", "hint", ah)) end
-        -- mini views of the relevant given machines, next to the
-        -- editor, plus an "insert" button that copies one in
+        -- an "insert" button that copies a given machine in — the
+        -- task-level givens stay visible above, so no side-column
+        -- preview; the button lives in the label row beside Check
         local gv = state.view and state.view.given
-        local side
-        local function sidehost()
-            if not side then
-                side = el("div", "autside")
-                row:appendChild(side)
-            end
-            return side
-        end
-        for _, gi in ipairs(pv.show_given or {}) do
-            local g = gv and gv[gi]
-            if g and g.kind == "aut" and g.model then
-                mount_given_svg(sidehost(), g.model,
-                                g.label or "given")
-            end
-        end
         if pv.copy then
             local g = gv and gv[pv.copy]
             if g and g.kind == "aut" and g.model then
-                mount_given_svg(sidehost(), g.model,
-                                g.label or "given")
                 local btn = el("button", "seedbtn")
                 btn.textContent = "insert "
                     .. (g.label or "the given automaton")
@@ -971,13 +968,14 @@ local function render_part(pv, pi)
                                json.encode(g.model))
                     dirty(st)()
                 end)
-                sidehost():appendChild(btn)
+                lab:insertBefore(btn, chk)
             end
         end
         -- "take over": adopt a task-level given automaton into this
         -- editor — complement/prefix/conversion tasks are exactly
-        -- "load M, then modify".  Plain parts only (copy/show_given/
-        -- seeds have their own insert story) and only when the given
+        -- "load M, then modify".  Plain parts only (copy has its own
+        -- insert button; show_given/seeds/seeds_locked mark tasks
+        -- that are not "load M, then modify") and only when the given
         -- type fits the editor: a richer editor type may adopt a
         -- stricter given (dfa/nfa model -> nfa-λ part), the reverse
         -- would silently retype the canvas via aut_load.
@@ -1009,8 +1007,7 @@ local function render_part(pv, pi)
                         dirty(st)()
                     end)
                     -- sits in the part's label row, just before the
-                    -- Check button — the side column is for given
-                    -- machine previews, not actions
+                    -- Check button
                     lab:insertBefore(btn, chk)
                 end
             end
