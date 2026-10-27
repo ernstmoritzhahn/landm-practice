@@ -1102,6 +1102,14 @@ parts_task{
     },
 }
 
+-- on the paper sheet these tasks ask for the GENERAL construction
+-- (for an arbitrary M) — here students apply it once to the
+-- concrete machine, so the description says that explicitly
+local GEN_CONSTR_NOTE = "  First work out the exact general "
+    .. "construction on paper — for an arbitrary automaton M "
+    .. "state precisely which automaton accepts the result "
+    .. "(states, transitions, initial and final states).  "
+    .. "Then apply it once to the concrete M below."
 -- the concrete machine for the prefix/reversal/suffix constructions
 local M32_MODEL = {
     type="dfa", alphabet="a,b",
@@ -1121,7 +1129,7 @@ parts_task{
     title = "Prefixes of L(M)",
     desc = "Let M be the DFA below, L = L(M).  Show that the "
         .. "prefix language P = {u | ∃v: uv ∈ L} is regular by "
-        .. "constructing an automaton for it.",
+        .. "constructing an automaton for it." .. GEN_CONSTR_NOTE,
     given = M32_GIVEN,
     parts = {
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
@@ -1136,7 +1144,7 @@ parts_task{
     title = "(extra) Reversals of L(M)",
     desc = "(extra) Let M be the DFA below, L = L(M).  Show that "
         .. "L^R = {w^R | w ∈ L} is regular by constructing an "
-        .. "automaton for it.",
+        .. "automaton for it." .. GEN_CONSTR_NOTE,
     given = M32_GIVEN,
     parts = {
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
@@ -1151,7 +1159,7 @@ parts_task{
     title = "(extra) Words having a suffix in L(M)",
     desc = "(extra) Let M be the DFA below, L = L(M).  Show that "
         .. "{uv | v ∈ L} = Σ*·L is regular by constructing an "
-        .. "automaton for it.",
+        .. "automaton for it." .. GEN_CONSTR_NOTE,
     given = M32_GIVEN,
     parts = {
         { kind="aut", aut_type="nfa-eps", alphabet="a,b",
