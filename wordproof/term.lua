@@ -26,9 +26,13 @@ function M.nmul(ts) return {k="nmul",ts=ts} end
 function M.npow(b,e) return {k="npow",b=b,e=e} end
 function M.nsum(v,lo,hi,body) return {k="nsum",v=v,lo=lo,hi=hi,body=body} end
 function M.fapp(fn,arg) return {k="fapp",fn=fn,arg=arg} end
+-- #{v : |v| rel E} — cardinality of a length-bounded word set over an
+-- al-letter alphabet; rel is "≤" or "=".  al/fn name the alphabet-size
+-- variable and the counting function the task defines (spec.card).
+function M.card(v,rel,hi,al,fn) return {k="card",v=v,rel=rel,hi=hi,al=al,fn=fn} end
 
 local WORDK = {lam=1,lit=1,lvar=1,var=1,cat=1,rev=1,pow=1}
-local NUMK  = {num=1,nvar=1,nadd=1,nmul=1,npow=1,nsum=1,fapp=1}
+local NUMK  = {num=1,nvar=1,nadd=1,nmul=1,npow=1,nsum=1,fapp=1,card=1}
 function M.domain(t)
     if WORDK[t.k] then return "word" end
     if NUMK[t.k] then return "num" end
@@ -65,6 +69,8 @@ local function shownum(e, parent_prec)
         if parent_prec and parent_prec>3 then s="("..s..")" end
         return s
     elseif e.k=="fapp" then s=e.fn.."("..shownum(e.arg)..")"
+    elseif e.k=="card" then
+        s="#{"..e.v.." : |"..e.v.."| "..e.rel.." "..shownum(e.hi).."}"
     elseif e.k=="hole" then s="□"
     else s="?" end
     if parent_prec and parent_prec>8 then s="("..s..")" end
@@ -141,6 +147,11 @@ local function t_eq(a,b)
     end
     if a.k=="nsum" then return a.v==b.v and t_eq(a.lo,b.lo) and t_eq(a.hi,b.hi) and t_eq(a.body,b.body) end
     if a.k=="fapp" then return a.fn==b.fn and t_eq(a.arg,b.arg) end
+    if a.k=="card" then
+        -- the bound word variable is a binder: alpha-equivalent
+        return a.rel==b.rel and a.al==b.al and a.fn==b.fn
+            and t_eq(a.hi,b.hi)
+    end
     return false
 end
 M.t_eq = t_eq
@@ -165,6 +176,10 @@ local function subst(t, name, repl)
         return M.nsum(t.v, subst(t.lo,name,repl), subst(t.hi,name,repl), subst(t.body,name,repl))
     end
     if t.k=="fapp" then return M.fapp(t.fn, subst(t.arg,name,repl)) end
+    if t.k=="card" then
+        if t.v==name then return t end   -- binder shadows
+        return M.card(t.v, t.rel, subst(t.hi,name,repl), t.al, t.fn)
+    end
     return t
 end
 M.subst = subst
@@ -187,6 +202,9 @@ function M.fill_hole(t, hole)
         return M.nsum(t.v, M.fill_hole(t.lo,hole), M.fill_hole(t.hi,hole), M.fill_hole(t.body,hole))
     end
     if t.k=="fapp" then return M.fapp(t.fn, M.fill_hole(t.arg,hole)) end
+    if t.k=="card" then
+        return M.card(t.v, t.rel, M.fill_hole(t.hi,hole), t.al, t.fn)
+    end
     return t
 end
 
@@ -198,6 +216,7 @@ end
 local function normalize_input(s)
     s = s:gsub("λ","\1"):gsub("ε","\1"):gsub("∅","\1")
          :gsub("Σ","\2"):gsub("·","*"):gsub("λ","\1")
+         :gsub("<=","\3"):gsub("≤","\3")
     return s
 end
 
@@ -307,6 +326,39 @@ function M.parse(src, spec)
         if c:match("%d") then
             local j=i; while src:sub(i,i):match("%d") do i=i+1 end
             return M.num(tonumber(src:sub(j,i-1)))
+        end
+        if c=="#" then
+            -- #{v : |v| ≤ nexpr} — cardinality of a length-bounded
+            -- word set; only where the task declares spec.card
+            if not spec.card then
+                fail("set cardinality #{…} is not defined here")
+            end
+            i=i+1
+            if peek()~="{" then fail("expected { after #") end i=i+1
+            local bv=peek()
+            if not bv:match("%a") then
+                fail("expected a variable after #{")
+            end
+            i=i+1
+            if peek()~=":" then fail("expected : in #{…}") end i=i+1
+            if peek()~="|" then fail("expected |"..bv.."| in #{…}") end
+            i=i+1
+            if peek()~=bv then fail("expected |"..bv.."| in #{…}") end
+            i=i+1
+            if peek()~="|" then fail("expected closing | in #{…}") end
+            i=i+1
+            local relc=peek()
+            local rel
+            if relc=="\3" then rel="≤"
+            elseif relc=="=" then rel="="
+            else fail("expected ≤ or = in #{…}") end
+            i=i+1
+            local hi=parse_nexpr()
+            if peek()~="}" then
+                fail("expected } to close #{…}")
+            end
+            i=i+1
+            return M.card(bv, rel, hi, spec.card.al, spec.card.fn)
         end
         if c=="\2" then i=i+1; goto do_sum end
         if c:match("%a") then
@@ -468,6 +520,22 @@ local function eval(t, env)
         if not env.f then error("function "..t.fn.." not defined",0) end
         return env.f(t.fn, eval(t.arg,env), env.nums)
     end
+    if t.k=="card" then
+        local m = eval(t.hi, env)
+        if t.rel=="=" then
+            -- #{v : |v| = m} over the al-letter alphabet: al^m words
+            local b = env.nums and env.nums[t.al]
+            if b==nil then
+                error("unbound number variable "..t.al,0)
+            end
+            return b ^ m
+        end
+        -- #{v : |v| ≤ m}: the same recurrence the task defines,
+        -- f(m) = 1 + al·f(m-1), f(0) = 1
+        if m < 0 then return 0 end
+        if not env.f then error("function "..t.fn.." not defined",0) end
+        return env.f(t.fn, m, env.nums)
+    end
     if t.k=="hole" then error("unfilled hole",0) end
     error("cannot evaluate "..t.k,0)
 end
@@ -487,7 +555,7 @@ M.eval = eval
 local nf  -- fwd
 
 local function rank(t)
-    local r = {num=1,nvar=2,nmul=3,npow=4,nsum=5,fapp=6,
+    local r = {num=1,nvar=2,nmul=3,npow=4,nsum=5,fapp=6,card=6,
                lam=7,lit=8,lvar=9,var=10,cat=11,rev=12,pow=13,hole=14}
     return r[t.k] or 99
 end
@@ -533,6 +601,22 @@ local function ambient(t, no_merge)
         end
         if t.b.k=="num" and t.e.k=="num" then return M.num(t.b.n^t.e.n) end
         if t.b.k=="npow" then return M.npow(t.b.b, M.nmul{t.b.e,t.e}) end
+    end
+    if t.k=="card" then
+        -- #{v : |v| ≤ E} IS f(E) — the task's own definition, so the
+        -- notations stay interchangeable; numeral bounds evaluate,
+        -- #{v : |v| = E} = al^E unconditionally
+        if t.rel=="=" then
+            return M.npow(M.nvar(t.al), t.hi)
+        end
+        if t.hi.k=="num" then
+            if t.hi.n <= 0 then
+                return (t.hi.n == 0) and M.num(1) or M.num(0)
+            end
+            return M.nadd{M.num(1), M.nmul{M.nvar(t.al),
+                M.card(t.v, "≤", M.num(t.hi.n - 1), t.al, t.fn)}}
+        end
+        if t.fn then return M.fapp(t.fn, t.hi) end
     end
 end
 
@@ -611,6 +695,8 @@ nf = function(t, rs, no_merge, d)
             end
         end
     elseif t.k=="fapp" then t=M.fapp(t.fn, nf(t.arg,rs,false,d+1))
+    elseif t.k=="card" then
+        t=M.card(t.v, t.rel, nf(t.hi,rs,false,d+1), t.al, t.fn)
     end
     -- rules first, then ambient
     for _,r in ipairs(rs) do
@@ -687,6 +773,7 @@ local function expansions(t)
             for _,v in ipairs(expansions(x.hi)) do out[#out+1]=wrap(M.nsum(x.v,x.lo,v,x.body)) end
             for _,v in ipairs(expansions(x.lo)) do out[#out+1]=wrap(M.nsum(x.v,v,x.hi,x.body)) end
         elseif x.k=="fapp" then for _,v in ipairs(expansions(x.arg)) do out[#out+1]=wrap(M.fapp(x.fn,v)) end
+        elseif x.k=="card" then for _,v in ipairs(expansions(x.hi)) do out[#out+1]=wrap(M.card(x.v,x.rel,v,x.al,x.fn)) end
         end
     end
     walk(t, function(u) return u end)
@@ -728,6 +815,8 @@ local function each_child(t, fn)
         fn(t.body, function(v) return M.nsum(t.v,t.lo,t.hi,v) end)
     elseif t.k=="fapp" then
         fn(t.arg, function(v) return M.fapp(t.fn,v) end)
+    elseif t.k=="card" then
+        fn(t.hi, function(v) return M.card(t.v,t.rel,v,t.al,t.fn) end)
     end
 end
 M.each_child = each_child

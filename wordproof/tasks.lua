@@ -223,7 +223,10 @@ def_task{
 -- 1.1c  f(n) = Σ_{i=0}^n k^i  — induction on n
 -- ======================================================================
 
-local spec_c = { nvar={i=true,k=true,n=true}, fns={f=true} }
+-- card: the definition f(n) = #{w : |w| ≤ n} is a parseable term
+-- (al = alphabet-size variable, fn = the defined function's name)
+local spec_c = { nvar={i=true,k=true,n=true}, fns={f=true},
+                 card={al="k", fn="f"} }
 
 -- f counts words of length <= n over a k-letter alphabet: f(0)=1,
 -- f(n+1)=1+k·f(n).  Concrete evaluation for the instance check:
@@ -2896,6 +2899,7 @@ function M.view(task)
         cite_docs = cite_docs,
         ih = task.ih_str,
         free = task.free or false,
+        card = (task.spec and task.spec.card) and true or false,
         indvar = task.indvar,
         step_var = task.step_var,
         sections = secs,

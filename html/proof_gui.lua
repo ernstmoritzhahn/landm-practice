@@ -1939,7 +1939,9 @@ local function render(view)
     end
     -- term-input syntax applies to every hole below — it sits at the
     -- top of the work area, not as a detached footer line
-    proof_el:appendChild(el("div", "hint", PROOF_SYNTAX_HINT))
+    proof_el:appendChild(el("div", "hint", PROOF_SYNTAX_HINT
+        .. (view.card and ' · <code>#{w : |w| ≤ n}</code> = f(n)'
+                       or '')))
     if view.free then
         ihrow_el:appendChild(text("span",
             "Induction hypothesis (IH):  ", "seclabel"))
