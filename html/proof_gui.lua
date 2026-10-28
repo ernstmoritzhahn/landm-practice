@@ -396,11 +396,28 @@ local function boot_pending_aut()
 end
 
 local function aut_cfg(v)
+    -- the 'deterministic' check reads "must be deterministic" — for
+    -- PDAs/TMs that is a grader flag (part.deterministic), not a type
+    -- property (a nondeterministic PDA is still a PDA).  Unless the
+    -- part requires determinism, silence the check instead of letting
+    -- the editable default flag the nondeterminism the task itself
+    -- asks for.  An explicit checks.deterministic entry still wins.
+    local checks = v.checks
+    local structured = v.aut_type == "pda"
+        or (type(v.aut_type) == "string"
+            and v.aut_type:match("^tm") ~= nil)
+    if structured and v.deterministic ~= true
+       and not (type(checks) == "table"
+                and checks.deterministic ~= nil) then
+        local c = { deterministic = false }
+        for k, val in pairs(checks or {}) do c[k] = val end
+        checks = c
+    end
     return { mode="aut",
              aut_type = v.aut_type or "dfa",
              alphabet = v.alphabet or "",
              stack_alphabet = v.stack_alphabet or "",
-             checks   = v.checks,
+             checks   = checks,
              -- practice pages let students toggle the warnings
              -- (default on; Anubis omits the flag and stays locked)
              checks_editable = true,
