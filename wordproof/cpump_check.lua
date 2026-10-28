@@ -161,7 +161,65 @@ local function eval_i(expr, env)
     return v
 end
 
-function M.check_cpump(part, z_text, i_map, why_sel)
+-- ---------- concrete splits at a sample k --------------------------
+-- the adversary's moves made explicit: enumerate every legal split
+-- and bucket it under the FIRST matching declared case (same order
+-- check_cpump uses).  Per case keep up to EXEM exemplars plus the
+-- full count — the student answers a concrete i per shown split.
+local EXEM = 4
+
+local function bucket_splits(part, zw, K)
+    local cases, un = {}, {}
+    for idx in ipairs(part.cases) do
+        cases[idx] = { splits = {}, n = 0 }
+    end
+    each_split(zw, K, function(sp)
+        local ci
+        for idx, c in ipairs(part.cases) do
+            if c.match(sp, zw, K) then ci = idx break end
+        end
+        if ci then
+            local cs = cases[ci]
+            cs.n = cs.n + 1
+            if #cs.splits < EXEM then
+                cs.splits[#cs.splits + 1] = sp
+            end
+        elseif #un < EXEM then
+            un[#un + 1] = sp
+        end
+    end)
+    return cases, un
+end
+
+-- worker "pump_splits" helper for cpump parts: validate + instantiate
+-- + bucket.  returns {word,k,cases,uncovered} or {err=...}
+function M.cpump_splits(part, z_text, K)
+    K = tonumber(K) or 2
+    if K < 1 or K > 4 then return { err = "k out of range" } end
+    local zfn, err
+    if part.zgen then
+        zfn = part.zgen
+    else
+        zfn, err = M.parse_z(z_text)
+        if not zfn then return { err = "z(k): " .. err } end
+    end
+    local zw = zfn(K)
+    if not zw then
+        return { err = "z(" .. K .. ") does not evaluate" }
+    end
+    if not part.lang_test(zw) then
+        return { err = "z(" .. K .. ") = '" .. zw
+            .. "' is not in L — pick a witness in the language" }
+    end
+    if #zw < K then
+        return { err = "|z(" .. K .. ")| = " .. #zw .. " < " .. K
+            .. " — need |z| ≥ k" }
+    end
+    local cases, un = bucket_splits(part, zw, K)
+    return { word = zw, k = K, cases = cases, uncovered = un }
+end
+
+function M.check_cpump(part, z_text, i_map, why_sel, ck, ci_map)
     local lang_test = part.lang_test
     local zfn
     if part.zgen then
@@ -225,6 +283,46 @@ function M.check_cpump(part, z_text, i_map, why_sel)
         end)
         if bad then return { ok = false, msg = bad } end
     end
+    -- concrete splits at the sample k: every shown split needs its
+    -- own i beating it — the adversary's moves made explicit (the
+    -- decompose step renders exactly these exemplar rows).
+    ck = tonumber(ck) or 2
+    local zw2 = zfn(ck)
+    if not zw2 then
+        return { ok = false, msg = "z(" .. ck
+            .. ") does not evaluate" }
+    end
+    local bcases = bucket_splits(part, zw2, ck)
+    local nshown = 0
+    for ci, cs in ipairs(bcases) do
+        for j, sp in ipairs(cs.splits) do
+            nshown = nshown + 1
+            local key = ci .. ":" .. j
+            local iv = ci_map and ci_map[key]
+            if iv == nil or (type(iv) == "string"
+                             and not iv:match("%S")) then
+                return { ok = false, msg = string.format(
+                    "case %d, split %d (u='%s', v='%s', x='%s'): "
+                    .. "choose a concrete i — 'decompose' lists the "
+                    .. "splits", ci, j, sp.u, sp.v, sp.x) }
+            end
+            local ivn = tonumber(iv)
+            if not ivn or ivn ~= math.floor(ivn) or ivn < 0
+               or ivn > 200 then
+                return { ok = false, msg = string.format(
+                    "case %d, split %d: i must be an integer ≥ 0",
+                    ci, j) }
+            end
+            local pumped = sp.u .. sp.v:rep(ivn) .. sp.w
+                .. sp.x:rep(ivn) .. sp.y
+            if lang_test(pumped) then
+                return { ok = false, msg = string.format(
+                    "case %d, split %d: i=%d keeps uv^iwx^iy in L — "
+                    .. "u='%s', v='%s', x='%s' pumps to '%s'",
+                    ci, j, ivn, sp.u, sp.v, sp.x, pumped) }
+            end
+        end
+    end
     -- the reason: which defining property of L does the pumped
     -- word violate?  (options are authored per task; the checker
     -- just verifies the pick)
@@ -244,8 +342,9 @@ function M.check_cpump(part, z_text, i_map, why_sel)
     end
     return { ok = true, msg = "✓ verified for all " .. nsplits
         .. " legal decompositions with k ≤ 3 (" .. ncases
-        .. " case(s) exercised) — your z and indices cover every "
-        .. "possibility" }
+        .. " case(s) exercised) and " .. nshown
+        .. " concrete splits at k = " .. ck
+        .. " — your z and indices cover every possibility" }
 end
 
 return M

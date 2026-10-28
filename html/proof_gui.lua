@@ -966,6 +966,44 @@ local function request_splits(pi)
         { what="pump_splits", id=state.id, pi=pi, z=p.z.value,
           k=p.ksel and tonumber(p.ksel.value) or nil }))
 end
+-- cpump (7.1): same adversary step for the CFL splits — the worker
+-- buckets every legal uvwxy split under its declared case; the
+-- per-case containers (p.cbox) then show concrete exemplars
+local function request_cpump_splits(pi)
+    local p = state.parts[pi]
+    if not p then return end
+    util.js_post_message(json.encode(
+        { what="pump_splits", id=state.id, pi=pi,
+          z=p.cpump_z and p.cpump_z.value or "",
+          k=p.ksel and tonumber(p.ksel.value) or 2 }))
+end
+-- decompose button + sample-k select, appended to a host row
+local function cpump_decompose_row(host, pi, p)
+    local btn = document:createElement("button")
+    btn.className, btn.textContent = "seedbtn", "decompose"
+    btn:addEventListener("click", function()
+        request_cpump_splits(pi) end)
+    host:appendChild(btn)
+    local ksel = document:createElement("select")
+    for _, kv in ipairs({ 2, 3 }) do
+        local o = document:createElement("option")
+        o.value, o.textContent = tostring(kv), "k = " .. kv
+        ksel:appendChild(o)
+    end
+    ksel:addEventListener("change", function()
+        request_cpump_splits(pi) end)
+    host:appendChild(ksel)
+    p.ksel = ksel
+end
+local function clear_cpump_rows(p)
+    for _, cb in pairs(p.cbox or {}) do clear(cb) end
+    p.ci_inps, p.ci_st = {}, {}
+    for _, cb in pairs(p.cbox or {}) do
+        cb:appendChild(text("div",
+            "(press 'decompose' — the concrete splits of this case "
+            .. "appear here)", "phint"))
+    end
+end
 -- (re)build the distinguishing-word rows for the ticked pairs;
 -- values survive via the `old` stash
 local function rebuild_wit(pi)
@@ -1442,7 +1480,8 @@ local function render_part(pv, pi)
         --   2) arbitrary z = uvwxy with |vwx| ≤ k, |vx| > 0 —
         --      distinguish the cases vx can sit in, and choose a
         --      pumping index i for each
-        rec.cells, rec.cpump_i = {}, {}
+        rec.cells, rec.cpump_i, rec.cbox = {}, {}, {}
+        rec.ci_inps, rec.ci_st = {}, {}
         if pv.has_z then
             box:appendChild(text("div",
                 "1)  Let k > 0 be given arbitrarily.  We choose "
@@ -1455,8 +1494,11 @@ local function render_part(pv, pi)
             inp:addEventListener("input", function()
                 replace_symbols(inp, PUMP_REPLACE)
                 dirty(rst)()
+                clear_cpump_rows(rec)
             end)
-            r:appendChild(inp); r:appendChild(rst)
+            r:appendChild(inp)
+            cpump_decompose_row(r, pi, rec)
+            r:appendChild(rst)
             box:appendChild(r)
             rec.cpump_z = inp
             rec.cells.z = { td = rst }
@@ -1465,11 +1507,16 @@ local function render_part(pv, pi)
                 "1)  Let k > 0 be given arbitrarily.  The witness "
                 .. "is fixed:  z = " .. (pv.z_fixed or "z(k)")
                 .. "  ∈ L, |z| ≥ k.", "pstep"))
+            local r = el("div", "wordrow")
+            cpump_decompose_row(r, pi, rec)
+            box:appendChild(r)
         end
         box:appendChild(text("div",
             "2)  Let z = uvwxy be an arbitrary decomposition with "
             .. "|vwx| ≤ k and |vx| > 0.  Distinguish the cases — "
-            .. "for each, choose i ≥ 0 with uv^iwx^iy ∉ L:", "pstep"))
+            .. "'decompose' lists the concrete splits under each "
+            .. "case; give a symbolic i per case AND a concrete i "
+            .. "for every shown split:", "pstep"))
         for i, c in ipairs(pv.cases or {}) do
             local r = el("div", "wordrow")
             r:appendChild(text("span", "case " .. i .. " — "
@@ -1482,7 +1529,12 @@ local function render_part(pv, pi)
             box:appendChild(r)
             rec.cpump_i[i] = inp
             rec.cells["i" .. i] = { td = rst }
+            -- container for the concrete splits of this case
+            local cb = el("div", "cbox")
+            box:appendChild(cb)
+            rec.cbox[i] = cb
         end
+        clear_cpump_rows(rec)
         -- 3) conclusion: the reason the pumped word leaves L in
         -- every case (the 'why' of the proof), then the schema's
         -- final inference
@@ -1577,6 +1629,12 @@ save_local = function()
                     pr.is[i] = inp.value
                 end
                 pr.why = p.cpump_why and p.cpump_why.value or ""
+                pr.ck = p.last_ck or
+                        (p.ksel and tonumber(p.ksel.value))
+                pr.ci = {}
+                for key, inp in pairs(p.ci_inps or {}) do
+                    pr.ci[key] = inp.value
+                end
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pr.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
@@ -1717,6 +1775,18 @@ local function restore_local()
                     end
                     if p.cpump_why and pr.why then
                         p.cpump_why.value = pr.why
+                    end
+                    if pr.ck and p.ksel then
+                        p.ksel.value = tostring(pr.ck)
+                    end
+                    p.pending_ci = pr.ci
+                    -- concrete rows only exist after 'decompose':
+                    -- re-issue it when there is something to restore
+                    if (pr.ci and next(pr.ci))
+                       or (p.cpump_z and pr.z
+                           and pr.z:match("%S"))
+                       or (not p.cpump_z and pr.ck) then
+                        request_cpump_splits(tonumber(pi))
                     end
                 end
             end
@@ -2082,6 +2152,12 @@ send_check = function(only_pi)
                     pd.is[i] = inp.value
                 end
                 pd.why = p.cpump_why and p.cpump_why.value or ""
+                pd.ck = p.last_ck or
+                        (p.ksel and tonumber(p.ksel.value))
+                pd.ci = {}
+                for key, inp in pairs(p.ci_inps or {}) do
+                    pd.ci[key] = inp.value
+                end
             elseif p.kind == "derivation" or p.kind == "tree" then
                 pd.texts = {}
                 for d, ta in ipairs(p.fields or {}) do
@@ -2292,6 +2368,93 @@ local function render_splits(pi, res)
             end
         end
         p.pending_is = nil
+    end
+end
+
+-- worker answered a cpump "pump_splits": the response carries the
+-- word and, per case, the first concrete splits plus the full count
+-- — render an i field per shown split under its case (the adversary
+-- move list made explicit, like the regular pumping parts do).
+local function render_cpump_splits(pi, res)
+    local p = state.parts[pi]
+    if not (p and p.cbox) then return end
+    p.ci_inps, p.ci_st = {}, {}
+    if res.err then
+        if p.cpump_z then
+            -- status lands next to the witness input
+            for _, c in pairs(p.cells or {}) do end
+            p.cells.z.td.textContent = " ✗ " .. res.err
+            p.cells.z.td.className = "st fail"
+        end
+        clear_cpump_rows(p)
+        return
+    end
+    if p.cells.z then
+        p.cells.z.td.textContent = " ✓"
+        p.cells.z.td.className = "st ok"
+    end
+    p.last_ck = res.k
+    local function lam(s) return s == "" and "λ" or s end
+    for ci, cs in ipairs(res.cases or {}) do
+        local host = p.cbox[ci]
+        if host then
+            clear(host)
+            host:appendChild(text("div",
+                "for k = " .. tostring(res.k) .. ",  z = "
+                .. res.word .. "  —  pick i ≠ 1 for each:", "phint"))
+            for j, s in ipairs(cs.splits or {}) do
+                local r = el("div", "wordrow")
+                r:appendChild(text("span",
+                    "u = " .. lam(s.u) .. ",  v = " .. lam(s.v)
+                    .. ",  w = " .. lam(s.w) .. ",  x = "
+                    .. lam(s.x) .. ",  y = " .. lam(s.y), "wlabel"))
+                local rst = el("span", "st")
+                local inp = mk_input(nil, 4, dirty(rst))
+                inp.placeholder = "i"
+                r:appendChild(text("span", "i =", "wlabel"))
+                r:appendChild(inp)
+                local pv2 = el("span", "wlabel")
+                inp:addEventListener("input", function()
+                    local n = tonumber(inp.value)
+                    pv2.textContent =
+                        (n and n >= 0 and n == math.floor(n))
+                        and ("  →  " .. lam(s.u .. s.v:rep(n)
+                             .. s.w .. s.x:rep(n) .. s.y)) or ""
+                end)
+                r:appendChild(pv2); r:appendChild(rst)
+                host:appendChild(r)
+                p.ci_inps[ci .. ":" .. j], p.ci_st[ci .. ":" .. j]
+                    = inp, rst
+            end
+            local more = (cs.n or 0) - #(cs.splits or {})
+            if more > 0 then
+                host:appendChild(text("div",
+                    "… and " .. more .. " more legal splits — "
+                    .. "covered by the case i above", "phint"))
+            end
+            if (cs.n or 0) == 0 then
+                host:appendChild(text("div",
+                    "(no splits land in this case at k = "
+                    .. res.k .. ")", "phint"))
+            end
+        end
+    end
+    if res.uncovered and #res.uncovered > 0 then
+        local u = res.uncovered[1]
+        local host = p.cbox[#p.cbox]
+        if host then
+            host:appendChild(text("div",
+                "(warning: " .. #res.uncovered
+                .. " split(s) match no case — e.g. u="
+                .. lam(u.u) .. ", v=" .. lam(u.v) .. ", x="
+                .. lam(u.x) .. ")", "phint"))
+        end
+    end
+    if p.pending_ci then
+        for key, v in pairs(p.pending_ci) do
+            if p.ci_inps[key] then p.ci_inps[key].value = v end
+        end
+        p.pending_ci = nil
     end
 end
 
@@ -2675,7 +2838,12 @@ return function(data)
         if data.id == state.id then render(data.view) end
     elseif data.what == "splits" then
         if data.id == state.id then
-            render_splits(data.pi, data.res or {})
+            local pv = state.parts[data.pi]
+            if pv and pv.kind == "cpump" then
+                render_cpump_splits(data.pi, data.res or {})
+            else
+                render_splits(data.pi, data.res or {})
+            end
         end
     elseif data.what == "result" then
         if data.id == state.id then paint(data.res) end

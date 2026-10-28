@@ -93,6 +93,8 @@ return function(data)
         local res
         if pdef and pdef.kind == "pumping" then
             res = DC.pump_splits(pdef, data.z, data.k)
+        elseif pdef and pdef.kind == "cpump" then
+            res = CC.cpump_splits(pdef, data.z, data.k)
         else
             res = { err = "not a pumping part" }
         end
@@ -183,7 +185,7 @@ return function(data)
                         return TC.check_tm(pdef, pd.text)
                     elseif pdef.kind == "cpump" then
                         return CC.check_cpump(pdef, pd.z, pd.is,
-                                              pd.why)
+                                              pd.why, pd.ck, pd.ci)
                     end
                     return { ok=false, msg="unknown part kind" }
                 end)
