@@ -167,6 +167,139 @@ local function scan_blocks(s, check, allow_zero)
     return blocks
 end
 
+-- ---------- student-named parameters ------------------------
+-- the general form claims  u = s^m,  v = s^n  for bound variables
+-- (|u|, |v|) the student names themselves.  Names are extracted from
+-- the u/v patterns (each must be a single block with a single-para-
+-- meter exponent), the 'for some …' bounds are verified to equal the
+-- legal-split domain {m ≥ 0, n ≥ 1, m+n ≤ k} on the sampled grid,
+-- and everything is then alpha-renamed to canonical p, q so the
+-- whole symbolic pipeline below runs unchanged.
+
+-- strict shape check: <sym>^<ident> (ident = the parameter name;
+-- braces/parens around it allowed).  -> sym, name or nil,err
+local function one_param_block(str, what, names)
+    local s = (str or ""):gsub("%s+", "")
+    if s == "" then
+        return nil, what .. " is empty — give it as <sym>^<name>, "
+            .. "e.g. " .. what .. " = a^m"
+    end
+    local sym, id = s:match("^(.-)%^[%{%(]?([%a]+)[%}%)]?$")
+    if not sym or #sym ~= 1 then
+        return nil, what .. " must be a single block "
+            .. "<sym>^<parameter> — inside the first block every "
+            .. what .. " is just sym^" .. (what == "u" and "m" or "n")
+            .. " for some " .. (what == "u" and "m" or "n")
+            .. " you name (e.g. " .. what .. " = a^m)"
+    end
+    if id == "k" then
+        return nil, "'k' is the pumping length itself — pick a "
+            .. "different parameter name for " .. what
+    end
+    if names[id] then
+        return nil, "'" .. id .. "' is already used for the other "
+            .. "bound variable — u and v need different parameters "
+            .. "(they range independently)"
+    end
+    names[id] = true
+    return sym, id
+end
+
+-- conjunction of linear comparisons over (k and the two names),
+-- renamed to canonical p,q:  "m ≥ 0, n ≥ 1, m+n ≤ k" → predicate
+-- fn(k,p,q).  -> pred or nil,err
+local function bound_predicate(src, map, uname, vname)
+    local s = (src or ""):gsub("%s+", "")
+        :gsub("≥", ">="):gsub("≤", "<=")
+    if s == "" then
+        return nil, "state the parameter bounds — e.g. '" .. uname
+            .. " ≥ 0, " .. vname .. " ≥ 1, " .. uname .. "+"
+            .. vname .. " ≤ k'"
+    end
+    -- optional quantifier lead-in:  ∃m,n: … / exists m,n: … /
+    -- for some m,n: … — strip it, the clauses carry the content
+    s = s:gsub("^∃[%a,]+:", ""):gsub("^∃", "")
+    s = s:gsub("^exists[%a,]+:", ""):gsub("^forsome[%a,]+:", "")
+    local clauses = {}
+    for c in s:gmatch("[^,;∧⋀&]+") do
+        if c ~= "" then clauses[#clauses + 1] = c end
+    end
+    local function rnm(str)
+        local bad
+        local out = str:gsub("[%a]+", function(t)
+            if t == "k" then return "k" end
+            local m = map[t]
+            if not m then bad = t return t end
+            return m
+        end)
+        return out, bad
+    end
+    local preds = {}
+    for _, c in ipairs(clauses) do
+        local L, rel, R = c:match("^(.-)([<>=!]=?)(.*)$")
+        if not rel or R == "" then
+            return nil, "bound '" .. c .. "' is not a comparison"
+        end
+        local Lr, bl = rnm(L); if bl then
+            return nil, "unknown parameter '" .. bl .. "' — you "
+                .. "declared " .. uname .. " and " .. vname end
+        local Rr, br = rnm(R); if br then
+            return nil, "unknown parameter '" .. br .. "' — you "
+                .. "declared " .. uname .. " and " .. vname end
+        local le, re = parse_exp(Lr), parse_exp(Rr)
+        if not le or not re then
+            return nil, "bound '" .. c .. "' must be linear in k, "
+                .. uname .. ", " .. vname
+        end
+        preds[#preds + 1] = { l = le, r = re, rel = rel }
+    end
+    return function(k, p, q)
+        for _, cl in ipairs(preds) do
+            local lv = cl.l.k * k + cl.l.p * p + cl.l.q * q + cl.l.c
+            local rv = cl.r.k * k + cl.r.p * p + cl.r.q * q + cl.r.c
+            local ok
+            if cl.rel == "<=" then ok = lv <= rv
+            elseif cl.rel == ">=" then ok = lv >= rv
+            elseif cl.rel == "<" then ok = lv < rv
+            elseif cl.rel == ">" then ok = lv > rv
+            else ok = lv == rv end
+            if not ok then return false end
+        end
+        return true
+    end
+end
+
+-- the declared bounds must equal the legal-split domain
+-- { |u| ≥ 0, |v| ≥ 1, |u|+|v| ≤ k } — sampled on the grid.
+-- Messages name |u|, |v| so they read right for any chosen names.
+local function check_bound_equiv(pred, uname, vname)
+    for k = 1, 8 do
+        for p = 0, 8 do
+            for q = 0, 8 do
+                local canon = (q >= 1 and p + q <= k)
+                local stud = pred(k, p, q)
+                if stud and not canon then
+                    return "your bounds also hold for |u|=" .. p
+                        .. ", |v|=" .. q .. " (k=" .. k
+                        .. ") — an illegal split (need |v| ≥ 1 "
+                        .. "and |u|+|v| ≤ k)"
+                elseif canon and not stud then
+                    return "your bounds exclude the legal split "
+                        .. "|u|=" .. p .. ", |v|=" .. q .. " (k="
+                        .. k .. ") — every legal split must "
+                        .. "satisfy them"
+                end
+            end
+        end
+    end
+end
+
+local function alpha_rename(src, map)
+    return (src or ""):gsub("[%a]+", function(t)
+        return map[t] or t
+    end)
+end
+
 function M.parse_pattern(s)
     return scan_blocks(s, function(sym, e, body)
         if e.p ~= 0 or e.q ~= 0 then
@@ -846,8 +979,13 @@ function M.general_case(mb)
 end
 
 -- full general check over the STUDENT-written decomposition
---   gen = { u = "a^p", v = "a^q", w = "a^{k-p-q}b^k", i = "2",
---           pw = "a^{k+q}b^k", why = "<reason option id>" }
+--   gen = { u = "a^m", v = "a^n", w = "a^{k-m-n}b^k", i = "2",
+--           pw = "a^{k+n}b^k", why = "<reason option id>",
+--           bound = "m >= 0, n >= 1, m+n <= k" }
+-- the bound variables (|u|, |v|) are NAMED BY THE STUDENT in u, v;
+-- the 'for some' bound must equal the legal-split domain
+-- { |v| ≥ 1, |u|+|v| ≤ k } on the sampled grid; then u/v/w/i/pw
+-- are alpha-renamed to canonical p,q and checked as before.
 -- verified: uvw ≡ z(k) as a poly identity, legality |v| ≥ 1 /
 -- |uv| ≤ k on the legal domain, coverage of every legal split,
 -- the pumped word uv^iw ≡ pw as a pattern, the reason, and
@@ -879,6 +1017,7 @@ function M.check_general(lang_id, z_str, gen, part)
     local filled = (gen.u or ""):match("%S") or (gen.v or ""):match("%S")
         or (gen.w or ""):match("%S") or (gen.i or ""):match("%S")
         or (gen.pw or ""):match("%S") or (gen.why or ""):match("%S")
+        or (gen.bound or ""):match("%S")
     if not filled then
         if gcase.err then return nil end
         return { ok = false, kind = "fail",
@@ -889,6 +1028,36 @@ function M.check_general(lang_id, z_str, gen, part)
     if gcase.err then
         return { ok = false, kind = "fail", msg = gcase.err }
     end
+    -- the bound variables (|u|, |v|) are named by the student:
+    -- u = s^m, v = s^n declares them, the 'for some …' field states
+    -- their legal range (verified ≡ {m ≥ 0, n ≥ 1, m+n ≤ k}).
+    -- Everything is renamed to canonical p,q for the pipeline below.
+    local taken = {}
+    local usym, uname = one_param_block(gen.u, "u", taken)
+    if not usym then return { ok = false, kind = "fail", msg = uname } end
+    local vsym, vname = one_param_block(gen.v, "v", taken)
+    if not vsym then return { ok = false, kind = "fail", msg = vname } end
+    -- a parameter name that doubles as a z-block symbol would
+    -- collide at rename time
+    for _, b in ipairs(mb) do
+        if b.sym == uname or b.sym == vname then
+            return { ok = false, kind = "fail",
+                     msg = "'" .. b.sym .. "' is an alphabet symbol "
+                        .. "of z — pick a different parameter name" }
+        end
+    end
+    local nmap = { [uname] = "p", [vname] = "q" }
+    local pred, berr = bound_predicate(gen.bound, nmap, uname, vname)
+    if not pred then return { ok = false, kind = "fail",
+                              msg = berr } end
+    local beq = check_bound_equiv(pred, uname, vname)
+    if beq then return { ok = false, kind = "fail", msg = beq } end
+    gen = { u = alpha_rename(gen.u, nmap),
+            v = alpha_rename(gen.v, nmap),
+            w = alpha_rename(gen.w, nmap),
+            i = alpha_rename(gen.i, nmap),
+            pw = alpha_rename(gen.pw, nmap),
+            why = gen.why }
     local ub, uerr = M.parse_pattern_pq(gen.u or "")
     if not ub then return { ok = false, kind = "fail",
                             msg = "u: " .. uerr } end

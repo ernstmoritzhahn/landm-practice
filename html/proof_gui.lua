@@ -1650,7 +1650,8 @@ save_local = function()
                     u = p.gen.u.value, v = p.gen.v.value,
                     w = p.gen.w.value, i = p.gen.i.value,
                     pw = p.gen.pw and p.gen.pw.value or "",
-                    why = p.gen.why and p.gen.why.value or "" } or nil
+                    why = p.gen.why and p.gen.why.value or "",
+                    bound = p.gen.bound and p.gen.bound.value or "" } or nil
                 pr.is = {}
                 for ri, inp in ipairs(p.i_inps) do pr.is[ri] = inp.value end
             elseif p.kind == "min_table" then
@@ -2139,7 +2140,8 @@ send_check = function(only_pi)
                     u = p.gen.u.value, v = p.gen.v.value,
                     w = p.gen.w.value, i = p.gen.i.value,
                     pw = p.gen.pw and p.gen.pw.value or "",
-                    why = p.gen.why and p.gen.why.value or "" } or nil
+                    why = p.gen.why and p.gen.why.value or "",
+                    bound = p.gen.bound and p.gen.bound.value or "" } or nil
             elseif p.kind == "grammar" or p.kind == "normalise"
                 or p.kind == "pda" or p.kind == "tm"
                 or p.kind == "pattern"
@@ -2279,15 +2281,19 @@ local function render_splits(pi, res)
         host:appendChild(gr)
         return inp
     end
-    local u_inp, v_inp, w_inp, i_inp
+    local u_inp, v_inp, w_inp, i_inp, bd_inp
     if gen.sym and p.genbox then
         p.genbox:appendChild(text("div",
-            "u = " .. gen.sym .. "^p,  v = " .. gen.sym .. "^q  "
-            .. "for some p ≥ 0, q ≥ 1 with p+q ≤ k — write the "
-            .. "patterns:", "wlabel"))
-        u_inp = grow(p.genbox, "u =", "e.g. a^p", "u")
-        v_inp = grow(p.genbox, "v =", "e.g. a^q", "v")
-        w_inp = grow(p.genbox, "w =", "e.g. a^{k-p-q}b^k", "w")
+            "every legal split sits in the first block:  u = "
+            .. gen.sym .. "^|u|,  v = " .. gen.sym
+            .. "^|v| — pick parameter names, write the patterns "
+            .. "and state their bounds:", "wlabel"))
+        u_inp = grow(p.genbox, "u =", "e.g. " .. gen.sym .. "^m", "u")
+        v_inp = grow(p.genbox, "v =", "e.g. " .. gen.sym .. "^n", "v")
+        w_inp = grow(p.genbox, "w =", "e.g. " .. gen.sym
+                     .. "^{k-m-n}b^k", "w")
+        bd_inp = grow(p.genbox, "for some",
+                      "e.g. m ≥ 0, n ≥ 1, m+n ≤ k", "bound")
     elseif gen.err and p.genbox then
         p.genbox:appendChild(text("div", gen.err, "wlabel"))
     end
@@ -2323,13 +2329,14 @@ local function render_splits(pi, res)
             "and for all k — one i that beats every legal split "
             .. "(a number or an expression in the parameters):",
             "wlabel"))
-        i_inp = grow(p.splitbox, "i =", "e.g. 2, q+1, k+1", "i")
+        i_inp = grow(p.splitbox, "i =",
+                     "e.g. 2, k+1 — in your parameters", "i")
         -- conclusion row: the general pumped word and the reason
         -- it leaves L — the 'why' that a proof sketch needs
         local pr = el("div", "wordrow")
         pr:appendChild(text("span", "Then  uv^i w =", "wlabel"))
         local pw_inp = mk_input("expr", 18, dirty(gst))
-        pw_inp.placeholder = "e.g. a^{k+q}b^k"
+        pw_inp.placeholder = "e.g. a^{k+n}b^k"
         if pend.pw then pw_inp.value = pend.pw end
         pr:appendChild(pw_inp)
         pr:appendChild(text("span", "∉ L,   since", "wlabel"))
@@ -2351,7 +2358,7 @@ local function render_splits(pi, res)
         p.splitbox:appendChild(pr)
         p.splitbox:appendChild(gst)
         p.gen = { u = u_inp, v = v_inp, w = w_inp, i = i_inp,
-                  pw = pw_inp, why = wsel }
+                  pw = pw_inp, why = wsel, bound = bd_inp }
         p.gen_st = gst
     elseif gen.err then
         p.splitbox:appendChild(text("div",
