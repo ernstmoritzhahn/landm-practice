@@ -210,14 +210,47 @@ return function(automata)
     -- grading-time rewrite treated them as operators unconditionally
     local LENIENT_META_TOKENS = {["{"]=true, ["}"]=true, ["U"]=true}
 
-    local function make_regexp_grammar(tokens, lenient)
-        local P, V, Cmt = lpeg.P, lpeg.V, lpeg.Cmt
+    local function make_regexp_grammar(tokens, lenient, metas)
+        local P, V, Cmt, Cp = lpeg.P, lpeg.V, lpeg.Cmt, lpeg.Cp
 
         local boundaries = {}
         local offset = 1
         for i, token in ipairs(tokens) do
             boundaries[offset] = i
             offset = offset + #token
+        end
+
+        -- token-index span on every constructed node: t0/t1 index
+        -- the caller's token array (parse_regexp_tokens reports the
+        -- failure position in the same space, so an editor can map
+        -- both onto its own source anchoring)
+        local function span(node, p0, p1)
+            node.t0 = boundaries[p0]
+            node.t1 = (boundaries[p1] or (#tokens + 1)) - 1
+            return node
+        end
+
+        -- farthest walked-past failure + the expected-token kinds at
+        -- that position (deepest wins — the classic best-guess error)
+        local ferr = {pos = 0, exp = {}}
+        local function rec(index, kind)
+            if not index or not kind then return end
+            if index > ferr.pos then ferr.pos, ferr.exp = index, {} end
+            if index == ferr.pos then ferr.exp[kind] = true end
+        end
+        local function merge_ferr(set, index)
+            if ferr.pos == index then
+                for k in pairs(ferr.exp) do set[k] = true end
+            end
+            return set
+        end
+
+        -- structured failure instead of a bare message: kind +
+        -- tokidx + expected-kind set ride along for editor clients;
+        -- the string entry points unwrap errtab.msg and rethrow, so
+        -- grading callers see the same errors as before
+        local function raise(errtab)
+            error(errtab, 0)
         end
 
         local repairs = lenient and {} or nil
@@ -234,16 +267,21 @@ return function(automata)
         -- base -> choice -> term -> factor -> base); the callback looks
         -- the token up at pos-1 and jumps to the end of the whole token,
         -- which may be a multi-byte cluster
+        -- single token string -> editor kind for the expected sets
+        local TOK_KIND = {["("] = "lp", [")"] = "rp", ["λ"] = "eps",
+                          ["∅"] = "empty", ["*"] = "star",
+                          ["+"] = "plus", ["^"] = "hat"}
         local function tok(expected)
             return Cmt(P(1), function(_, pos)
                 local index = boundaries[pos - 1]
                 local token = index and tokens[index]
-                if not token then
-                    return nil
-                end
-                if type(expected) == "table" then
-                    if not expected[token] then return nil end
-                elseif token ~= expected then
+                local good = token
+                    and (type(expected) == "table"
+                         and expected[token] or token == expected)
+                if not good then
+                    rec(index or (#tokens + 1),
+                        type(expected) == "table" and "union"
+                            or TOK_KIND[expected])
                     return nil
                 end
                 return pos - 1 + #token
@@ -283,21 +321,47 @@ return function(automata)
             end)
         end
 
-        -- hard parse error, mirroring the old eat()/assert() failures
+        -- hard parse error, mirroring the old eat()/assert() failures.
+        -- kind "close": a committed closing token went missing — the
+        -- expected set merges the far-side continuations seen at the
+        -- same position (operand starts open a new factor, ∪/*/+/^
+        -- extend the inner expression, ')' is what was asked for)
+        local WHAT_KIND = {[")"] = {rp = true}, ["}"] = {rp = true},
+                           ["digits"] = {digits = true}}
         local function expected(what)
             return Cmt(P(true), function(_, pos)
                 local index = boundaries[pos]
                 local token = index and tokens[index]
+                local idx = index or (#tokens + 1)
+                local set = {}
+                for k in pairs(WHAT_KIND[what] or {}) do
+                    set[k] = true
+                end
                 if token then
-                    error("Expected: " .. what .. "; got: " .. token)
+                    raise{kind = "close", tokidx = idx, want = what,
+                          exp = merge_ferr(set, idx),
+                          msg = "Expected: " .. what
+                                .. "; got: " .. token}
                 else
-                    error("Expected: " .. what .. " but string ended")
+                    raise{kind = "close", tokidx = idx, want = what,
+                          exp = merge_ferr(set, idx),
+                          msg = "Expected: " .. what
+                                .. " but string ended"}
                 end
             end)
         end
 
+        -- kind "operand": an operand was required where none exists
+        local OPERAND = {sym = true, lp = true,
+                         eps = true, empty = true}
         local function fail(message)
-            return Cmt(P(true), function() error(message) end)
+            return Cmt(P(true), function(_, pos)
+                local idx = boundaries[pos] or (#tokens + 1)
+                local set = {}
+                for k in pairs(OPERAND) do set[k] = true end
+                raise{kind = "operand", tokidx = idx,
+                      exp = merge_ferr(set, idx), msg = message}
+            end)
         end
 
         -- bound on the *logical* expanded AST size for "^n" exponents:
@@ -322,7 +386,9 @@ return function(automata)
             local index = boundaries[pos - 1]
             local token = index and tokens[index]
             if not token or META_TOKENS[token] or
+                (metas and metas[token]) or
                 (lenient and LENIENT_META_TOKENS[token]) then
+                rec(index or (#tokens + 1), "sym")
                 return nil
             end
             if lenient and token == "\\" then
@@ -344,7 +410,9 @@ return function(automata)
                     end
                 end
             end
-            return pos - 1 + #token, automata.make_regexp_primitive(token)
+            return pos - 1 + #token,
+                   span(automata.make_regexp_primitive(token),
+                        pos - 1, pos - 1 + #token)
         end)
 
         -- "^"? digits — captures the exponent number; a bare "^" not
@@ -374,34 +442,52 @@ return function(automata)
 
         local grammar = P{
             "regexp",
+            -- kind "end": a complete expression followed by junk —
+            -- the leftover token could extend the expression (∪/*/+
+            -- continue it), that is the offered continuation set
             regexp = V"choice" * (P(-1)
                      + Cmt(P(true), function(_, pos)
                            local index = boundaries[pos]
-                           error("Expected end of regular expression but "
-                                 .. tostring(index and tokens[index])
-                                 .. " obtained")
+                           raise{kind = "end",
+                                 tokidx = index or (#tokens + 1),
+                                 exp = {union = true, star = true,
+                                        plus = true},
+                                 msg = "Expected end of regular "
+                                    .. "expression but "
+                                    .. tostring(index
+                                                and tokens[index])
+                                    .. " obtained"}
                        end)),
-            choice = (V"term" * (union * (V"choice"
-                     + fail("Expression expected")))^-1)
-                     / function(term, rest)
+            choice = (Cp() * V"term" * (union * (V"choice"
+                     + fail("Expression expected")))^-1 * Cp())
+                     / function(p0, term, x, p1)
+                           -- absent optional: the last arg is p1
+                           -- and the middle slot held it instead
+                           local rest
+                           if p1 then rest = x else p1 = x end
                            if rest then
-                               return automata.make_regexp_choice(term, rest)
+                               return span(
+                                   automata.make_regexp_choice(term, rest),
+                                   p0, p1)
                            end
                            return term
                        end,
-            term = V"factor"^1 / function(...)
-                       local acc
-                       for _, factor in ipairs{...} do
-                           if acc then
-                               acc = automata.make_regexp_sequence(acc, factor)
-                           else
-                               acc = factor
-                           end
+            term = (Cp() * V"factor"^1 * Cp()) / function(p0, ...)
+                       local args = {...}
+                       local p1 = args[#args]
+                       args[#args] = nil
+                       local acc = args[1]
+                       for i = 2, #args do
+                           acc = automata.make_regexp_sequence(acc, args[i])
                        end
-                       return acc
+                       return span(acc, p0, p1)
                    end,
-            factor = (V"base" * V"postfix"^0) / function(base, ...)
-                       for _, op in ipairs{...} do
+            factor = (Cp() * V"base" * V"postfix"^0 * Cp())
+                     / function(p0, base, ...)
+                       local ops = {...}
+                       local p1 = ops[#ops]
+                       ops[#ops] = nil
+                       for _, op in ipairs(ops) do
                            if op == "rep" then
                                base = automata.make_regexp_repetition(base)
                            elseif op == "plus" then
@@ -420,7 +506,7 @@ return function(automata)
                                base = expanded
                            end
                        end
-                       return base
+                       return span(base, p0, p1)
                    end,
             postfix = (tok("*") / function() return "rep" end)
                     + (tok("+") / function() return "plus" end)
@@ -429,26 +515,45 @@ return function(automata)
             -- lenient adds "{…}" as group and "\lambda" for the empty
             -- word; like "(", a matched "{" commits -- a missing "}"
             -- is a hard error, never a primitive fallback
-            base = tok("(") * V"choice"
-                 * (tok(")") + (lenient and tok("}") or P(false))
-                    + expected(")"))
-                 + tok("λ") / function() return automata.make_regexp_blank() end
-                 + tok("∅") / function() return automata.make_regexp_empty() end
+            base = (Cp() * tok("(") * V"choice"
+                    * (tok(")") + (lenient and tok("}") or P(false))
+                       + expected(")")) * Cp())
+                   / function(p0, inner, p1)
+                         return span(inner, p0, p1) end
+                 + (Cp() * tok("λ") * Cp())
+                   / function(p0, p1)
+                         return span(automata.make_regexp_blank(),
+                                     p0, p1) end
+                 + (Cp() * tok("∅") * Cp())
+                   / function(p0, p1)
+                         return span(automata.make_regexp_empty(),
+                                     p0, p1) end
                  + (lenient and
-                    rtok("{", "braces") * V"choice"
-                    * (tok("}") + tok(")") + expected("}"))
+                    (Cp() * rtok("{", "braces") * V"choice"
+                     * (tok("}") + tok(")") + expected("}")) * Cp())
+                    / function(p0, inner, p1)
+                        return span(inner, p0, p1) end
                     or P(false))
                  + (lenient and
-                    (tok_word("\\lambda", "lambda_word")
-                     + tok_word("\\lamda", "lambda_word"))
-                    / function() return automata.make_regexp_blank() end
+                    (Cp() * (tok_word("\\lambda", "lambda_word")
+                     + tok_word("\\lamda", "lambda_word")) * Cp())
+                    / function(p0, p1)
+                        return span(automata.make_regexp_blank(),
+                                    p0, p1) end
                     or P(false))
                  + primitive
         }
-        return grammar, repairs
+        return grammar, repairs, ferr
     end
 
-    local function parse_tokens(tokens, lenient)
+    -- parse a token list:  -> ast, repairs   |   nil, errtab
+    -- errtab = {kind = "operand"|"close"|"end"|"error",
+    --           tokidx = <token index or #tokens+1>,
+    --           exp = {<expected kinds>}, msg = <string>}
+    -- structured raises arrive as tables (level 0, no position
+    -- prefix); a legacy string error ("Exponent too large",
+    -- left-recursion, ...) is wrapped verbatim
+    local function parse_tokens(tokens, lenient, metas)
         -- a token mapped to "" (or otherwise empty) denotes the empty word,
         -- exactly what the old parser's peek()=="" branch produced
         for i, token in ipairs(tokens) do
@@ -457,10 +562,33 @@ return function(automata)
             end
         end
         local input = table.concat(tokens)
-        local grammar, repairs = make_regexp_grammar(tokens, lenient)
-        local result = lpeg.match(grammar, input)
-        assert(result, "Expression expected")
+        local grammar, repairs, ferr =
+            make_regexp_grammar(tokens, lenient, metas)
+        local ok, result = pcall(lpeg.match, grammar, input)
+        if not ok then
+            if type(result) == "table" then
+                return nil, result
+            end
+            return nil, {kind = "error", tokidx = nil,
+                         exp = nil, msg = result}
+        end
+        if not result then
+            return nil, {kind = "operand", tokidx = ferr.pos,
+                         exp = ferr.exp,
+                         msg = "Expression expected"}
+        end
         return result, repairs
+    end
+
+    -- the pre-refactor contract: success -> ast, repairs; failure ->
+    -- raised string error (same messages, re-prefixed by error())
+    local function parse_tokens_or_raise(tokens, lenient)
+        local ast, res = parse_tokens(tokens, lenient)
+        if not ast then
+            error((res.msg or tostring(res))
+                  :gsub("^[^:]+:%d+: *", ""))
+        end
+        return ast, res
     end
 
     -- https://matt.might.net/articles/parsing-regex-with-recursive-descent/
@@ -474,7 +602,7 @@ return function(automata)
             end
             tokens[#tokens + 1] = token
         end
-        return parse_tokens(tokens)
+        return parse_tokens_or_raise(tokens)
     end
 
     function automata.parse_regexp_string(word, map)
@@ -487,7 +615,19 @@ return function(automata)
         for index = 1,sequence:len() do
             tokens[index] = sequence:get_char(index)
         end
-        return (parse_tokens(tokens))
+        return (parse_tokens_or_raise(tokens))
+    end
+
+    -- editor-facing variant: the caller hands over its own token
+    -- list (it owns the source anchoring) and gets a structured
+    -- result — success: ast (nodes carry t0/t1 token-index spans)
+    -- + repairs; failure: nil + errtab{kind,tokidx,exp,msg}.
+    -- opts.lenient enables the grading spellings; opts.metas marks
+    -- additional tokens as non-primitive (course notation: *, +, ^
+    -- are operators, never symbols)
+    function automata.parse_regexp_tokens(tokens, opts)
+        opts = opts or {}
+        return parse_tokens(tokens, opts.lenient, opts.metas)
     end
 
     -- lenient variant for grading: additionally accepts the spellings
@@ -506,7 +646,7 @@ return function(automata)
         for index = 1,sequence:len() do
             tokens[index] = sequence:get_char(index)
         end
-        return parse_tokens(tokens, true)
+        return parse_tokens_or_raise(tokens, true)
     end
 
     function automata.random_regexp(alphabet)
