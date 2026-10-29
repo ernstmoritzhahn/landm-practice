@@ -146,6 +146,22 @@
             border-color: var(--accent);
         }
 
+        /* overview page (no ?exercise= argument) */
+        .ovsheet { margin: 0.4rem 0 1.2rem 0; }
+        .ovsheet .ovtitle {
+            font-weight: bold; font-size: 1.05rem;
+            border-bottom: 1px solid var(--hairline);
+            margin-bottom: 0.45rem; padding-bottom: 2px;
+        }
+        .ovgroup { margin: 0.3rem 0; }
+        .ovgroup .ovgrp { display: inline-block; min-width: 8rem; }
+        .ovsubs a {
+            color: var(--accent); text-decoration: none;
+            font-family: "Monaco", "Consolas", monospace;
+            font-size: 0.85rem; padding: 0 4px;
+        }
+        .ovsubs a:hover { text-decoration: underline; }
+
         #goalrow {
             display: flex;
             align-items: baseline;

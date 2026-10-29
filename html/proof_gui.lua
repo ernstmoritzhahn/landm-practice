@@ -2762,6 +2762,43 @@ end)
 -- NB: no js_post_message here — it is only wired after this module's
 -- require() returns.  The worker pushes the task list itself on load.
 
+-- no ?exercise= argument: the landing page is an overview of every
+-- sheet's exercises instead of sheet 1's first task — the tabbed
+-- view has no way to reach other sheets otherwise
+local function render_overview()
+    clear(proof_el); clear(summary_el)
+    clear(ihrow_el); clear(rulesbox_el)
+    clear(variant_el); clear(tabs_el); clear(subtabs_el)
+    rulesbox_el.style.display = "none"
+    checkbtn.textContent = "Check"
+    goal_el.innerHTML = ""
+    goal_el:appendChild(text("span",
+        "Languages & Machines — practice exercises", "goaltitle"))
+    goal_el:appendChild(text("div",
+        "Pick an exercise, or a single part.", "desc"))
+    for _,sh in ipairs(state.sheets) do
+        local box = el("div", "ovsheet")
+        box:appendChild(text("div", sh.title, "ovtitle"))
+        for _,g in ipairs(sh.groups or {}) do
+            local row = el("div", "ovgroup")
+            local a = el("a", "exlink ovgrp")
+            a.href = "?exercise=" .. g.id
+            a.textContent = g.title or g.id
+            row:appendChild(a)
+            local subs = el("span", "ovsubs")
+            for _,sub in ipairs(g.subtasks) do
+                local sa = el("a")
+                sa.href = "?exercise=" .. g.id .. "&sub=" .. sub.sub
+                sa.textContent = sub.sub .. ")"
+                subs:appendChild(sa)
+            end
+            row:appendChild(subs)
+            box:appendChild(row)
+        end
+        proof_el:appendChild(box)
+    end
+end
+
 -- bad ?exercise=/?sub= deep link: show an error + the valid choices
 -- instead of silently landing on the default task
 local function render_error(bad_ex, bad_sub)
@@ -2835,10 +2872,13 @@ return function(data)
             end
             if not found then bad_sub = sub_param end
         end
-        render_tabs()
         if bad_ex or bad_sub then
+            render_tabs()
             render_error(bad_ex, bad_sub)
+        elseif not ex_param then
+            render_overview()
         else
+            render_tabs()
             select_task()
         end
     elseif data.what == "view" then
