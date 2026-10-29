@@ -13,6 +13,7 @@ local document = window.document
 local fwrap      = document:getElementById("fwrap")
 local fhl_el     = document:getElementById("fhl")
 local hlchk      = document:getElementById("hlchk")
+local propchk    = document:getElementById("propchk")
 local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
 local meta_el    = document:getElementById("meta")
@@ -97,6 +98,7 @@ local function send_parse()
     local sel = input.selectionStart or #input.value
     util.js_post_message(json.encode(
         {what = "parse", input = input.value,
+         prop = propchk.checked,
          prefix = input.value:sub(1, byte_pos(input.value, sel))}))
 end
 
@@ -123,6 +125,7 @@ end)
 hlchk:addEventListener("change", function()
     fwrap.className = hlchk.checked and "fwrap" or "fwrap nohl"
 end)
+propchk:addEventListener("change", send_parse)
 
 -- symbol buttons insert at the caret
 local buttons = document.querySelectorAll(".symbtn")

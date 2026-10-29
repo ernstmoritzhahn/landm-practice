@@ -120,7 +120,7 @@ local syntax = {}
 -- Precedence levels are sorted tightest-first internally; the formula
 -- rule is the loosest level.  All binary connectives fold to the right
 -- (matches the operator table and the usual reading of p->q->r).
-local function build_grammar()
+local function build_grammar(prop_only)
     -- group connectives by precedence
     local by_prec, precs = {}, {}
     for _, op in ipairs(operators.connectives) do
@@ -138,20 +138,20 @@ local function build_grammar()
 
     grammar.formula = V("level_" .. precs[1])
 
-    -- base operand: constants, quantifiers, atoms, parenthesised.
-    -- The trailing expect-labels are the operand-start vocabulary:
-    -- at a farthest-failure position they ARE the valid continuations
-    -- (suggestions map each label to insertable tokens).
+    -- base operand: constants, quantifiers (full mode only), atoms,
+    -- parenthesised.  The trailing expect-labels are the operand-start
+    -- vocabulary: at a farthest-failure position they ARE the valid
+    -- continuations (suggestions map each label to insertable tokens).
     grammar.base =
         P(false)
         + V("boolconst")
-        + V("quant")
+        + (prop_only and P(false) or V("quant"))
         + V("atom")
         + Open * V("formula")
           * (Close + expect("')'"))
         + expect("identifier")
         + expect("'¬'")
-        + expect("quantifier")
+        + (prop_only and P(false) or expect("quantifier"))
         + expect("constant")
         + expect("'('")
 
@@ -231,14 +231,16 @@ local function build_grammar()
 
         grammar.atom =
             P(false)
-            + (Cp() * C(Ident) * Space
-               * Open
-               * (V("termlist") + Cc({}))
-               * (Close + expect("')'"))
-               * Cp()
-               / function(f, name, args, t)
-                   return node("atom", f, t, {name = name, args = args})
-               end)
+            + (prop_only and P(false)
+               or (Cp() * C(Ident) * Space
+                   * Open
+                   * (V("termlist") + Cc({}))
+                   * (Close + expect("')'"))
+                   * Cp()
+                   / function(f, name, args, t)
+                       return node("atom", f, t,
+                                   {name = name, args = args})
+                   end))
             + (Cp() * C(Ident) * Cp() * Space
                / function(f, name, t)
                    return node("atom", f, t, {name = name, args = {}})
@@ -304,6 +306,7 @@ local function build_grammar()
 end
 
 local formula_pattern = build_grammar()
+local prop_pattern = build_grammar(true)
 
 -- term parser alone (for tableau gamma-terms etc.)
 local term_pattern
@@ -459,14 +462,17 @@ end
 
 --- parse(input, opts) -> ast | nil, err | nil, info
 --- opts.var_initials: set of initials classified as free variables
+--- opts.prop: propositional-only mode (no quantifiers, no term args)
 --- On success also returns info = {free={...}, roles={...}, errors={..}}
 local top_pattern = Space * formula_pattern * Space * Cp()
+local top_prop_pattern = Space * prop_pattern * Space * Cp()
 
 function syntax.parse(input, opts)
+    local pat = (opts and opts.prop) and top_prop_pattern or top_pattern
     local prev = parsing_context.get_current()
     local ctx = parsing_context(input)
     parsing_context.set_current(ctx)
-    local ast, endpos = lpeg.match(top_pattern, input)
+    local ast, endpos = lpeg.match(pat, input)
     parsing_context.set_current(prev)
     if ast == nil or endpos <= #input then
         local pos = ctx:get_last_position()
@@ -609,18 +615,25 @@ do
     SUGGEST_TOKENS["connective"] = list
 end
 
---- suggest(prefix) -> {{ins=string, back=int?}, ...}
+--- suggest(prefix, opts) -> {{ins=string, back=int?}, ...}
 --- prefix: input text up to the caret (byte string).
-function syntax.suggest(prefix)
+--- opts.prop: propositional-only mode (no quantifier/term offers).
+function syntax.suggest(prefix, opts)
+    local pat = (opts and opts.prop) and top_prop_pattern or top_pattern
     local prev = parsing_context.get_current()
     local ctx = parsing_context(prefix)
     parsing_context.set_current(ctx)
-    lpeg.match(top_pattern, prefix)
+    lpeg.match(pat, prefix)
     local expected = ctx:get_expected() or {}
     parsing_context.set_current(prev)
     local seen, out = {}, {}
     for _, label in ipairs(expected) do
-        for _, t in ipairs(SUGGEST_TOKENS[label] or {}) do
+        local offers = SUGGEST_TOKENS[label]
+        -- term args don't exist in the propositional grammar
+        if opts and opts.prop and label == "identifier" then
+            offers = {{"p"}}
+        end
+        for _, t in ipairs(offers or {}) do
             if not seen[t[1]] then
                 seen[t[1]] = true
                 out[#out + 1] = {ins = t[1], back = t.back}

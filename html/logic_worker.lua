@@ -27,12 +27,13 @@ end
 return function(data)
     local msg = json.decode(data)
     if msg.what == "parse" then
+        local opts = {prop = msg.prop == true}
         -- continuations for the text before the caret
-        local suggestions = logic.suggest(msg.prefix or "")
+        local suggestions = logic.suggest(msg.prefix or "", opts)
         -- token classes for the highlight layer (echo the input so a
         -- stale reply is not painted over newer text)
         local spans = logic.highlight(msg.input or "")
-        local ast, err, info = logic.parse(msg.input or "")
+        local ast, err, info = logic.parse(msg.input or "", opts)
         if ast then
             local out = {
                 ok = true,
