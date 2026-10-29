@@ -14,8 +14,9 @@ local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
 local render_el  = document:getElementById("render")
 local meta_el    = document:getElementById("meta")
-local tree_el    = document:getElementById("tree")
-local errline_el = document:getElementById("errline")
+local tree_el    = document.getElementById("tree")
+local errline_el = document.getElementById("errline")
+local suggest_el = document.getElementById("suggest")
 
 -- ASCII digraphs live-replaced by their Unicode connectives.
 -- Ordered: multi-char before the overlaps they would otherwise eat
@@ -65,11 +66,36 @@ local function replace_symbols(element)
     end
 end
 
+-- all input symbols are BMP codepoints: UTF-16 units (the DOM
+-- selection API's unit) equal character counts — byte math only has
+-- to step over UTF-8 continuation bytes.
+local function byte_pos(s, units)
+    local i, n = 1, 0
+    while i <= #s and n < units do
+        local b = s:byte(i)
+        i = i + (b < 0x80 and 1 or b < 0xE0 and 2
+                 or b < 0xF0 and 3 or 4)
+        n = n + 1
+    end
+    return i - 1
+end
+
+local function ulen(s)
+    local n = 0
+    for i = 1, #s do
+        local b = s:byte(i)
+        if b < 0x80 or b >= 0xC0 then n = n + 1 end
+    end
+    return n
+end
+
 local alive = false   -- worker answered at least once
 
 local function send_parse()
+    local sel = input.selectionStart or #input.value
     util.js_post_message(json.encode(
-        {what = "parse", input = input.value}))
+        {what = "parse", input = input.value,
+         prefix = input.value:sub(1, byte_pos(input.value, sel))}))
 end
 
 -- util_worker drops messages that arrive before its module is loaded:
@@ -85,6 +111,9 @@ input:addEventListener("input", function()
     replace_symbols(input)
     send_parse()
 end)
+-- caret moves change the continuation vocabulary
+input:addEventListener("keyup", send_parse)
+input:addEventListener("click", send_parse)
 
 -- symbol buttons insert at the caret
 local buttons = document.querySelectorAll(".symbtn")
@@ -93,10 +122,13 @@ for i = 0, buttons.length - 1 do
     b:addEventListener("click", function()
         local s = b.textContent
         local sel = input.selectionStart or #input.value
-        input.value = input.value:sub(1, sel) .. s ..
-                      input.value:sub(sel + 1)
-        input.selectionStart = sel + 1
-        input.selectionEnd = sel + 1
+        local selEnd = input.selectionEnd or sel
+        local v = input.value
+        input.value = v:sub(1, byte_pos(v, sel)) .. s ..
+                      v:sub(byte_pos(v, selEnd) + 1)
+        local pos = sel + 1
+        input.selectionStart = pos
+        input.selectionEnd = pos
         input:focus()
         send_parse()
     end)
@@ -145,9 +177,39 @@ local function chip(text, cls)
            esc(text) .. "</span>"
 end
 
+local function render_suggestions(list)
+    local parts = {}
+    for _, s in ipairs(list or {}) do
+        parts[#parts + 1] =
+            '<button class="sugbtn" data-ins="' .. esc(s.ins) ..
+            '" data-back="' .. (s.back or 0) .. '">' ..
+            esc(s.label or s.ins) .. "</button>"
+    end
+    suggest_el.innerHTML = table.concat(parts, " ")
+    local btns = suggest_el:querySelectorAll(".sugbtn")
+    for i = 0, btns.length - 1 do
+        local b = btns[i]
+        b:addEventListener("click", function()
+            local ins = b:getAttribute("data-ins")
+            local back = tonumber(b:getAttribute("data-back")) or 0
+            local sel = input.selectionStart or #input.value
+            local selEnd = input.selectionEnd or sel
+            local v = input.value
+            input.value = v:sub(1, byte_pos(v, sel)) .. ins ..
+                          v:sub(byte_pos(v, selEnd) + 1)
+            local pos = sel + ulen(ins) - back
+            input.selectionStart = pos
+            input.selectionEnd = pos
+            input:focus()
+            send_parse()
+        end)
+    end
+end
+
 return function(data)
     alive = true
     local msg = json.decode(data)
+    render_suggestions(msg.suggestions)
     if msg.ok then
         status_el.textContent = "✓ formula"
         status_el.className = "status ok"

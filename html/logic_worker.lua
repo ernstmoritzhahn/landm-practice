@@ -27,6 +27,8 @@ end
 return function(data)
     local msg = json.decode(data)
     if msg.what == "parse" then
+        -- continuations for the text before the caret
+        local suggestions = logic.suggest(msg.prefix or "")
         local ast, err, info = logic.parse(msg.input or "")
         if ast then
             local out = {
@@ -37,6 +39,7 @@ return function(data)
                 closed = #info.free == 0,
                 layout = logic.layout(ast),
                 ast = ast,
+                suggestions = suggestions,
             }
             util.js_post_message(json.encode(out))
         else
@@ -45,6 +48,7 @@ return function(data)
                 message = err.message,
                 pos = err.pos,
                 expected = err.expected,
+                suggestions = suggestions,
             }))
         end
     end

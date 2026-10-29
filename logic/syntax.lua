@@ -138,7 +138,10 @@ local function build_grammar()
 
     grammar.formula = V("level_" .. precs[1])
 
-    -- base operand: constants, quantifiers, atoms, parenthesised
+    -- base operand: constants, quantifiers, atoms, parenthesised.
+    -- The trailing expect-labels are the operand-start vocabulary:
+    -- at a farthest-failure position they ARE the valid continuations
+    -- (suggestions map each label to insertable tokens).
     grammar.base =
         P(false)
         + V("boolconst")
@@ -146,7 +149,11 @@ local function build_grammar()
         + V("atom")
         + Open * V("formula")
           * (Close + expect("')'"))
-        + expect("formula")
+        + expect("identifier")
+        + expect("'¬'")
+        + expect("quantifier")
+        + expect("constant")
+        + expect("'('")
 
     -- boolean constants
     do
@@ -176,13 +183,16 @@ local function build_grammar()
             / function(f, n, t)
                 return {name = n, pos = mkpos(f, t)}
             end)
+        -- ',' only expected when no comma was just consumed; a
+        -- 'variable' expectation marks the position after it.
         local varlist = Ct(varname
-            * ((Comma + P(true)) * varname)^0)
+            * ((Comma + expect("','") + P(true))
+               * (varname + expect("variable")))^0)
         grammar.quant =
             Cp() * qsym * Space
             * (varlist + expect("variable"))
             * (Dot + expect("'.'"))
-            * (V("formula") + expect("quantified formula"))
+            * V("formula")
             * Cp()
             / function(f, quant, vars, body, t)
                 return node("quant", f, t,
@@ -473,6 +483,59 @@ function syntax.parse(input, opts)
         return nil, err
     end
     return ast, nil, {free = free, roles = roles}
+end
+
+-- context-sensitive suggestions -------------------------------------
+--
+-- suggest(prefix) parses the text before the caret and reads the
+-- farthest-failure expectation set — that set IS the continuation
+-- vocabulary (successful parses still register the infix "connective"
+-- probe at end-of-input).  Each expectation label maps to insertable
+-- tokens; `back` is the number of characters the caret moves back
+-- after insertion (lands inside () for the (…)-style offers).
+
+local SUGGEST_TOKENS = {
+    ["identifier"]  = {{"p"}, {"p()", back = 1}},
+    ["'¬'"]         = {{"¬"}},
+    ["'('"]         = {{"()", back = 1}},
+    ["quantifier"]  = {{"∀"}, {"∃"}},
+    ["constant"]    = {{"⊤"}, {"⊥"}},
+    ["variable"]    = {{"x"}, {"y"}},
+    ["term"]        = {{"a"}, {"x"}, {"f()", back = 1}},
+    ["')'"]         = {{")"}},
+    ["','"]         = {{","}},
+    ["'.'"]         = {{"."}},
+}
+do
+    local order = {"and", "or", "imp", "iff", "xor", "nand", "nor",
+                   "revimp"}
+    local list = {}
+    for _, key in ipairs(order) do
+        local op = operators.by_key[key]
+        list[#list + 1] = {op.default_symbol}
+    end
+    SUGGEST_TOKENS["connective"] = list
+end
+
+--- suggest(prefix) -> {{ins=string, back=int?}, ...}
+--- prefix: input text up to the caret (byte string).
+function syntax.suggest(prefix)
+    local prev = parsing_context.get_current()
+    local ctx = parsing_context(prefix)
+    parsing_context.set_current(ctx)
+    lpeg.match(top_pattern, prefix)
+    local expected = ctx:get_expected() or {}
+    parsing_context.set_current(prev)
+    local seen, out = {}, {}
+    for _, label in ipairs(expected) do
+        for _, t in ipairs(SUGGEST_TOKENS[label] or {}) do
+            if not seen[t[1]] then
+                seen[t[1]] = true
+                out[#out + 1] = {ins = t[1], back = t.back}
+            end
+        end
+    end
+    return out
 end
 
 --- parse a standalone term (gamma-rule inputs etc.)

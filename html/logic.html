@@ -80,6 +80,19 @@
             color: var(--ut-dark-grey);
         }
         .symbtn:hover { border-color: var(--ut-black); }
+        .sugbar { margin: 0.6rem 0 0 0; min-height: 1.9rem; }
+        .sugbtn {
+            background: #fff;
+            border: 1px solid #b9c6e8;
+            border-radius: 3px;
+            font-family: "Monaco", monospace;
+            font-size: 0.95rem;
+            padding: 4px 10px;
+            margin-right: 5px;
+            cursor: pointer;
+            color: #0033a0;
+        }
+        .sugbtn:hover { border-color: #0033a0; background: #f2f5fc; }
         .status { font-family: "Monaco", monospace; font-size: 0.95rem; }
         .status.ok { color: #177a2a; }
         .status.err { color: var(--ut-red); }
@@ -153,6 +166,7 @@
         <input type="text" id="formula"
                placeholder="p -> q /\ r   or   forall x. p(x) -> exists y. q(y,a)"
                autocomplete="off" spellcheck="false">
+        <div id="suggest" class="sugbar"></div>
         <div class="symbar">
             <button class="symbtn">¬</button><button class="symbtn">∧</button><button class="symbtn">∨</button><button class="symbtn">→</button><button class="symbtn">←</button><button class="symbtn">↔</button><button class="symbtn">⊕</button><button class="symbtn">↑</button><button class="symbtn">↓</button><button class="symbtn">∀</button><button class="symbtn">∃</button><button class="symbtn">⊤</button><button class="symbtn">⊥</button>
         </div>
