@@ -583,9 +583,16 @@ function aut.edge_poly(i, bx, by, vox, voy, fh, geo_only)
                 -- sibling between the same states (single <-> fan
                 -- <-> bidirectional) — a STRUCTURAL trigger the
                 -- geometric reach rule cannot see
-                local touched = {}
+                local touched, touched_nodes = {}, {}
                 local function touch(a, b)
                     touched[a .. ">" .. b] = true
+                    -- node-level record for self-loops: a loop's
+                    -- free_dir depends on EVERY incident non-loop
+                    -- edge, so a (from,to) pair change on either
+                    -- endpoint must dirty it too — the pair key
+                    -- "q0>q0" alone misses that
+                    touched_nodes[a] = true
+                    touched_nodes[b] = true
                 end
                 for _, e in ipairs(G.edges) do
                     local pe = ps.edges[e.id]
@@ -609,6 +616,7 @@ function aut.edge_poly(i, bx, by, vox, voy, fh, geo_only)
                     local dirty = rewired
                         or touched[e.from .. ">" .. e.to]
                         or touched[e.to .. ">" .. e.from]
+                        or (e.from == e.to and touched_nodes[e.from])
                     if not dirty then
                         local r = edge_reach(j, bx, by, vox, voy)
                         for _, cb in ipairs(changed) do
