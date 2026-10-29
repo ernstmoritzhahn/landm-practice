@@ -214,3 +214,13 @@ button.primary:hover {
     text-decoration: underline wavy var(--fail) 2px;
     background: rgba(180, 30, 60, 0.12);
 }
+
+/* deploy token — a screenshot then shows whether the page is current
+   (open tabs keep their loaded Lua until reloaded, and GitHub Pages
+   caches the html/js shell for up to 10 minutes) */
+.deployv {
+    margin-top: 2em;
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-align: right;
+}
