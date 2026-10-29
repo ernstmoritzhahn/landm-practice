@@ -29,6 +29,21 @@ local replacements = {
     {"&&", "∧"}, {"/\\", "∧"},
     {"||", "∨"}, {"\\/", "∨"},
     {"~", "¬"}, {"!", "¬"},
+    -- LaTeX commands (safe: no member is a prefix of another —
+    -- \to, \la, \up, \down are deliberately excluded so \top,
+    -- \land, \uparrow, \downarrow remain typeable; the parser still
+    -- accepts them and the render shows the symbol)
+    {"\\neg", "¬"}, {"\\lnot", "¬"},
+    {"\\wedge", "∧"}, {"\\land", "∧"},
+    {"\\vee", "∨"}, {"\\lor", "∨"},
+    {"\\rightarrow", "→"}, {"\\ra", "→"},
+    {"\\leftarrow", "←"}, {"\\gets", "←"},
+    {"\\leftrightarrow", "↔"}, {"\\lra", "↔"}, {"\\iff", "↔"},
+    {"\\oplus", "⊕"}, {"\\xor", "⊕"},
+    {"\\uparrow", "↑"}, {"\\nand", "↑"},
+    {"\\downarrow", "↓"}, {"\\nor", "↓"},
+    {"\\forall", "∀"}, {"\\exists", "∃"},
+    {"\\top", "⊤"}, {"\\bot", "⊥"},
 }
 -- escape pattern-magic characters once
 for _, r in ipairs(replacements) do
