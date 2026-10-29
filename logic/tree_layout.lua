@@ -88,11 +88,15 @@ end
 -- native and in the worker.  This replaces the earlier Graphviz
 -- dependency: our formula trees are always trees, so a dot-shaped
 -- layered layout is contour packing + rank-by-depth.
+local utf8_len = (utf8 and utf8.len) or function(s) return #s end
+
 local function layout_tidy(nodes, root_id)
     -- every node's measured size first: contour distances need widths
+    -- (character count, not byte count — node labels are unicode)
     for _, n in ipairs(nodes) do
         n.h = tree.NODE_H
-        n.w = math.max(tree.NODE_MIN_W, #n.label * tree.NODE_CHAR_W + 10)
+        n.w = math.max(tree.NODE_MIN_W,
+                       utf8_len(n.label) * tree.NODE_CHAR_W + 10)
     end
 
     local sibNo, lSib, par = {}, {}, {}

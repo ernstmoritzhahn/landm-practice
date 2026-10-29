@@ -109,10 +109,13 @@ end
 local KIND_COLOR = {op = "#000000", quant = "#0033a0",
                     atom = "#555555", const = "#888888"}
 
+local SVG_PAD = 8   -- viewBox margin so node strokes aren't clipped
+
 local function build_svg(layout)
-    local w, h = layout.w, layout.h
+    local w, h = layout.w + 2 * SVG_PAD, layout.h + 2 * SVG_PAD
     local parts = {'<svg width="' .. w .. '" height="' .. h ..
-                   '" viewBox="0 0 ' .. w .. ' ' .. h .. '">'}
+                   '" viewBox="' .. -SVG_PAD .. ' ' .. -SVG_PAD ..
+                   ' ' .. w .. ' ' .. h .. '">'}
     local function nd(id) return layout.nodes[id] end
     for _, e in ipairs(layout.edges) do
         local a, b = nd(e.from), nd(e.to)
