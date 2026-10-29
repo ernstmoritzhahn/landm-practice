@@ -168,10 +168,28 @@ local REL_DISPLAY = { ["="] = "=", ["!="] = "≠", ["<"] = "⊊",
                       [">"] = "⊋" }
 
 -- shared tail for the text and the graphical model paths: `pda` is a
--- built make_pda object, `notes` accumulates student-facing warnings
-local function check_pda_obj(part, pda, notes)
+-- built make_pda object, `notes` accumulates student-facing warnings,
+-- `atype` is the effective type name (part.aut_type wins — the task
+-- sets the contract; the saved model's own type is only the fallback
+-- for callers without one, "pda" the default)
+local function check_pda_obj(part, pda, notes, atype)
     notes = notes or {}
-    if part.deterministic then
+    -- the pda family's acceptance mode comes from the type name
+    -- (dpda-* deterministic, -* suffix picks L_F/L_E; anything else
+    -- keeps the plain L(M) semantics — both conditions).  The mode
+    -- is stamped onto the automaton objects; the word problem reads
+    -- it back per configuration.
+    local label_lang = require "automata.label_lang"
+    atype = part.aut_type or atype or "pda"
+    local mode = label_lang.pda_accept
+                 and label_lang.pda_accept(atype) or "fe"
+    pda.pda_acceptance = mode
+    -- deterministic variants demand Sudkamp determinism even when the
+    -- part does not spell it out — the type name is the requirement
+    local want_det = part.deterministic
+                     or (label_lang.is_det_pda
+                         and label_lang.is_det_pda(atype))
+    if want_det then
         local det, derr = M.is_deterministic(pda)
         if not det then
             return { ok = false,
@@ -190,6 +208,9 @@ local function check_pda_obj(part, pda, notes)
     local ref = part.pda_ref
     if type(ref) == "function" then ref = ref() end
     if not ref then return { ok = false, msg = "no reference PDA" } end
+    -- both sides run under the part's acceptance mode — comparing an
+    -- L_E reference against an L(M) student would be meaningless
+    ref.pda_acceptance = mode
     -- bounded comparison: PDA equivalence is undecidable, so the
     -- bounded search runs under a CPU deadline — in the wasm worker a
     -- stack-growing student PDA would otherwise grind for minutes
@@ -301,7 +322,7 @@ function M.check_pda_model(part, model_json)
     if not next(pda:get_accepting() or {}) then
         notes[1] = "no final states — accepts by empty stack"
     end
-    return check_pda_obj(part, pda, notes)
+    return check_pda_obj(part, pda, notes, m.type)
 end
 
 function M.check_pda(part, text)

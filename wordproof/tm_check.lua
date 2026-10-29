@@ -149,7 +149,42 @@ function M.run(tm, word, max_steps)
     return "timeout"
 end
 
-local function check_tm_obj(part, tm)
+-- Sudkamp determinism: two transitions from the same state conflict
+-- when their read tuples are identical on every tape
+local function is_deterministic(tm)
+    for st, list in pairs(tm.trans) do
+        local seen = {}
+        for _, tr in ipairs(list) do
+            local reads = {}
+            for t = 1, tm.ntapes do reads[#reads + 1] = tr.tapes[t].r end
+            local key = table.concat(reads, "|")
+            if seen[key] then
+                return false, string.format(
+                    "nondeterministic in state %s: two transitions "
+                    .. "read '%s'", st, key)
+            end
+            seen[key] = true
+        end
+    end
+    return true
+end
+
+local function check_tm_obj(part, tm, atype)
+    -- tm|tm-N is the deterministic family (part.deterministic makes a
+    -- legacy part demand it too); ntm* branches freely
+    local label_lang = require "automata.label_lang"
+    local want_det = part.deterministic
+                     or (label_lang.is_det_tm
+                         and label_lang.is_det_tm(
+                             part.aut_type or atype or "tm"))
+    if want_det then
+        local det, derr = is_deterministic(tm)
+        if not det then
+            return { ok = false,
+                     msg = derr
+                         .. " — the TM must be deterministic" }
+        end
+    end
     if part.tape1_no_L then
         for st, list in pairs(tm.trans) do
             for _, tr in ipairs(list) do
@@ -223,7 +258,9 @@ function M.check_tm_model(part, model_json)
                 .. "endpoint"
         else
             local ts, why = label_lang.parse_many(
-                "tm" .. (ntapes > 1 and ("-" .. ntapes) or ""), e.label)
+                label_lang.tapes(m.type) and m.type
+                    or ("tm" .. (ntapes > 1 and ("-" .. ntapes) or "")),
+                e.label)
             if not ts then
                 problems[#problems + 1] = "label '" .. tostring(e.label)
                     .. "': " .. why
@@ -246,7 +283,7 @@ function M.check_tm_model(part, model_json)
     if #problems > 0 then
         return { ok = false, msg = table.concat(problems, "; ") }
     end
-    return check_tm_obj(part, tm)
+    return check_tm_obj(part, tm, m.type)
 end
 
 return M

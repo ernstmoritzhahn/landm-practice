@@ -44,9 +44,12 @@ local G = {
     -- object under test: "aut" = the automaton, "re" = the regular
     -- expression in G.regex
     mode     = "aut",
-    aut_type = "nfa",   -- nfa|nfa-eps|dfa|dfa-part|pda|tm|tm-N
+    -- nfa|nfa-eps|dfa|dfa-part | pda family: pda|pda-f|pda-e (nondet,
+    -- -f/-e pick L_F/L_E acceptance) + dpda* (deterministic) |
+    -- tm|tm-N (det) | ntm|ntm-N (nondet)
+    aut_type = "nfa",
     alphabet = "",      -- declared alphabet, "" = unspecified
-    stack_alphabet = "",-- PDA only: declared stack alphabet
+    stack_alphabet = "",-- PDA types only: declared stack alphabet
     regex    = "",      -- regular expression source (re mode)
     re_word  = "",      -- scratch word tested against the expression
     checks   = nil,     -- key -> bool toggles (lazy: checks.defaults())

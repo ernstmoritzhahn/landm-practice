@@ -547,12 +547,13 @@ function M.check_aut(part, model_json, expect_type)
     end
     -- graphical PDA / Turing-machine input delegates to the dedicated
     -- checkers; their labels parse through automata.label_lang
-    if part.aut_type == "pda" then
+    local at = part.aut_type or ""
+    if at:match("^d?pda") then
         return require("wordproof.pda_check")
             .check_pda_model(part, model_json)
     end
-    if part.aut_type == "tm"
-       or (part.aut_type or ""):match("^tm%-%d+$") then
+    if at == "tm" or at == "ntm"
+       or at:match("^n?tm%-%d+$") then
         return require("wordproof.tm_check")
             .check_tm_model(part, model_json)
     end

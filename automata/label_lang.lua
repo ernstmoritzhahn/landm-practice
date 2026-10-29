@@ -9,8 +9,12 @@
 -- notation); λ is NOT the blank.  Accepted shapes:
 --
 --   pda   "a A/AA" | "a, A -> AA" | "a, A → AA" | "λ Z/Z"
+--         (same grammar for all pda-family types: pda, pda-f, pda-e,
+--         dpda, dpda-f, dpda-e — the suffix picks the acceptance mode)
 --   tm    "a b R"  | "a,b,R"      | "a -> b, R"  | "a b -> R"
 --   tm-N  "a b R | ⊔ ⊔ L"        — N clauses separated by '|'
+--         (ntm/ntm-N are the nondeterministic TM variants, same
+--         clause grammar)
 --
 -- parse(type, label) returns a plain tuple table or nil, reason:
 --   pda   -> {input=sym|"", pop=sym|"", push=string|""}
@@ -153,21 +157,45 @@ local function parse_many(atype, label)
 end
 
 -- ---------- registry ----------
+-- type families: the PDA family is pda|pda-f|pda-e (nondeterministic)
+-- plus dpda|dpda-f|dpda-e (deterministic); the suffix picks the
+-- acceptance mode — -f final state only (L_F), -e empty stack only
+-- (L_E), no suffix = both (the lecture's plain L(M)).  The TM family
+-- is tm|tm-N (deterministic) and ntm|ntm-N (nondeterministic).
+function M.is_pda(atype)
+    return atype ~= nil and atype:match("^d?pda") ~= nil
+end
+
+function M.is_det_pda(atype)
+    return atype ~= nil and atype:match("^dpda") ~= nil
+end
+
+-- "fe" | "f" | "e"
+function M.pda_accept(atype)
+    local s = (atype or ""):match("%-(%l+)$")
+    return (s == "f" or s == "e") and s or "fe"
+end
+
 function M.tapes(atype)
-    local n = (atype or ""):match("^tm%-(%d+)$")
+    local n = (atype or ""):match("^n?tm%-(%d+)$")
     if n then return tonumber(n) end
-    if atype == "tm" then return 1 end
+    if atype == "tm" or atype == "ntm" then return 1 end
     return nil
+end
+
+-- deterministic TM variants (tm, tm-N) vs nondeterministic (ntm*)
+function M.is_det_tm(atype)
+    return atype ~= nil and atype:match("^tm") ~= nil
 end
 
 -- does the type use structured (non-symbol-list) labels?
 function M.is_structured(atype)
-    return atype == "pda" or M.tapes(atype) ~= nil
+    return M.is_pda(atype) or M.tapes(atype) ~= nil
 end
 
 -- parse(type, label) -> tuple | nil, reason
 function M.parse(atype, label)
-    if atype == "pda" then return parse_pda(label) end
+    if M.is_pda(atype) then return parse_pda(label) end
     local n = M.tapes(atype)
     if n then return parse_tm(label, n) end
     return nil, "no label grammar for type '" .. tostring(atype) .. "'"

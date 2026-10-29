@@ -56,13 +56,16 @@ local LABEL_HINTS = {
         .. "\xc2\xb7 ~ = keep symbol",
 }
 local function label_hint()
-    local nt = (G.aut_type or ""):match("^tm%-(%d+)$")
+    local t = G.aut_type or "nfa"
+    local nt = t:match("^n?tm%-(%d+)$")
     if nt then
         return "one 'read write move' clause per tape, | separates "
             .. "tapes \xc2\xb7 " .. nt
             .. " tapes, e.g. a a R | \xe2\x8a\x94 X S"
     end
-    return LABEL_HINTS[G.aut_type or "nfa"]
+    return LABEL_HINTS[t]
+        or (t:match("^d?pda") and LABEL_HINTS.pda)
+        or (t:match("^ntm") and LABEL_HINTS.tm)
 end
 
 local aut_panel = {}
@@ -233,8 +236,8 @@ local function alphabet_field()
         G.alphabet = al
         changed()
     end
-    -- PDA carries a second alphabet for stack symbols
-    if (G.aut_type or "") == "pda" then
+    -- PDA types carry a second alphabet for stack symbols
+    if (G.aut_type or ""):match("^d?pda") then
         A.row(20, 1); A.label("Stack alphabet (e.g. A,Z)",
                               NK.TEXT_LEFT)
         if stack_for ~= G.stack_alphabet then
@@ -346,22 +349,46 @@ end
 local function config_section()
     A.row(20, 1); A.label("Automaton", NK.TEXT_LEFT)
     A.row(24, 1)
-    -- type cycle: NFA -> NFA-λ -> DFA -> Partial DFA -> PDA -> TM ->
-    -- 2-tape TM -> NFA (only NFA-λ admits lambda transitions; "partial"
-    -- is the explicitly incomplete DFA variant — completeness off
-    -- there, not hidden).  PDA labels read 'in pop/push', TM labels
-    -- 'read write move' ('|' splits tapes)
-    local TYPE_NEXT = {nfa = "nfa-eps", ["nfa-eps"] = "dfa",
-                       dfa = "dfa-part", ["dfa-part"] = "pda",
-                       pda = "tm", tm = "tm-2", ["tm-2"] = "nfa"}
+    -- type selector (a dropdown: the family is too big for a cycle
+    -- button).  Finite types, then the PDA family — plain = the
+    -- lecture's L(M) accepting by final state AND empty stack, the
+    -- -f/-e suffixes single out L_F/L_E, dpda* are the deterministic
+    -- variants — then the TM family (det tm*, nondet ntm*).  Only
+    -- NFA-λ admits lambda transitions; "partial" is the explicitly
+    -- incomplete DFA variant.
+    local TYPE_ORDER = {"nfa", "nfa-eps", "dfa", "dfa-part",
+                        "pda", "pda-f", "pda-e",
+                        "dpda", "dpda-f", "dpda-e",
+                        "tm", "tm-2", "ntm", "ntm-2"}
     local TYPE_TEXT = {nfa = "NFA", ["nfa-eps"] = "NFA-\xce\xbb",
                        dfa = "DFA", ["dfa-part"] = "Partial DFA",
-                       pda = "PDA", tm = "TM", ["tm-2"] = "2-tape TM"}
+                       pda = "PDA", ["pda-f"] = "PDA, final state",
+                       ["pda-e"] = "PDA, empty stack",
+                       dpda = "DPDA",
+                       ["dpda-f"] = "DPDA, final state",
+                       ["dpda-e"] = "DPDA, empty stack",
+                       tm = "TM", ["tm-2"] = "2-tape TM",
+                       ntm = "NTM", ["ntm-2"] = "2-tape NTM"}
+    local function type_text(ty)
+        return TYPE_TEXT[ty]
+            or ty:match("^tm%-(%d+)$") and (ty:match("^tm%-(%d+)$")
+                                          .. "-tape TM")
+            or ty:match("^ntm%-(%d+)$") and (ty:match("^ntm%-(%d+)$")
+                                           .. "-tape NTM")
+            or ty:upper()
+    end
     local t = G.aut_type or "nfa"
-    if A.button("Type: " .. (TYPE_TEXT[t] or t:upper())) ~= 0
-       and not G.readonly then
-        G.aut_type = TYPE_NEXT[t] or "nfa"
-        changed()
+    local items = {}
+    for i, ty in ipairs(TYPE_ORDER) do items[i] = TYPE_TEXT[ty] end
+    local picked = A.combo_label("Type: " .. type_text(t),
+                                 table.concat(items, "\n"), 10,
+                                 #items, 24, 0, 0)
+    if picked >= 0 and picked < #items and not G.readonly then
+        local nt = TYPE_ORDER[picked + 1]
+        if nt ~= t then
+            G.aut_type = nt
+            changed()
+        end
     end
 end
 

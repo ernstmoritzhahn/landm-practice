@@ -396,17 +396,16 @@ local function boot_pending_aut()
 end
 
 local function aut_cfg(v)
-    -- the 'deterministic' check reads "must be deterministic" — for
-    -- PDAs/TMs that is a grader flag (part.deterministic), not a type
-    -- property (a nondeterministic PDA is still a PDA).  Unless the
-    -- part requires determinism, silence the check instead of letting
-    -- the editable default flag the nondeterminism the task itself
-    -- asks for.  An explicit checks.deterministic entry still wins.
+    -- the 'deterministic' check reads "must be deterministic" — on the
+    -- nondeterministic types (pda|pda-f|pda-e, ntm|ntm-N) it would
+    -- flag the branching the task itself asks for; on the
+    -- deterministic variants (dpda*, tm|tm-N) it is exactly the point,
+    -- so it stays on.  A part.deterministic flag still wins, as does
+    -- an explicit checks.deterministic entry.
     local checks = v.checks
-    local structured = v.aut_type == "pda"
-        or (type(v.aut_type) == "string"
-            and v.aut_type:match("^tm") ~= nil)
-    if structured and v.deterministic ~= true
+    local at = type(v.aut_type) == "string" and v.aut_type or ""
+    local nondet = at:match("^pda") ~= nil or at:match("^ntm") ~= nil
+    if nondet and v.deterministic ~= true
        and not (type(checks) == "table"
                 and checks.deterministic ~= nil) then
         local c = { deterministic = false }

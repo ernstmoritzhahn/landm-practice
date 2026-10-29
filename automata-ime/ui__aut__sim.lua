@@ -8,12 +8,19 @@
 --             offers ε-moves (always, even mid-word)
 --   pda       conf (q, rest, stack) with the stack's TOP on the left;
 --             a clause 'input pop/push' fires on (read or ε) × (pop or
---             λ); push strings land first-char-on-top; acceptance is
---             word AND stack empty in an accepting state
+--             λ); push strings land first-char-on-top.  The pda family
+--             (pda|pda-f|pda-e nondet, dpda* deterministic) shares the
+--             stepping; only acceptance differs: plain types want
+--             word AND stack empty in an accepting state, -f types
+--             only the accepting state (L_F), -e types only the empty
+--             stack (L_E — the lecture requires a NON-EMPTY
+--             computation, so the steps counter must be > 0)
 --   tm/tm-N   conf (q, tapes, heads); right/left-infinite tapes of
 --             blanks (⊔ shown, stored "B"); '~'/λ write = keep; the
 --             input word sits on tape 1; a halted accepting config
---             accepts (halt-in-accept, JFLAP-style)
+--             accepts (halt-in-accept, JFLAP-style).  ntm/ntm-N are
+--             the nondeterministic variants — same stepping, more
+--             successors per config
 --
 -- Nondeterminism is breadth-expanded per STEP press; identical
 -- configurations merge and already-seen ones are dropped (a repeated
@@ -59,6 +66,17 @@ local function is_lam(tk)
            or tk == "eps" or tk == "\\lambda" or tk == "\\lamda"
 end
 
+-- type-family predicates, local so the sim still branches correctly
+-- when label_lang is absent (the structured labels then parse to
+-- nothing, but the conf machinery stays consistent)
+local function is_pda(t) return (t or ""):match("^d?pda") ~= nil end
+-- pda acceptance mode: "fe" (final state AND empty stack — the
+-- lecture's L(M)) | "f" (L_F) | "e" (L_E, non-empty computation)
+local function pda_accept(t)
+    local s = (t or ""):match("%-(%l+)$")
+    return (s == "f" or s == "e") and s or "fe"
+end
+
 -- word string -> symbol list: greedy longest-match against the
 -- declared alphabet (multi-char symbols exist, e.g. "10"), plain
 -- characters otherwise.  Spaces and λ are skipped.
@@ -100,7 +118,7 @@ local function build()
     local m = {type = G.aut_type or "nfa", tr = {}, errs = {},
                names = {}, acc = {}, initial = nil, lbl = {}}
     m.tapes = ll and ll.tapes(m.type)
-           or (m.type == "tm" and 1 or nil)
+           or ((m.type == "tm" or m.type == "ntm") and 1 or nil)
     for _, n in ipairs(G.nodes) do
         m.names[n.id] = n.name
         if n.initial then m.initial = n.id end
@@ -110,7 +128,7 @@ local function build()
         local L = m.tr[e.from] or {}
         m.tr[e.from] = L
         m.lbl[e.id] = e.label
-        if m.type == "pda" or m.tapes then
+        if is_pda(m.type) or m.tapes then
             if ll then
                 local cs, why = ll.parse_many(m.type, e.label)
                 if cs then
@@ -168,7 +186,7 @@ local function conf_key(m, c)
             parts[#parts + 1] = table.concat(cells, ";")
         end
         return table.concat(parts, "|")
-    elseif m.type == "pda" then
+    elseif is_pda(m.type) then
         return tostring(c.st) .. "@" .. c.pos .. "|"
             .. table.concat(c.stack)
     end
@@ -208,7 +226,7 @@ local function succs(m, run, c, out, eids)
         return
     end
     local sym = run.toks[c.pos]
-    if m.type == "pda" then
+    if is_pda(m.type) then
         for _, t in ipairs(m.tr[c.st] or {}) do
             for _, cl in ipairs(t.cs) do
                 -- (read|λ) × (pop|λ): input "" never reads, otherwise
@@ -231,7 +249,7 @@ local function succs(m, run, c, out, eids)
                         j = j + 1
                     end
                     out[#out + 1] = {st = t.to, pos = c.pos + rd,
-                                     stack = ns}
+                                     stack = ns, steps = c.steps + 1}
                     eids[#eids + 1] = t.eid
                 end
             end
@@ -256,7 +274,14 @@ local function accepts(m, run, c, n_succ)
         return n_succ == 0 and m.acc[c.st] == true
     end
     if c.pos <= #run.toks then return false end
-    if m.type == "pda" then
+    if is_pda(m.type) then
+        local acc = pda_accept(m.type)
+        if acc == "f" then         -- L_F: state in F, stack arbitrary
+            return m.acc[c.st] == true
+        elseif acc == "e" then     -- L_E: stack empty, a NON-EMPTY
+            return #c.stack == 0   -- computation (steps>0) so λ is
+                   and c.steps > 0 -- not free
+        end
         return #c.stack == 0 and m.acc[c.st] == true
     end
     return m.acc[c.st] == true
@@ -290,8 +315,8 @@ local function conf0(m, toks)
             heads[i] = 1
         end
         return {st = m.initial, tapes = tapes, heads = heads}
-    elseif m.type == "pda" then
-        return {st = m.initial, pos = 1, stack = {}}
+    elseif is_pda(m.type) then
+        return {st = m.initial, pos = 1, stack = {}, steps = 0}
     end
     return {st = m.initial, pos = 1}
 end
@@ -527,7 +552,7 @@ local GEN_WORDS = 8        -- rows shown
 local GEN_CAP = 40000    -- explored confs safety bound
 
 local function gen_key(m, c)
-    if m.type == "pda" then
+    if is_pda(m.type) then
         return tostring(c.st) .. "@" .. c.word .. "|"
             .. table.concat(c.stack)
     end
@@ -537,7 +562,7 @@ end
 -- generation successors: a clause's own symbol extends the produced
 -- word (λ clauses keep it); stack handling identical to the runs
 local function gen_succs(m, c, out)
-    if m.type == "pda" then
+    if is_pda(m.type) then
         for _, t in ipairs(m.tr[c.st] or {}) do
             for _, cl in ipairs(t.cs) do
                 if cl.pop == "" or c.stack[1] == cl.pop then
@@ -552,7 +577,7 @@ local function gen_succs(m, c, out)
                     end
                     out[#out + 1] = {st = t.to,
                                      word = c.word .. cl.input,
-                                     stack = ns}
+                                     stack = ns, steps = c.steps + 1}
                 end
             end
         end
@@ -569,7 +594,10 @@ local function gen_succs(m, c, out)
 end
 
 local function gen_accepts(m, c)
-    if m.type == "pda" then
+    if is_pda(m.type) then
+        local acc = pda_accept(m.type)
+        if acc == "f" then return m.acc[c.st] == true end
+        if acc == "e" then return #c.stack == 0 and c.steps > 0 end
         return #c.stack == 0 and m.acc[c.st] == true
     end
     return m.acc[c.st] == true
@@ -582,7 +610,8 @@ local function gen_words(m, limit, cap)
     cap = cap or GEN_CAP
     local words, q, seen, emitted, explored = {}, {}, {}, {}, 0
     local c0 = {st = m.initial, word = "",
-                stack = m.type == "pda" and {} or nil}
+                stack = is_pda(m.type) and {} or nil,
+                steps = is_pda(m.type) and 0 or nil}
     q[1] = c0
     seen[gen_key(m, c0)] = true
     local head = 1
@@ -704,7 +733,7 @@ local function conf_text(m, run, c)
     local rest = {}
     for i = c.pos, #run.toks do rest[#rest + 1] = run.toks[i] end
     local w = #rest > 0 and table.concat(rest) or "\xce\xbb"
-    if m.type == "pda" then
+    if is_pda(m.type) then
         local st = #c.stack > 0 and table.concat(c.stack) or "\xce\xbb"
         return string.format("(%s, %s, %s)", nm, w, st)
     end
@@ -801,7 +830,16 @@ local MODES = {
     {"tree", "tree \xc2\xb7 click to expand"},
     {"pick", "pick \xc2\xb7 choose each move"},
 }
-local NONDET_TYPE = {nfa = true, ["nfa-eps"] = true, pda = true}
+-- the nondeterminism views make sense only where the type allows
+-- branching: NFA variants, the nondeterministic PDA types and ntm*;
+-- dfa*, dpda* and tm* are deterministic by definition
+local NONDET_TYPE = {nfa = true, ["nfa-eps"] = true,
+                     pda = true, ["pda-f"] = true, ["pda-e"] = true,
+                     ntm = true}
+local function is_nondet_type(t)
+    return NONDET_TYPE[t or ""] == true
+        or (t or ""):match("^ntm%-") ~= nil
+end
 local TREE_ROWS = 14
 
 local function verdict_label(cur)
@@ -950,7 +988,7 @@ function sim.section(disc_row)
     -- shown for types that can branch — a deterministic automaton has
     -- one live configuration anyway, so the choice is hidden there.
     G.sim_mode = G.sim_mode or "set"
-    if NONDET_TYPE[G.aut_type or "nfa"] then
+    if is_nondet_type(G.aut_type or "nfa") then
         for _, md in ipairs(MODES) do
             A.row(20, 1)
             if A.option(md[2], G.sim_mode == md[1] and 1 or 0) ~= 0 then
@@ -1061,7 +1099,8 @@ function sim.section(disc_row)
     -- visualisation.  Not offered for TMs (no generation entry in
     -- the grader's acceptance_map either).
     local tapes = (ll and ll.tapes(G.aut_type or ""))
-                  or (G.aut_type == "tm" and 1 or nil)
+                  or ((G.aut_type == "tm" or G.aut_type == "ntm")
+                      and 1 or nil)
     if not tapes then
         if disc_row("Accepted words", G.gen_open) then
             G.gen_open = not G.gen_open

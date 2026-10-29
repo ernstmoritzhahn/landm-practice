@@ -22,11 +22,13 @@ return function(automata)
         end
     }
 
-    function automata.make_pda_conf(pda, state, word, stack, purpose)
+    function automata.make_pda_conf(pda, state, word, stack, purpose, steps)
         assert(type(state) == "string" or type(state) == "nil")
         --        assert(type(word) == "string")
         assert(word)
-        local conf = { automaton = pda, state = state, word = word, stack = stack, purpose = purpose }
+        local conf = { automaton = pda, state = state, word = word,
+                       stack = stack, purpose = purpose,
+                       steps = steps or 0 }
 
         setmetatable(conf, pda_conf_metatable)
 
@@ -64,7 +66,7 @@ return function(automata)
                         end
                     end
                 end
-                table.insert(result, automata.make_pda_conf(pda, next_transition.target, new_word, new_stack, self.purpose))
+                table.insert(result, automata.make_pda_conf(pda, next_transition.target, new_word, new_stack, self.purpose, self.steps + 1))
             end
         end
 
@@ -115,18 +117,48 @@ return function(automata)
             end
         end
 
+        -- the pda family's acceptance mode rides on the automaton
+        -- (pda_acceptance): "fe" — word AND stack empty in a final
+        -- state (the lecture's L(M), the default) | "f" — L_F,
+        -- final state with the stack arbitrary | "e" — L_E, empty
+        -- stack after a NON-EMPTY computation (the empty run does
+        -- not count, so steps > 0), the state arbitrary
+        local function accept_mode()
+            return pda.pda_acceptance or "fe"
+        end
+
         if purpose == "acceptance" then
             function conf:is_accepting()
-                return self:get_word():len() == 0
-                        and self:get_stack():len() == 0
+                if self:get_word():len() ~= 0 then return false end
+                local mode = accept_mode()
+                if mode == "f" then
+                    return toboolean(self:get_state())
+                            and self:get_automaton():is_accepting(
+                                self:get_state())
+                elseif mode == "e" then
+                    return self:get_stack():len() == 0
+                            and self.steps > 0
+                end
+                return self:get_stack():len() == 0
                         and toboolean(self:get_state())
-                        and self:get_automaton():is_accepting(self:get_state())
+                        and self:get_automaton():is_accepting(
+                            self:get_state())
             end
         elseif purpose == "generation" then
             function conf:is_accepting()
+                local mode = accept_mode()
+                if mode == "f" then
+                    return toboolean(self:get_state())
+                            and self:get_automaton():is_accepting(
+                                self:get_state())
+                elseif mode == "e" then
+                    return self:get_stack():len() == 0
+                            and self.steps > 0
+                end
                 return self:get_stack():len() == 0
                         and toboolean(self:get_state())
-                        and self:get_automaton():is_accepting(self:get_state())
+                        and self:get_automaton():is_accepting(
+                            self:get_state())
             end
         end
 

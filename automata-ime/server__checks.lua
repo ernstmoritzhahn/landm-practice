@@ -25,11 +25,17 @@ local has_ll, label_lang = pcall(require, "automata.label_lang")
 if not has_ll then label_lang = nil end
 
 -- every type the editor knows: finite automata plus the structured-
--- label machines (PDA, TM, TM-N multitape)
+-- label machines — the PDA family (pda|pda-f|pda-e nondeterministic,
+-- dpda* deterministic; the suffix selects the acceptance mode) and
+-- the TM family (tm|tm-N deterministic, ntm|ntm-N nondeterministic)
 function M.is_known_type(t)
+    if type(t) ~= "string" then return false end
     return t == "dfa" or t == "dfa-part" or t == "nfa"
-           or t == "nfa-eps" or t == "pda" or t == "tm"
-           or (type(t) == "string" and t:match("^tm%-%d+$") ~= nil)
+           or t == "nfa-eps"
+           or t == "pda" or t == "pda-f" or t == "pda-e"
+           or t == "dpda" or t == "dpda-f" or t == "dpda-e"
+           or t == "tm" or t == "ntm"
+           or t:match("^n?tm%-%d+$") ~= nil
 end
 
 -- ---------------------------------------------------------------
@@ -159,7 +165,8 @@ spec{key = "labels", name = "labels fit type",
 run = function(M, _, out)
     local structured = label_lang and label_lang.is_structured(M.type)
     if not label_lang
-       and (M.type == "pda" or (M.type or ""):match("^tm")) then
+       and ((M.type or ""):match("^d?pda")
+            or (M.type or ""):match("^n?tm")) then
         out[#out + 1] = {msg = "label grammar module missing "
             .. "(automata.label_lang) — checks degraded"}
     end
@@ -199,7 +206,7 @@ run = function(M, _, out)
     for _, e in ipairs(M.transitions or {}) do            -- to check
         if structured then
             local ts = label_lang.parse_many(M.type, e.label)
-            if ts and M.type == "pda" then
+            if ts and label_lang.is_pda(M.type) then
                 for _, t in ipairs(ts) do
                     if t.input ~= "" and not aset[t.input] then
                         flag(e, t.input, "alphabet")
@@ -250,14 +257,16 @@ end}
 spec{key = "deterministic", name = "deterministic",
      sev = "error", dfa_only = true,
 run = function(M, _, out)
-    if label_lang and M.type == "pda" then
-        -- Sudkamp determinism: transitions from one state conflict
+    if label_lang and label_lang.is_det_pda
+       and label_lang.is_det_pda(M.type) then
+        -- Sudkamp determinism (dpda types only — plain pda is
+        -- nondeterministic): transitions from one state conflict
         -- when their inputs can apply together (equal or either λ)
         -- AND their pops can hold together (equal or either λ)
         local ts = {}
         for _, e in ipairs(M.transitions or {}) do
             for _, t in ipairs(
-                    label_lang.parse_many("pda", e.label) or {}) do
+                    label_lang.parse_many(M.type, e.label) or {}) do
                 ts[#ts + 1] = {from = e.from, id = e.id, t = t,
                                label = label_lang.pda_label(t)}
             end
@@ -283,8 +292,10 @@ run = function(M, _, out)
         end
         return
     end
-    if label_lang and label_lang.tapes(M.type) then
-        -- TM: two transitions from one state with the same read
+    if label_lang and label_lang.is_det_tm
+       and label_lang.is_det_tm(M.type) then
+        -- TM (deterministic variants only — ntm* branches freely):
+        -- two transitions from one state with the same read
         -- tuple (on every tape) compete
         local per = {}
         for _, e in ipairs(M.transitions or {}) do
@@ -430,6 +441,10 @@ end}
 spec{key = "has_accepting", name = "has accepting",
      sev = "warning",
 run = function(M, _, out)
+    -- empty-stack acceptance makes F superfluous: the lecture's
+    -- L_E(M) ignores the state at the end of the computation
+    if label_lang and label_lang.pda_accept
+       and label_lang.pda_accept(M.type) == "e" then return end
     for _, s in ipairs(M.states or {}) do
         if s.accepting then return end
     end
