@@ -150,54 +150,6 @@ local function build()
                          eps = eps and m.type == "nfa-eps"}
         end
     end
-    -- does this machine ever face a choice?  finite: two moves can
-    -- fire together when a state has ≥2 transitions on the same
-    -- symbol or an ε-move competing with anything else; pda/tm: two
-    -- clauses whose guards can hold at the same time.  Drives whether
-    -- the nondeterminism-view selector is shown at all — for a
-    -- deterministic machine the three views are equivalent.
-    m.nondet = false
-    for _, L in pairs(m.tr) do
-        if m.tapes then
-            local cls = {}
-            for _, t in ipairs(L) do
-                for _, ts in ipairs(t.cs) do cls[#cls + 1] = ts end
-            end
-            for i = 1, #cls do for j = i + 1, #cls do
-                local a, b, same = cls[i], cls[j], true
-                for ti = 1, m.tapes do
-                    if not a[ti] or not b[ti] or a[ti][1] ~= b[ti][1]
-                    then same = false break end
-                end
-                if same then m.nondet = true end
-            end end
-        elseif m.type == "pda" then
-            local cls = {}
-            for _, t in ipairs(L) do
-                for _, cl in ipairs(t.cs) do cls[#cls + 1] = cl end
-            end
-            for i = 1, #cls do for j = i + 1, #cls do
-                local a, b = cls[i], cls[j]
-                if (a.input == b.input or a.input == "" or b.input == "")
-                and (a.pop == b.pop or a.pop == "" or b.pop == "") then
-                    m.nondet = true
-                end
-            end end
-        else
-            local seen, eps_n, other = {}, 0, false
-            for _, t in ipairs(L) do
-                for s in pairs(t.syms or {}) do
-                    seen[s] = (seen[s] or 0) + 1
-                    if seen[s] > 1 then m.nondet = true end
-                end
-                if t.eps then eps_n = eps_n + 1 end
-                if next(t.syms or {}) then other = true end
-            end
-            if eps_n > 1 or (eps_n > 0 and other) then
-                m.nondet = true
-            end
-        end
-    end
     return m
 end
 
@@ -841,12 +793,15 @@ local function conf_row(text, indent, color, clickable, marker)
     return clicked
 end
 
--- nondeterminism views (radio: exactly one on)
+-- nondeterminism views (radio: exactly one on); only the types that
+-- can branch offer them — DFA variants and Turing machines are
+-- deterministic by construction, so there the selector is hidden
 local MODES = {
     {"set",  "set \xc2\xb7 all branches live"},
     {"tree", "tree \xc2\xb7 click to expand"},
     {"pick", "pick \xc2\xb7 choose each move"},
 }
+local NONDET_TYPE = {nfa = true, ["nfa-eps"] = true, pda = true}
 local TREE_ROWS = 14
 
 local function verdict_label(cur)
@@ -992,16 +947,10 @@ function sim.section(disc_row)
 
     -- view selector: one of the three nondeterminism views; switching
     -- drops the current run (same word can simply be re-run).  Only
-    -- meaningful when the machine can actually branch — a
-    -- deterministic automaton has one live configuration anyway, so
-    -- the radio is hidden there (recomputed on graph/type edits).
-    local verkey = tostring(G.nodes_ver) .. "|" .. tostring(G.aut_type)
-    if G.sim_nondet_ver ~= verkey then
-        G.sim_nondet_ver = verkey
-        G.sim_nondet = build().nondet
-    end
-    if G.sim_nondet then
-        G.sim_mode = G.sim_mode or "set"
+    -- shown for types that can branch — a deterministic automaton has
+    -- one live configuration anyway, so the choice is hidden there.
+    G.sim_mode = G.sim_mode or "set"
+    if NONDET_TYPE[G.aut_type or "nfa"] then
         for _, md in ipairs(MODES) do
             A.row(20, 1)
             if A.option(md[2], G.sim_mode == md[1] and 1 or 0) ~= 0 then
@@ -1011,7 +960,7 @@ function sim.section(disc_row)
                 end
             end
         end
-    elseif G.sim_mode and G.sim_mode ~= "set" then
+    elseif G.sim_mode ~= "set" then
         G.sim_mode = "set"
         reset()
     end
