@@ -12,7 +12,6 @@ local document = window.document
 
 local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
-local render_el  = document:getElementById("render")
 local meta_el    = document:getElementById("meta")
 local tree_el    = document.getElementById("tree")
 local errline_el = document.getElementById("errline")
@@ -214,7 +213,6 @@ return function(data)
         status_el.textContent = "✓ formula"
         status_el.className = "status ok"
         errline_el.textContent = ""
-        render_el.textContent = msg.render
         local chips = {chip(msg.kind)}
         chips[#chips + 1] = chip(msg.closed and "closed" or "open")
         for _, v in ipairs(msg.free or {}) do
@@ -225,7 +223,6 @@ return function(data)
     else
         status_el.textContent = "✗ " .. msg.message
         status_el.className = "status err"
-        render_el.textContent = ""
         meta_el.innerHTML = ""
         tree_el.innerHTML = ""
         -- caret display: byte-accurate slice (error positions are at
