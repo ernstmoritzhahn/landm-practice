@@ -4,6 +4,7 @@
 
 local util = require "lib.util"
 local json = require "lib.json"
+local dom_input = require "html.dom_input"
 
 util.fix_path()
 
@@ -24,78 +25,47 @@ local suggest_el = document.getElementById("suggest")
 -- ASCII digraphs live-replaced by their Unicode connectives.
 -- Ordered: multi-char before the overlaps they would otherwise eat
 -- (typed '<' '-' '>' first becomes '<-' then '←', and the trailing '>'
--- merges via the '←>' entry).
+-- merges via the '←>' entry).  `find` strings match literally.
 local replacements = {
-    {"<->", "↔"}, {"<=>", "↔"}, {"==", "↔"},
-    {"->", "→"}, {"=>", "→"},
-    {"<-", "←"}, {"<=", "←"},
-    {"←>", "↔"}, {"←=", "↔"}, {"→<", "↔"}, {"=<","↔"},
-    {"&&", "∧"}, {"/\\", "∧"},
-    {"||", "∨"}, {"\\/", "∨"},
-    {"~", "¬"}, {"!", "¬"},
+    {find = "<->", to = "↔"}, {find = "<=>", to = "↔"},
+    {find = "==", to = "↔"},
+    {find = "->", to = "→"}, {find = "=>", to = "→"},
+    {find = "<-", to = "←"}, {find = "<=", to = "←"},
+    {find = "←>", to = "↔"}, {find = "←=", to = "↔"},
+    {find = "→<", to = "↔"}, {find = "=<", to = "↔"},
+    {find = "&&", to = "∧"}, {find = "/\\", to = "∧"},
+    {find = "||", to = "∨"}, {find = "\\/", to = "∨"},
+    {find = "~", to = "¬"}, {find = "!", to = "¬"},
     -- LaTeX commands (safe: no member is a prefix of another —
     -- \to, \la, \up, \down are deliberately excluded so \top,
     -- \land, \uparrow, \downarrow remain typeable; the parser still
     -- accepts them and the render shows the symbol)
-    {"\\neg", "¬"}, {"\\lnot", "¬"},
-    {"\\wedge", "∧"}, {"\\land", "∧"},
-    {"\\vee", "∨"}, {"\\lor", "∨"},
-    {"\\rightarrow", "→"}, {"\\ra", "→"},
-    {"\\leftarrow", "←"}, {"\\gets", "←"},
-    {"\\leftrightarrow", "↔"}, {"\\lra", "↔"}, {"\\iff", "↔"},
-    {"\\oplus", "⊕"}, {"\\xor", "⊕"},
-    {"\\uparrow", "↑"}, {"\\nand", "↑"},
-    {"\\downarrow", "↓"}, {"\\nor", "↓"},
-    {"\\forall", "∀"}, {"\\exists", "∃"},
-    {"\\top", "⊤"}, {"\\bot", "⊥"},
+    {find = "\\neg", to = "¬"}, {find = "\\lnot", to = "¬"},
+    {find = "\\wedge", to = "∧"}, {find = "\\land", to = "∧"},
+    {find = "\\vee", to = "∨"}, {find = "\\lor", to = "∨"},
+    {find = "\\rightarrow", to = "→"}, {find = "\\ra", to = "→"},
+    {find = "\\leftarrow", to = "←"}, {find = "\\gets", to = "←"},
+    {find = "\\leftrightarrow", to = "↔"}, {find = "\\lra", to = "↔"},
+    {find = "\\iff", to = "↔"},
+    {find = "\\oplus", to = "⊕"}, {find = "\\xor", to = "⊕"},
+    {find = "\\uparrow", to = "↑"}, {find = "\\nand", to = "↑"},
+    {find = "\\downarrow", to = "↓"}, {find = "\\nor", to = "↓"},
+    {find = "\\forall", to = "∀"}, {find = "\\exists", to = "∃"},
+    {find = "\\top", to = "⊤"}, {find = "\\bot", to = "⊥"},
 }
--- escape pattern-magic characters once
-for _, r in ipairs(replacements) do
-    r.pat = (r[1]:gsub("(%W)", "%%%1"))
-end
+
+local units_len = dom_input.units_len
+local byte_pos = dom_input.byte_pos
+local char_bytes = dom_input.char_bytes
 
 local function replace_symbols(element)
-    local sel = element.selectionStart
-    for _, r in ipairs(replacements) do
-        local count
-        element.value, count = element.value:gsub(r.pat, r[2])
-        if count > 0 and sel > 0 then
-            -- selectionStart is a UTF-16 index: every ASCII digraph
-            -- and every replacement symbol is exactly 1 unit
-            sel = math.max(0, sel - count * (#r[1] - 1))
-            element.selectionStart = sel
-            element.selectionEnd = sel
-        end
-    end
-end
-
--- all input symbols are BMP codepoints: UTF-16 units (the DOM
--- selection API's unit) equal character counts — byte math only has
--- to step over UTF-8 continuation bytes.
-local function byte_pos(s, units)
-    local i, n = 1, 0
-    while i <= #s and n < units do
-        local b = s:byte(i)
-        i = i + (b < 0x80 and 1 or b < 0xE0 and 2
-                 or b < 0xF0 and 3 or 4)
-        n = n + 1
-    end
-    return i - 1
-end
-
-local function ulen(s)
-    local n = 0
-    for i = 1, #s do
-        local b = s:byte(i)
-        if b < 0x80 or b >= 0xC0 then n = n + 1 end
-    end
-    return n
+    dom_input.replace_symbols(element, replacements)
 end
 
 local alive = false   -- worker answered at least once
 
 local function send_parse()
-    local sel = input.selectionStart or #input.value
+    local sel = input.selectionStart or units_len(input.value)
     util.js_post_message(json.encode(
         {what = "parse", input = input.value,
          prop = propchk.checked,
@@ -133,12 +103,12 @@ for i = 0, buttons.length - 1 do
     local b = buttons[i]
     b:addEventListener("click", function()
         local s = b.textContent
-        local sel = input.selectionStart or #input.value
+        local sel = input.selectionStart or units_len(input.value)
         local selEnd = input.selectionEnd or sel
         local v = input.value
         input.value = v:sub(1, byte_pos(v, sel)) .. s ..
                       v:sub(byte_pos(v, selEnd) + 1)
-        local pos = sel + 1
+        local pos = sel + units_len(s)
         input.selectionStart = pos
         input.selectionEnd = pos
         input:focus()
@@ -204,12 +174,12 @@ local function render_suggestions(list)
         b:addEventListener("click", function()
             local ins = b:getAttribute("data-ins")
             local back = tonumber(b:getAttribute("data-back")) or 0
-            local sel = input.selectionStart or #input.value
+            local sel = input.selectionStart or units_len(input.value)
             local selEnd = input.selectionEnd or sel
             local v = input.value
             input.value = v:sub(1, byte_pos(v, sel)) .. ins ..
                           v:sub(byte_pos(v, selEnd) + 1)
-            local pos = sel + ulen(ins) - back
+            local pos = sel + units_len(ins) - back
             input.selectionStart = pos
             input.selectionEnd = pos
             input:focus()
@@ -252,11 +222,13 @@ return function(data)
         meta_el.innerHTML = ""
         tree_el.innerHTML = ""
         -- caret display: byte-accurate slice (error positions are at
-        -- token starts)
+        -- token starts); the mark takes the whole UTF-8 char, not one
+        -- byte of it
         local pos = msg.pos or 1
+        local bl = math.max(char_bytes(input.value, pos), 1)
         local pre  = esc(input.value:sub(1, pos - 1))
-        local mark = esc(input.value:sub(pos, pos))
-        local post = esc(input.value:sub(pos + 1))
+        local mark = esc(input.value:sub(pos, pos + bl - 1))
+        local post = esc(input.value:sub(pos + bl))
         errline_el.innerHTML =
             '<pre class="errline">' .. pre ..
             '<span class="caret">' .. (mark ~= "" and mark or " ")

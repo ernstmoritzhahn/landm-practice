@@ -6,6 +6,7 @@
 
 local util = require "lib.util"
 local json = require "lib.json"
+local dom_input = require "html.dom_input"
 util.fix_path()
 
 local window = util.js_get("window")
@@ -122,49 +123,32 @@ end
 
 -- ---------- input helpers ----------
 local replace_table = {
-    ["\\lambda"]   = "λ",
-    ["\\Sigma"]    = "Σ",
-    ["\\sum"]      = "Σ",
-    ["\\emptyset"] = "∅",
-    ["\\cup"]      = "∪",
-    ["\\cdot"]     = "·",
+    {find = "\\lambda",   to = "λ"},
+    {find = "\\Sigma",    to = "Σ"},
+    {find = "\\sum",      to = "Σ"},
+    {find = "\\emptyset", to = "∅"},
+    {find = "\\cup",      to = "∪"},
+    {find = "\\cdot",     to = "·"},
 }
 local REGEXP_REPLACE = {
-    ["|"] = "∪",
+    {find = "|", to = "∪"},
 }
 -- typed arrows become real arrows while typing, like the exam's
 -- input helper:  => and -> both mean ⇒ in a derivation, → in a rule
 local DERIV_REPLACE = {
-    ["=>"] = "⇒", ["%->"] = "⇒", ["lambda"] = "λ",
+    {find = "=>", to = "⇒"}, {find = "->", to = "⇒"},
+    {find = "lambda", to = "λ"},
 }
 local GRAMMAR_REPLACE = {
-    ["%->"] = "→", ["=>"] = "→", ["lambda"] = "λ",
+    {find = "->", to = "→"}, {find = "=>", to = "→"},
+    {find = "lambda", to = "λ"},
 }
 local TREE_REPLACE = {
-    ["lambda"] = "λ",
+    {find = "lambda", to = "λ"},
 }
 local function replace_symbols(e, extra)
-    local sel = e.selectionStart
-    for k,v in pairs(replace_table) do
-        local count
-        e.value, count = e.value:gsub(k, v)
-        if count > 0 then
-            sel = sel - #k + 1
-            e.selectionStart = sel
-            e.selectionEnd = sel
-        end
-    end
-    if extra then
-        for k,v in pairs(extra) do
-            local count
-            e.value, count = e.value:gsub(k, v)
-            if count > 0 then
-                sel = sel - #k + 1
-                e.selectionStart = sel
-                e.selectionEnd = sel
-            end
-        end
-    end
+    dom_input.replace_symbols(e, replace_table)
+    if extra then dom_input.replace_symbols(e, extra) end
 end
 -- oninput: clear the given status cell + the summary (stale verdicts
 -- must not survive edits)

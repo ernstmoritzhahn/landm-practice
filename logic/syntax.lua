@@ -207,7 +207,8 @@ local function build_grammar(prop_only)
     do
         -- term argument list
         grammar.termlist = V("term")
-            * (Comma * (V("term") + expect("term")))^0
+            * ((Comma + expect("','"))
+               * (V("term") + expect("term")))^0
             / function(first, ...)
                 local args = {first}
                 for _, a in ipairs({...}) do args[#args + 1] = a end
@@ -318,7 +319,7 @@ do
         term = P(false)
             + (Cp() * C(Ident) * Space
                * Open
-               * (V("term") * (Comma * V("term"))^0
+               * (V("term") * ((Comma + expect("','")) * V("term"))^0
                   / function(first, ...)
                       local a = {first}
                       for _, x in ipairs({...}) do a[#a + 1] = x end
@@ -442,11 +443,36 @@ local function format_expected(expected)
     return "expected " .. table.concat(expected, " or ")
 end
 
+-- error positions are byte offsets internally (pos stays bytes — the
+-- caret slices are byte-accurate), but a human counts characters —
+-- multi-byte symbols (∀∃¬∧…) would otherwise inflate the reported
+-- position.  text_pos returns line, character column, and absolute
+-- character position for a byte offset.  (lib.util's
+-- index_to_line_and_column is byte-based and lua-base-synced, so the
+-- character counting lives here.)
+local function text_pos(input, pos)
+    local line, col, n = 1, 1, 1
+    for i = 1, pos - 1 do
+        local b = input:byte(i)
+        if b == 0x0A then
+            line, col = line + 1, 1
+        elseif b < 0x80 or b >= 0xC0 then
+            col = col + 1
+        end
+        if b < 0x80 or b >= 0xC0 then n = n + 1 end
+    end
+    return line, col, n
+end
+
+local function char_pos(input, pos)
+    local _, _, n = text_pos(input, pos)
+    return n
+end
+
 local function make_error(input, pos, expected)
-    local line, col = nil, nil
+    local line, col, char
     if pos then
-        local util = require "lib.util"
-        line, col = util.index_to_line_and_column(input, pos)
+        line, col, char = text_pos(input, pos)
     end
     return {
         pos = pos,
@@ -454,7 +480,7 @@ local function make_error(input, pos, expected)
         column = col,
         expected = expected,
         message = format_expected(expected) ..
-            (pos and string.format(" at position %d", pos) or ""),
+            (pos and string.format(" at position %d", char) or ""),
     }
 end
 
@@ -488,7 +514,7 @@ function syntax.parse(input, opts)
         local e = errors[1]
         local err = make_error(input, e.pos.from, nil)
         err.message = e.message ..
-            string.format(" at position %d", e.pos.from)
+            string.format(" at position %d", char_pos(input, e.pos.from))
         return nil, err
     end
     return ast, nil, {free = free, roles = roles}
@@ -540,7 +566,9 @@ local lexer = Ct(((Cp() * (
     + C(S(",."))               / function(m)
           return m == "," and "comma" or "dot" end
     + C(S(" \t\n")^1)          / function() return "space" end
-    + C(P(1))                  / function() return "err" end
+    -- unlexable input: group a lead byte with its continuation bytes
+    -- so one bad multi-byte char yields one err span, not n fragments
+    + C(P(1) * R("\128\191")^0) / function() return "err" end
 ) * Cp()) / function(f, c, t) return {f = f, t = t, cls = c} end)^0)
 
 -- identifier occurrences -> refined class, from a successful parse
