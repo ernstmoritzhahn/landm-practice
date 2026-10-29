@@ -132,21 +132,6 @@ button.primary:hover {
 }
 .chip.var { border-color: var(--link); color: var(--link); }
 
-/* parser error echo: input text with the offending position marked */
-.errline {
-    font-family: "Monaco", "Consolas", monospace;
-    font-size: 1.05rem;
-    background: #fff4f4;
-    padding: 8px;
-    margin-top: 6px;
-    white-space: pre-wrap;
-    overflow-x: auto;
-}
-.errline .caret {
-    background: var(--fail);
-    color: #fff;
-}
-
 /* input-aid rows: static symbol palette (.symbtn) and dynamic
    continuation suggestions (.sugbtn — accent-outlined like links) */
 .symbar { margin: 0.5rem 0 1rem 0; }
@@ -225,3 +210,8 @@ button.primary:hover {
 .hl-ident     { color: var(--ink); }
 .hl-lparen, .hl-rparen, .hl-comma, .hl-dot { color: var(--muted); }
 .hl-err       { color: var(--fail); }
+/* parse-error position, marked inside the field itself */
+.hl-bad {
+    text-decoration: underline wavy var(--fail) 2px;
+    background: rgba(180, 30, 60, 0.12);
+}

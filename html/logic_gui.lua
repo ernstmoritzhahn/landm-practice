@@ -19,7 +19,6 @@ local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
 local meta_el    = document:getElementById("meta")
 local tree_el    = document.getElementById("tree")
-local errline_el = document.getElementById("errline")
 local suggest_el = document.getElementById("suggest")
 
 -- ASCII digraphs live-replaced by their Unicode connectives.
@@ -188,12 +187,37 @@ local function render_suggestions(list)
     end
 end
 
-local function paint_spans(spans)
-    local parts = {}
+-- errpos (byte offset of a parse error) marks the single offending
+-- character inside the field itself — the painted layer sits exactly
+-- under the input text, so a highlighted char there reads as the
+-- error position without a separate error line
+local function paint_spans(spans, errpos)
+    local v, parts = input.value, {}
+    local marked = false
     for _, s in ipairs(spans or {}) do
-        parts[#parts + 1] =
-            '<span class="hl-' .. s.cls .. '">' ..
-            esc(input.value:sub(s.f, s.t - 1)) .. "</span>"
+        local cls = "hl-" .. s.cls
+        if errpos and not marked and s.f <= errpos and errpos < s.t then
+            local bl = math.max(char_bytes(v, errpos), 1)
+            if s.f < errpos then
+                parts[#parts + 1] = '<span class="' .. cls .. '">' ..
+                    esc(v:sub(s.f, errpos - 1)) .. "</span>"
+            end
+            parts[#parts + 1] = '<span class="' .. cls .. ' hl-bad">'
+                .. esc(v:sub(errpos, math.min(errpos + bl, s.t) - 1))
+                .. "</span>"
+            if errpos + bl < s.t then
+                parts[#parts + 1] = '<span class="' .. cls .. '">' ..
+                    esc(v:sub(errpos + bl, s.t - 1)) .. "</span>"
+            end
+            marked = true
+        else
+            parts[#parts + 1] = '<span class="' .. cls .. '">' ..
+                esc(v:sub(s.f, s.t - 1)) .. "</span>"
+        end
+    end
+    -- error at end of input: mark a trailing blank
+    if errpos and not marked then
+        parts[#parts + 1] = '<span class="hl-bad"> </span>'
     end
     fhl_el.innerHTML = table.concat(parts)
 end
@@ -204,11 +228,11 @@ return function(data)
     render_suggestions(msg.suggestions)
     -- only paint when the reply describes the current text — a stale
     -- response would misalign the colored layer with the caret
-    if msg.input == input.value then paint_spans(msg.spans) end
+    local fresh = msg.input == input.value
     if msg.ok then
+        if fresh then paint_spans(msg.spans) end
         status_el.textContent = "✓ formula"
         status_el.className = "status ok"
-        errline_el.textContent = ""
         local chips = {chip(msg.kind)}
         chips[#chips + 1] = chip(msg.closed and "closed" or "open")
         for _, v in ipairs(msg.free or {}) do
@@ -217,21 +241,12 @@ return function(data)
         meta_el.innerHTML = table.concat(chips)
         tree_el.innerHTML = build_svg(msg.layout)
     else
+        -- the offending character is marked inside the input field
+        -- (byte pos, token-start aligned — paint_spans splits spans)
+        if fresh then paint_spans(msg.spans, msg.pos or 1) end
         status_el.textContent = "✗ " .. msg.message
         status_el.className = "status err"
         meta_el.innerHTML = ""
         tree_el.innerHTML = ""
-        -- caret display: byte-accurate slice (error positions are at
-        -- token starts); the mark takes the whole UTF-8 char, not one
-        -- byte of it
-        local pos = msg.pos or 1
-        local bl = math.max(char_bytes(input.value, pos), 1)
-        local pre  = esc(input.value:sub(1, pos - 1))
-        local mark = esc(input.value:sub(pos, pos + bl - 1))
-        local post = esc(input.value:sub(pos + bl))
-        errline_el.innerHTML =
-            '<pre class="errline">' .. pre ..
-            '<span class="caret">' .. (mark ~= "" and mark or " ")
-            .. "</span>" .. post .. "</pre>"
     end
 end
