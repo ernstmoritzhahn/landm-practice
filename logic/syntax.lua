@@ -217,7 +217,7 @@ local function build_grammar(prop_only)
         grammar.term =
             P(false)
             + (Cp() * C(Ident) * Space
-               * Open
+               * (Open + expect("'('"))
                * (V("termlist") + Cc({}))
                * (Close + expect("')'"))
                * Cp()
@@ -234,7 +234,7 @@ local function build_grammar(prop_only)
             P(false)
             + (prop_only and P(false)
                or (Cp() * C(Ident) * Space
-                   * Open
+                   * (Open + expect("'('"))
                    * (V("termlist") + Cc({}))
                    * (Close + expect("')'"))
                    * Cp()
@@ -318,7 +318,7 @@ do
         [1] = "term",
         term = P(false)
             + (Cp() * C(Ident) * Space
-               * Open
+               * (Open + expect("'('"))
                * (V("term") * ((Comma + expect("','")) * V("term"))^0
                   / function(first, ...)
                       local a = {first}
