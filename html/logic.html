@@ -3,147 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formula Workbench | University of Twente</title>
+    <title>Formula Workbench</title>
+    <link rel="stylesheet" href="site.css">
     <style>
-        :root {
-            --ut-red: #f1131e;
-            --ut-black: #000000;
-            --ut-dark-grey: #333333;
-            --border-color: #e6e6e6;
-            --bg-light: #ffffff;
-        }
-        body {
-            font-family: "Arial", sans-serif;
-            background-color: var(--bg-light);
-            color: var(--ut-black);
-            margin: 0;
-            -webkit-font-smoothing: antialiased;
-        }
-        header {
-            padding: 2.5rem 10% 1rem 10%;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .logo {
-            font-size: 1.1rem;
-            font-weight: bold;
-            letter-spacing: -0.5px;
-            margin-bottom: 2rem;
-            display: block;
-        }
-        .logo span { color: var(--ut-red); }
-        .faculty {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #666;
-            margin-bottom: 0.5rem;
-        }
-        h1 { font-size: 2.2rem; font-weight: 300; margin: 0; }
-        main {
-            padding: 3rem 10%;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-        .section-title {
-            font-size: 0.9rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid var(--ut-black);
-            display: inline-block;
-        }
-        .control-group { margin-bottom: 1.5rem; }
-        input[type="text"] {
-            width: 100%;
-            border: 1px solid var(--border-color);
-            padding: 15px;
-            font-family: "Monaco", "Consolas", monospace;
-            font-size: 1.05rem;
-            background-color: #fafafa;
-            color: var(--ut-dark-grey);
-            outline: none;
-            box-sizing: border-box;
-        }
-        input[type="text"]:focus {
-            border-color: var(--ut-black);
-            background-color: #fff;
-        }
-        .symbar { margin: 0.6rem 0 1.2rem 0; }
-        .symbtn {
-            background: #fff;
-            border: 1px solid var(--border-color);
-            font-family: "Monaco", monospace;
-            font-size: 1rem;
-            padding: 4px 9px;
-            margin-right: 5px;
-            cursor: pointer;
-            color: var(--ut-dark-grey);
-        }
-        .symbtn:hover { border-color: var(--ut-black); }
-        .sugbar { margin: 0.6rem 0 0 0; min-height: 1.9rem; }
-        .sugbtn {
-            background: #fff;
-            border: 1px solid #b9c6e8;
-            border-radius: 3px;
-            font-family: "Monaco", monospace;
-            font-size: 0.95rem;
-            padding: 4px 10px;
-            margin-right: 5px;
-            cursor: pointer;
-            color: #0033a0;
-        }
-        .sugbtn:hover { border-color: #0033a0; background: #f2f5fc; }
-        .status { font-family: "Monaco", monospace; font-size: 0.95rem; }
-        .status.ok { color: #177a2a; }
-        .status.err { color: var(--ut-red); }
+        #formula { width: 100%; font-size: 1.05rem; padding: 12px 10px;
+                   box-sizing: border-box; }
         .render {
             font-size: 1.6rem;
             padding: 0.8rem 0;
             min-height: 1.2em;
         }
-        .chip {
-            display: inline-block;
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 2px 10px;
-            margin-right: 6px;
-            font-size: 0.8rem;
-            color: var(--ut-dark-grey);
-            background: #fafafa;
-        }
-        .chip.var { border-color: #0033a0; color: #0033a0; }
-        .errline {
-            font-family: "Monaco", monospace;
-            font-size: 1.05rem;
-            background: #fff4f4;
-            padding: 8px;
-            margin-top: 6px;
-            white-space: pre-wrap;
-            overflow-x: auto;
-        }
-        .caret {
-            background: var(--ut-red);
-            color: #fff;
-        }
-        #tree { margin-top: 1rem; overflow-x: auto; }
-        .help {
-            margin-top: 3rem;
-            font-size: 0.85rem;
-            color: #555;
-            line-height: 1.7;
-        }
+        #tree { margin-top: 0.6rem; overflow-x: auto; }
+        .help { color: var(--muted); font-size: 0.8rem;
+                margin-top: 2rem; line-height: 1.7; }
         .help code {
-            font-family: "Monaco", monospace;
+            font-family: "Monaco", "Consolas", monospace;
             background: #f4f4f4;
             padding: 1px 5px;
-        }
-        footer {
-            margin-top: 5rem;
-            padding: 3rem 10%;
-            background-color: #f9f9f9;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.8rem;
-            color: #666;
+            color: #555;
         }
     </style>
     <script src="../lib/prepare_util.js" type="module"></script>
@@ -154,31 +31,23 @@
 </head>
 <body>
 
-<header>
-    <div class="logo">UNIVERSITY <span>OF TWENTE.</span></div>
-    <div class="faculty">Electrical Engineering, Mathematics and Computer Science</div>
-    <h1>Formula Workbench</h1>
-</header>
-
 <main>
-    <div class="section-title">Formula Input</div>
-    <div class="control-group">
-        <input type="text" id="formula"
-               placeholder="p -> q /\ r   or   forall x. p(x) -> exists y. q(y,a)"
-               autocomplete="off" spellcheck="false">
-        <div id="suggest" class="sugbar"></div>
-        <div class="symbar">
-            <button class="symbtn">¬</button><button class="symbtn">∧</button><button class="symbtn">∨</button><button class="symbtn">→</button><button class="symbtn">←</button><button class="symbtn">↔</button><button class="symbtn">⊕</button><button class="symbtn">↑</button><button class="symbtn">↓</button><button class="symbtn">∀</button><button class="symbtn">∃</button><button class="symbtn">⊤</button><button class="symbtn">⊥</button>
-        </div>
-        <div id="status" class="status"></div>
-        <div id="errline"></div>
+    <div class="section-title">Formula input</div>
+    <input type="text" id="formula"
+           placeholder="p -> q /\ r   or   forall x. p(x) -> exists y. q(y,a)"
+           autocomplete="off" spellcheck="false">
+    <div id="suggest" class="sugbar"></div>
+    <div class="symbar">
+        <button class="symbtn">¬</button><button class="symbtn">∧</button><button class="symbtn">∨</button><button class="symbtn">→</button><button class="symbtn">←</button><button class="symbtn">↔</button><button class="symbtn">⊕</button><button class="symbtn">↑</button><button class="symbtn">↓</button><button class="symbtn">∀</button><button class="symbtn">∃</button><button class="symbtn">⊤</button><button class="symbtn">⊥</button>
     </div>
+    <div id="status" class="status"></div>
+    <div id="errline"></div>
 
-    <div class="section-title">Parsed Formula</div>
+    <div class="section-title">Parsed formula</div>
     <div id="render" class="render"></div>
     <div id="meta"></div>
 
-    <div class="section-title" style="margin-top:2rem">Formula Tree</div>
+    <div class="section-title">Formula tree</div>
     <div id="tree"></div>
 
     <div class="help">
@@ -204,6 +73,5 @@
         <code>f(t1,…,tn)</code> (function). Precedence: ¬ &gt; ∧ ↑ &gt; ∨ ↓ &gt; → ← &gt; ↔ ⊕.
     </div>
 </main>
-<footer>Formula workbench — Advanced Logic demonstrator</footer>
 </body>
 </html>

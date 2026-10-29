@@ -1,0 +1,178 @@
+/* Shared page design for the practice tools (Languages & Machines,
+   Advanced Logic).  The pages are iframed into Canvas, so there is no
+   site chrome of their own: body carries Canvas's typography (the
+   Lato subset Canvas itself serves, bundled locally) and the
+   Instructure theme tokens.  Page-specific rules stay in each page's
+   inline <style>. */
+
+/* Instructure's Lato subset, bundled locally (SIL OFL) — same files
+   Canvas itself serves, so the embed renders identically */
+@font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 300;
+             src: url("fonts/Lato-Light-7244318390.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 400;
+             src: url("fonts/Lato-Regular-bd03a2cc27.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Lato Extended"; font-style: italic; font-weight: 400;
+             src: url("fonts/Lato-Italic-4eb103b4d1.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Lato Extended"; font-style: normal; font-weight: 700;
+             src: url("fonts/Lato-Bold-cccb897485.woff2") format("woff2"); font-display: swap; }
+
+:root {
+    /* UT canvas theme tokens (from canvas.utwente.nl variables css) */
+    --accent: #cf0072;              /* --ic-brand-primary */
+    --accent-dark: #c5006d;         /* primary darkened-5 */
+    --link: #0e68b3;                /* --ic-link-color */
+    --ink: #273540;                 /* --ic-brand-font-color-dark */
+    --muted: #47535c;
+    --border-color: #c7cdd1;
+    --hairline: #e8eaec;
+    --btn-bg: #f2f4f4;
+    --btn-bg-hover: hsl(180, 8.33%, 90.29%);
+    --bg-light: #ffffff;
+    --ok: #0a7a30;
+    --warn: #b26a00;
+    --fail: #c02020;
+}
+
+body {
+    font-family: "Lato Extended", "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background-color: var(--bg-light);
+    color: var(--ink);
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.5;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* embedded into a Canvas page: no page padding beyond breathing room */
+main {
+    padding: 0.75rem 0.25rem 1.5rem 0.25rem;
+}
+
+/* section heading inside the work area: bold label + hairline rule */
+.section-title {
+    font-weight: bold;
+    margin: 1.4rem 0 0.6rem 0;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 2px;
+}
+.section-title:first-child { margin-top: 0; }
+
+select, input[type="text"] {
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-family: "Monaco", "Consolas", monospace;
+    font-size: 0.95rem;
+    font-weight: 400;
+    background-color: #fff;
+    color: var(--ink);
+    outline: none;
+}
+
+select:focus, input[type="text"]:focus {
+    border-color: var(--link);
+    box-shadow: 0 0 0 1px var(--link);
+}
+
+/* canvas .btn metrics: light-gray secondary; .primary for the
+   accent-coloured main action */
+button {
+    background-color: var(--btn-bg);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: 8px 14px;
+    font-size: 1rem;
+    line-height: 22px;
+    cursor: pointer;
+    transition: background-color .2s ease-in-out;
+}
+button:hover { background-color: var(--btn-bg-hover); }
+button:focus { box-shadow: inset 0 0 0 2px var(--link); }
+button.primary {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+button.primary:hover {
+    background-color: var(--accent-dark);
+    border-color: var(--accent-dark);
+}
+
+/* verdict status marks */
+.st.ok      { color: var(--ok); }
+.st.warn    { color: var(--warn); }
+.st.fail    { color: var(--fail); }
+.st.pending { color: #999; }
+
+/* plain ok/err status line (single-field tools) */
+.status { font-family: "Monaco", "Consolas", monospace; font-size: 0.95rem; }
+.status.ok  { color: var(--ok); }
+.status.err { color: var(--fail); }
+
+/* muted syntax/help text */
+.hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 0.6rem;
+}
+.hint code { color: #555; }
+
+/* metadata chips */
+.chip {
+    display: inline-block;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 2px 10px;
+    margin-right: 6px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: #fafafa;
+}
+.chip.var { border-color: var(--link); color: var(--link); }
+
+/* parser error echo: input text with the offending position marked */
+.errline {
+    font-family: "Monaco", "Consolas", monospace;
+    font-size: 1.05rem;
+    background: #fff4f4;
+    padding: 8px;
+    margin-top: 6px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+.errline .caret {
+    background: var(--fail);
+    color: #fff;
+}
+
+/* input-aid rows: static symbol palette (.symbtn) and dynamic
+   continuation suggestions (.sugbtn — accent-outlined like links) */
+.symbar { margin: 0.5rem 0 1rem 0; }
+.symbtn {
+    background: var(--btn-bg);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    font-family: "Monaco", "Consolas", monospace;
+    font-size: 1rem;
+    padding: 4px 9px;
+    margin-right: 5px;
+    cursor: pointer;
+    color: var(--ink);
+}
+.symbtn:hover { background-color: var(--btn-bg-hover); }
+
+.sugbar { margin: 0.6rem 0 0 0; min-height: 1.9rem; }
+.sugbtn {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    font-family: "Monaco", "Consolas", monospace;
+    font-size: 0.95rem;
+    padding: 4px 10px;
+    margin-right: 5px;
+    cursor: pointer;
+    color: var(--link);
+}
+.sugbtn:hover { border-color: var(--link); background: #f6f9fc; }
