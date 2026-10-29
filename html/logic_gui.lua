@@ -96,24 +96,9 @@ hlchk:addEventListener("change", function()
 end)
 propchk:addEventListener("change", send_parse)
 
--- symbol buttons insert at the caret
-local buttons = document.querySelectorAll(".symbtn")
-for i = 0, buttons.length - 1 do
-    local b = buttons[i]
-    b:addEventListener("click", function()
-        local s = b.textContent
-        local sel = input.selectionStart or units_len(input.value)
-        local selEnd = input.selectionEnd or sel
-        local v = input.value
-        input.value = v:sub(1, byte_pos(v, sel)) .. s ..
-                      v:sub(byte_pos(v, selEnd) + 1)
-        local pos = sel + units_len(s)
-        input.selectionStart = pos
-        input.selectionEnd = pos
-        input:focus()
-        send_parse()
-    end)
-end
+-- (no static symbol palette: the suggestion chips offer exactly the
+-- continuations that are legal at the caret, and ASCII digraphs /
+-- LaTeX commands are normalised to Unicode while typing)
 
 local function esc(s)
     return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
