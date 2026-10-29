@@ -35,20 +35,24 @@ local replacements = {
     {find = "&&", to = "∧"}, {find = "/\\", to = "∧"},
     {find = "||", to = "∨"}, {find = "\\/", to = "∨"},
     {find = "~", to = "¬"}, {find = "!", to = "¬"},
-    -- LaTeX commands (safe: no member is a prefix of another —
-    -- \to, \la, \up, \down are deliberately excluded so \top,
-    -- \land, \uparrow, \downarrow remain typeable; the parser still
-    -- accepts them and the render shows the symbol)
+    -- LaTeX commands.  The four boundary-marked ones are prefixes of
+    -- longer commands (\to<\top, \la<\land, \up<\uparrow,
+    -- \down<\downarrow): they convert only once a non-identifier
+    -- byte follows, so the longer spellings stay typeable.
     {find = "\\neg", to = "¬"}, {find = "\\lnot", to = "¬"},
     {find = "\\wedge", to = "∧"}, {find = "\\land", to = "∧"},
     {find = "\\vee", to = "∨"}, {find = "\\lor", to = "∨"},
     {find = "\\rightarrow", to = "→"}, {find = "\\ra", to = "→"},
+    {find = "\\to", to = "→", boundary = true},
     {find = "\\leftarrow", to = "←"}, {find = "\\gets", to = "←"},
+    {find = "\\la", to = "←", boundary = true},
     {find = "\\leftrightarrow", to = "↔"}, {find = "\\lra", to = "↔"},
     {find = "\\iff", to = "↔"},
     {find = "\\oplus", to = "⊕"}, {find = "\\xor", to = "⊕"},
     {find = "\\uparrow", to = "↑"}, {find = "\\nand", to = "↑"},
+    {find = "\\up", to = "↑", boundary = true},
     {find = "\\downarrow", to = "↓"}, {find = "\\nor", to = "↓"},
+    {find = "\\down", to = "↓", boundary = true},
     {find = "\\forall", to = "∀"}, {find = "\\exists", to = "∃"},
     {find = "\\top", to = "⊤"}, {find = "\\bot", to = "⊥"},
     -- pseudo-LaTeX: intuitive names for students, no real commands
@@ -170,6 +174,9 @@ local function render_suggestions(list)
             local pos = sel + units_len(ins) - back
             input.selectionStart = pos
             input.selectionEnd = pos
+            -- the inserted text may complete a pending command
+            -- (\to followed by a symbol converts to →)
+            replace_symbols(input)
             input:focus()
             send_parse()
         end)

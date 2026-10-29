@@ -44,14 +44,26 @@ function M.char_bytes(s, i)
     return b < 0x80 and 1 or b < 0xE0 and 2 or b < 0xF0 and 3 or 4
 end
 
+-- identifier characters are ASCII in our grammars
+local function is_ident_byte(b)
+    return b ~= nil and
+        ((b >= 48 and b <= 57) or (b >= 65 and b <= 90)
+         or (b >= 97 and b <= 122) or b == 95 or b == 39)
+end
+
 --- Live symbol replacement for an <input>/<textarea>: rewrites
 --- ASCII digraphs / word commands to their Unicode symbols while the
 --- user types, keeping the caret where it belongs.
 ---
---- entries: array of {find = string, to = string, plain = bool?} —
+--- entries: array of {find = string, to = string, plain = bool?,
+---                    boundary = bool?} —
 --- find is matched literally unless plain == false (then it is a Lua
 --- pattern like gsub's first argument).  List order matters when
 --- replacements overlap (run multi-char before the prefixes they eat).
+--- boundary=true only replaces when the match is followed by a
+--- non-identifier byte, or is a finished token at the end of the
+--- field (caret not immediately after it) — needed for commands that
+--- are prefixes of longer ones (\to vs \top, \la vs \land).
 ---
 --- Only matches that start at or before the caret move the caret —
 --- replacing text further right must not shift the selection.
@@ -64,12 +76,22 @@ function M.replace_symbols(element, entries)
         while true do
             local f, t = v:find(e.find, init, e.plain ~= false)
             if not f then break end
-            if f <= selb then
-                moved = moved + M.units_len(v:sub(f, t))
-                              - M.units_len(e.to)
+            local nb = v:byte(t + 1)
+            local done = not e.boundary
+                or (nb ~= nil and not is_ident_byte(nb))
+                or (nb == nil and selb ~= t)
+            if done then
+                if f <= selb then
+                    moved = moved + M.units_len(v:sub(f, t))
+                                  - M.units_len(e.to)
+                end
+                out[#out + 1] = v:sub(init, f - 1) .. e.to
+                init = t + 1
+            else
+                -- keep a pending command verbatim and continue behind it
+                out[#out + 1] = v:sub(init, t)
+                init = t + 1
             end
-            out[#out + 1] = v:sub(init, f - 1) .. e.to
-            init = t + 1 > init and t + 1 or init + 1
         end
         if init > 1 then
             element.value = table.concat(out) .. v:sub(init)
