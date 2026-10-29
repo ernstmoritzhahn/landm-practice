@@ -188,11 +188,14 @@ local function build_grammar()
         local varlist = Ct(varname
             * ((Comma + expect("','") + P(true))
                * (varname + expect("variable")))^0)
+        -- narrow scope (Ben-Ari / the lecture's convention): the body
+        -- is only the tightest-level formula that follows, so
+        -- '∀x.p ∧ q' reads as (∀x.p) ∧ q — wide scope needs parens.
         grammar.quant =
             Cp() * qsym * Space
             * (varlist + expect("variable"))
             * (Dot + expect("'.'"))
-            * V("formula")
+            * V("level_" .. top)
             * Cp()
             / function(f, quant, vars, body, t)
                 return node("quant", f, t,

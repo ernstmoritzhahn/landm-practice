@@ -61,7 +61,10 @@
         <code>↑ nand</code>, <code>↓ nor</code> —
         words <code>not and or xor nand nor implies iff</code> also work.<br>
         Quantifiers: <code>∀x.</code> / <code>forall x.</code>, <code>∃x.</code> / <code>exists x.</code>
-        (several variables: <code>∀x,y.</code> or <code>∀x y.</code>).
+        (several variables: <code>∀x,y.</code> or <code>∀x y.</code>;
+        a quantifier's scope is the smallest following formula —
+        <code>∀x.p ∧ q</code> reads as <code>(∀x.p) ∧ q</code>, write
+        <code>∀x.(p ∧ q)</code> for the wider scope).
         Constants <code>⊤ true</code>, <code>⊥ false</code>.
         LaTeX commands work too: <code>\forall \exists \neg \wedge \lor \ra
         \to \la \lra \oplus \up \down \top \bot</code> — the input field

@@ -43,7 +43,14 @@ local function render(f)
         local vs = {}
         for i, v in ipairs(f.vars) do vs[i] = v.name end
         local q = f.quant == "forall" and "∀" or "∃"
-        return q .. table.concat(vs, ",") .. "." .. render(f.body)
+        local inner = render(f.body)
+        -- narrow scope: a binary-op body needs parens to reparse
+        -- (∀x.(p∧q), not ∀x.p∧q which reads (∀x.p)∧q); prefix-op
+        -- and atomic bodies stay bare
+        if f.body.type == "op" and f.body.op ~= "not" then
+            inner = "(" .. inner .. ")"
+        end
+        return q .. table.concat(vs, ",") .. "." .. inner
     end
     -- op
     local sym = OP_SYM[f.op] or f.op
