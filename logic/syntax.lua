@@ -618,16 +618,17 @@ end
 -- vocabulary (successful parses still register the infix "connective"
 -- probe at end-of-input).  Each expectation label maps to insertable
 -- tokens; `back` is the number of characters the caret moves back
--- after insertion (lands inside () for the (…)-style offers).
+-- after insertion (currently unused — offers are single tokens, so
+-- the formula can be clicked together strictly left to right).
 
 local SUGGEST_TOKENS = {
-    ["identifier"]  = {{"p"}, {"p()", back = 1}},
+    ["identifier"]  = {{"p"}, {"p("}},
     ["'¬'"]         = {{"¬"}},
-    ["'('"]         = {{"()", back = 1}},
+    ["'('"]         = {{"("}},
     ["quantifier"]  = {{"∀"}, {"∃"}},
     ["constant"]    = {{"⊤"}, {"⊥"}},
     ["variable"]    = {{"x"}, {"y"}},
-    ["term"]        = {{"a"}, {"x"}, {"f()", back = 1}},
+    ["term"]        = {{"a"}, {"x"}, {"f("}},
     ["')'"]         = {{")"}},
     ["','"]         = {{","}},
     ["'.'"]         = {{"."}},
