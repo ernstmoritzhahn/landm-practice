@@ -78,9 +78,18 @@ local function build_tree(f, nodes, edges, parent_id)
     return id
 end
 
--- Buchheim–Jünger–Leipert tidy layout (verbatim port of the BN one;
--- deterministic — same AST, same geometry)
+-- Tidy-tree layout (Buchheim–Jünger–Leipert, "Improving Walker's
+-- Algorithm to Run in Linear Time").  firstWalk assigns preliminary x
+-- positions, packing each sibling subtree as tight as its contour
+-- distance allows and recording per-child modifiers + threads;
+-- secondWalk accumulates the modifiers into absolute positions.
+-- Parents centre over their children; sibling subtrees never overlap.
+-- Deterministic — the same AST always yields the same geometry, on
+-- native and in the worker.  This replaces the earlier Graphviz
+-- dependency: our formula trees are always trees, so a dot-shaped
+-- layered layout is contour packing + rank-by-depth.
 local function layout_tidy(nodes, root_id)
+    -- every node's measured size first: contour distances need widths
     for _, n in ipairs(nodes) do
         n.h = tree.NODE_H
         n.w = math.max(tree.NODE_MIN_W, #n.label * tree.NODE_CHAR_W + 10)
@@ -98,12 +107,15 @@ local function layout_tidy(nodes, root_id)
         while lSib[id] do id = lSib[id] end
         return id
     end
+    -- minimal centre distance between adjacent contour nodes
     local function dist(a, b)
         return nodes[a].w / 2 + tree.NODE_X_GAP + nodes[b].w / 2
     end
 
     local prelim, mod, anc, thr = {}, {}, {}, {}
     local shift_, change_ = {}, {}
+    -- thread links jump the contour when a subtree's inside edge is
+    -- shallower than its neighbour's
     local function nextLeft(id)  return thr[id] or nodes[id].children[1] end
     local function nextRight(id)
         local c = nodes[id].children
@@ -161,6 +173,10 @@ local function layout_tidy(nodes, root_id)
         local sop = mod[vop] or 0
         local sim = mod[vim] or 0
         local som = mod[vom] or 0
+        -- vim's recorded ancestor counts only while it is a sibling of
+        -- v (a child of v's own parent); deeper contour nodes fall back
+        -- to the running default ancestor, or the shift arithmetic
+        -- divides by sibNo[v] - sibNo[itself] = 0
         while nextRight(vim) and nextLeft(vip) do
             vim = nextRight(vim); vip = nextLeft(vip)
             vom = nextLeft(vom); vop = nextRight(vop)
@@ -178,40 +194,48 @@ local function layout_tidy(nodes, root_id)
         end
         if nextRight(vim) and not nextRight(vop) then
             thr[vop] = nextRight(vim)
-            sop = sop + (mod[vop] or 0)
-            mod[vop] = sop + (mod[vim] or 0) - (mod[vop] or 0)
+            mod[vop] = (mod[vop] or 0) + sim - sop
         end
-        if nextLeft(vip) and not nextLeft(vim) then
-            thr[vim] = nextLeft(vip)
-            sim = sim + (mod[vim] or 0)
-            mod[vim] = sim + (mod[vip] or 0) - (mod[vim] or 0)
+        if nextLeft(vip) and not nextLeft(vom) then
+            thr[vom] = nextLeft(vip)
+            mod[vom] = (mod[vom] or 0) + sip - som
+            defaultAncestor = v
         end
         return defaultAncestor
     end
+
     firstWalk(root_id)
     local function secondWalk(v, m, depth)
-        n = nodes[v]
+        local n = nodes[v]
         n.x = prelim[v] + m
-        n.y = depth * (tree.NODE_H + tree.NODE_Y_GAP)
+        n.y = depth * (tree.NODE_H + tree.NODE_Y_GAP) + tree.NODE_H / 2
         for _, w in ipairs(n.children) do
             secondWalk(w, m + (mod[v] or 0), depth + 1)
         end
     end
     secondWalk(root_id, 0, 0)
 
-    local min_left, max_right, max_bottom = math.huge, -math.huge, 0
+    -- Normalise so the bounding box starts at (0, 0).  n.x/n.y are
+    -- centres, so measure using half extents.
+    local min_left   = math.huge
+    local min_top    = math.huge
+    local max_right  = -math.huge
+    local max_bottom = -math.huge
     for _, n in ipairs(nodes) do
-        local l = n.x - n.w / 2
-        local r = n.x + n.w / 2
-        if l < min_left then min_left = l end
-        if r > max_right then max_right = r end
-        if n.y + n.h > max_bottom then max_bottom = n.y + n.h end
+        local left   = n.x - n.w / 2
+        local right  = n.x + n.w / 2
+        local top    = n.y - n.h / 2
+        local bottom = n.y + n.h / 2
+        if left   < min_left   then min_left   = left   end
+        if top    < min_top    then min_top    = top    end
+        if right  > max_right  then max_right  = right  end
+        if bottom > max_bottom then max_bottom = bottom end
     end
     for _, n in ipairs(nodes) do
-        n.x = n.x - min_left + 4
-        n.y = n.y + 4
+        n.x = n.x - min_left
+        n.y = n.y - min_top
     end
-    return max_right - min_left + 8, max_bottom + 8
+    return max_right - min_left, max_bottom - min_top
 end
 
 -- tree.layout(ast) -> {nodes, edges, w, h, root}
