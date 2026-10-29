@@ -11,9 +11,7 @@ util.fix_path()
 local window = util.js_get("window")
 local document = window.document
 
-local fwrap      = document:getElementById("fwrap")
 local fhl_el     = document:getElementById("fhl")
-local hlchk      = document:getElementById("hlchk")
 local propchk    = document:getElementById("propchk")
 local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
@@ -100,9 +98,6 @@ input:addEventListener("click", send_parse)
 -- keep the painted layer aligned with the field's horizontal scroll
 input:addEventListener("scroll", function()
     fhl_el.scrollLeft = input.scrollLeft
-end)
-hlchk:addEventListener("change", function()
-    fwrap.className = hlchk.checked and "fwrap" or "fwrap nohl"
 end)
 propchk:addEventListener("change", send_parse)
 

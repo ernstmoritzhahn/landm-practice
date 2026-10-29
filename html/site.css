@@ -195,7 +195,6 @@ button.primary:hover {
     color: transparent;
 }
 .fwrap input[type="text"]::placeholder { color: var(--muted); }
-.fwrap.nohl input[type="text"] { color: var(--ink); }
 
 /* token classes from logic.syntax.highlight — the logic equivalent of
    the "kind" classes BayesL's get_tree reports */
