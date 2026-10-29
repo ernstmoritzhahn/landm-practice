@@ -1893,6 +1893,7 @@ local function render(view)
     if view.desc then
         goal_el:appendChild(text("div", view.desc, "desc"))
     end
+    checkbtn.style.display = ""
     checkbtn.textContent = "Check proof"
     if view.type == "parts" then
         checkbtn.textContent = "Check all"
@@ -2770,7 +2771,7 @@ local function render_overview()
     clear(ihrow_el); clear(rulesbox_el)
     clear(variant_el); clear(tabs_el); clear(subtabs_el)
     rulesbox_el.style.display = "none"
-    checkbtn.textContent = "Check"
+    checkbtn.style.display = "none"
     goal_el.innerHTML = ""
     goal_el:appendChild(text("span",
         "Languages & Machines — practice exercises", "goaltitle"))
@@ -2805,6 +2806,7 @@ local function render_error(bad_ex, bad_sub)
     clear(proof_el); clear(summary_el)
     clear(ihrow_el); clear(rulesbox_el)
     clear(variant_el)
+    checkbtn.style.display = ""
     checkbtn.textContent = "Check"
     goal_el.innerHTML = ""
     goal_el:appendChild(text("span", "Exercise not found", "goaltitle"))
