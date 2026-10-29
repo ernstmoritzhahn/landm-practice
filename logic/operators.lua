@@ -19,7 +19,7 @@ operators.connectives = {
         name = "not",
         key = "not",
         symbols = {"¬", "~", "!"},
-        word_symbols = {"\\neg", "\\lnot"},
+        word_symbols = {"\\neg", "\\lnot", "\\not"},
         default_symbol = "¬",
         latex = "\\neg",
         arity = 1,
@@ -31,7 +31,7 @@ operators.connectives = {
         name = "and",
         key = "and",
         symbols = {"∧", "&&", "&", "/\\", "^"},
-        word_symbols = {"\\land", "\\wedge"},
+        word_symbols = {"\\land", "\\wedge", "\\and"},
         default_symbol = "∧",
         latex = "\\wedge",
         arity = 2,
@@ -58,7 +58,7 @@ operators.connectives = {
         name = "or",
         key = "or",
         symbols = {"∨", "||", "|", "\\/"},
-        word_symbols = {"\\lor", "\\vee"},
+        word_symbols = {"\\lor", "\\vee", "\\or"},
         default_symbol = "∨",
         latex = "\\vee",
         arity = 2,
@@ -155,9 +155,9 @@ operators.quantifiers = {
 -- identifier boundaries.  Bare T/F stay identifiers (they are legit
 -- atom/term names in predicate logic).
 operators.constants = {
-    {name = "true", symbols = {"⊤"}, word_symbols = {"\\top"},
+    {name = "true", symbols = {"⊤"}, word_symbols = {"\\top", "\\true"},
      default_symbol = "⊤", latex = "\\top"},
-    {name = "false", symbols = {"⊥"}, word_symbols = {"\\bot"},
+    {name = "false", symbols = {"⊥"}, word_symbols = {"\\bot", "\\false"},
      default_symbol = "⊥", latex = "\\bot"},
 }
 

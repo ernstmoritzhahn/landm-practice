@@ -51,6 +51,10 @@ local replacements = {
     {find = "\\downarrow", to = "↓"}, {find = "\\nor", to = "↓"},
     {find = "\\forall", to = "∀"}, {find = "\\exists", to = "∃"},
     {find = "\\top", to = "⊤"}, {find = "\\bot", to = "⊥"},
+    -- pseudo-LaTeX: intuitive names for students, no real commands
+    {find = "\\not", to = "¬"}, {find = "\\and", to = "∧"},
+    {find = "\\or", to = "∨"},
+    {find = "\\true", to = "⊤"}, {find = "\\false", to = "⊥"},
 }
 
 local units_len = dom_input.units_len
