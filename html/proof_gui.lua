@@ -2775,6 +2775,14 @@ local function render_overview()
     goal_el.innerHTML = ""
     goal_el:appendChild(text("span",
         "Languages & Machines — practice exercises", "goaltitle"))
+    local demo = el("div", "ovdemo")
+    local da = el("a")
+    da.href = "../automata-ime/"
+    da.target = "_blank"
+    da.rel = "noopener"
+    da.textContent = "Automata & regular expressions demonstrator"
+    demo:appendChild(da)
+    goal_el:appendChild(demo)
     goal_el:appendChild(text("div",
         "Pick an exercise, or a single part.", "desc"))
     for _,sh in ipairs(state.sheets) do

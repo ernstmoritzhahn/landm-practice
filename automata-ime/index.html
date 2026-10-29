@@ -1,0 +1,80 @@
+<!doctypehtml><html lang=en-us><head><meta charset=utf-8><meta content="text/html; charset=utf-8"http-equiv=Content-Type><title>Automata Editor</title><style>body{font-family:arial;margin:0;padding:none}.emscripten{padding-right:0;margin-left:auto;margin-right:auto;display:block}div.emscripten{text-align:center}div.emscripten_border{border:1px solid #000}canvas.emscripten{border:0 none;background-color:#000}.spinner{height:30px;width:30px;margin:0;margin-top:20px;margin-left:20px;display:inline-block;vertical-align:top;-webkit-animation:rotation .8s linear infinite;-moz-animation:rotation .8s linear infinite;-o-animation:rotation .8s linear infinite;animation:rotation .8s linear infinite;border-left:5px solid #ebebeb;border-right:5px solid #ebebeb;border-bottom:5px solid #ebebeb;border-top:5px solid #787878;border-radius:100%;background-color:#bdd72e}@-webkit-keyframes rotation{from{transform:rotate(0)}to{transform:rotate(360deg)}}@-moz-keyframes rotation{from{transform:rotate(0)}to{transform:rotate(360deg)}}@-o-keyframes rotation{from{transform:rotate(0)}to{transform:rotate(360deg)}}@keyframes rotation{from{transform:rotate(0)}to{transform:rotate(360deg)}}#status{display:inline-block;vertical-align:top;margin-top:30px;margin-left:20px;font-weight:700;color:#787878}#progress{height:20px;width:300px}#controls{display:inline-block;float:right;vertical-align:top;margin-top:30px;margin-right:20px}#output{width:100%;height:200px;margin:0 auto;margin-top:10px;border-left:0;border-right:0px;padding-left:0;padding-right:0;display:block;background-color:#000;color:#fff;font-family:'Lucida Console',Monaco,monospace;outline:0}</style></head><body><div class=spinner id=spinner></div><div class=emscripten id=status>Downloading...</div><span id=controls><span><input type=checkbox id=resize>Resize canvas</span> <span><input type=checkbox id=pointerLock checked>Lock/hide mouse pointer   </span><span><input type=button onclick='Module.requestFullscreen(document.getElementById("pointerLock").checked,document.getElementById("resize").checked)'value=Fullscreen></span></span><div class=emscripten><progress hidden id=progress max=100 value=0></progress></div><div class=emscripten_border><canvas class=emscripten id=canvas oncontextmenu=event.preventDefault() tabindex=-1></canvas></div><textarea id=output rows=8></textarea><script>var statusElement=document.getElementById("status"),progressElement=document.getElementById("progress"),spinnerElement=document.getElementById("spinner"),canvasElement=document.getElementById("canvas"),outputElement=document.getElementById("output");outputElement&&(outputElement.value=""),canvasElement.addEventListener("webglcontextlost",e=>{alert("WebGL context lost. You will need to reload the page."),e.preventDefault()},!1);var setStatus=e=>{if(setStatus.last||(setStatus.last={time:Date.now(),text:""}),e!==setStatus.last.text){var t=e.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/),n=Date.now();t&&n-setStatus.last.time<30||(setStatus.last.time=n,setStatus.last.text=e,t?(e=t[1],progressElement.value=100*parseInt(t[2]),progressElement.max=100*parseInt(t[4]),progressElement.hidden=!1,spinnerElement.hidden=!1):(progressElement.value=null,progressElement.max=null,progressElement.hidden=!0,e||(spinnerElement.style.display="none")),statusElement.innerHTML=e)}},Module={print(...e){if(console.log(...e),outputElement){var t=e.join(" ");outputElement.value+=t+"\n",outputElement.scrollTop=outputElement.scrollHeight}},canvas:canvasElement,setStatus:setStatus,totalDependencies:0,monitorRunDependencies(e){this.totalDependencies=Math.max(this.totalDependencies,e),setStatus(e?"Preparing... ("+(this.totalDependencies-e)+"/"+this.totalDependencies+")":"All downloads complete.")}};setStatus("Downloading..."),window.onerror=window.onunhandledrejection=()=>{setStatus("Exception thrown, see JavaScript console"),spinnerElement.style.display="none",setStatus=e=>{e&&console.error("[post-exception status] "+e)}}</script><script src="ime.js?v=d3e730a99c84"></script><script src="ui-data.js?v=e663e18c9df3"></script><script type="module">import UnifiedModule from './unified.js?v=46bd8afdbb868e4afc185f049ae9ef995205';
+Module.__deployV = '46bd8afdbb868e4afc185f049ae9ef995205';
+Module.__runtimeJS = new URL('./unified.js?v=' + Module.__deployV, location.href).href;
+// one wasm serves both realms: the page instantiates it below, the
+// service worker receives the bytes + glue URL in its boot hello.
+// noInitialRun gates _main until the VFS files are fetched + written.
+Module.noInitialRun = true;
+const bnResp = await fetch('unified.wasm?v=' + Module.__deployV);
+if (!bnResp.ok) throw new Error('unified.wasm: HTTP ' + bnResp.status);
+Module.wasmBinary = Module.__wasmRuntime = await bnResp.arrayBuffer();
+// this glue build has no wasmBinary support compiled in — without the
+// instantiateWasm hook it would fetch unified.wasm a second time
+// (unstamped locateFile URL).  Hand it the bytes we already have.
+Module.instantiateWasm = function (imports, done) {
+    WebAssembly.instantiate(Module.__wasmRuntime, imports)
+        .then(function (out) { done(out.instance, out.module); });
+    return {};
+};
+const v = '?v=' + Module.__deployV;
+// every manifest file also exists as <url>.br and <url>.gz —
+// DecompressionStream inflates the best one the browser supports
+// ('brotli' needs a fairly new engine; 'gzip' is universal), falling
+// back to the plain file when the siblings are absent
+const bnCodecs = [['brotli', '.br'], ['gzip', '.gz']].filter(function (c) {
+    try { new DecompressionStream(c[0]); return true; }
+    catch (e) { return false; }
+});
+const bnFetchData = function (f) {
+    const plain = function () {
+        return fetch(f.url + v).then(function (r) {
+            if (!r.ok) throw new Error(f.url + ': HTTP ' + r.status);
+            return r.arrayBuffer();
+        });
+    };
+    // try each compressed sibling in order, then the plain file
+    const attempt = function (i) {
+        if (i >= bnCodecs.length) return plain();
+        const codec = bnCodecs[i];
+        return fetch(f.url + codec[1] + v).then(function (r) {
+            if (!r.ok) return attempt(i + 1);
+            const ds = new DecompressionStream(codec[0]);
+            return new Response(r.body.pipeThrough(ds)).arrayBuffer();
+        });
+    };
+    return attempt(0);
+};
+// the same concurrency gate loadText uses: an unbatched burst of
+// fetches overflows the listen backlog of lightweight dev servers and
+// drops connections mid-boot (lib.util "failed to find" storms)
+const bnData = (async function () {
+    const out = [];
+    for (let i = 0; i < UI_DATA.length; i += 4) {
+        const batch = await Promise.all(UI_DATA.slice(i, i + 4)
+            .map(function (f) {
+                return bnFetchData(f).then(function (buf) {
+                    return { f: f, buf: buf };
+                });
+            }));
+        out.push(...batch);
+    }
+    return out;
+})();
+const inst = await UnifiedModule(Module);
+for (const it of await bnData) {
+    if (it.f.dir) inst.FS.createPath('/', it.f.dir, true);
+    inst.FS.createDataFile(it.f.dir ? '/' + it.f.dir : '/',
+                           it.f.name, new Uint8Array(it.buf), true, true);
+}
+// _main replaces callMain: swallow the runtime's own control-flow
+// exceptions (emscripten_set_main_loop exits via 'unwind'; exit() via
+// ExitStatus) so they don't surface as page errors.
+try { inst._main(0, 0); }
+catch (e) {
+    if (e !== 'unwind' && !(e && typeof e === 'object' && 'status' in e)) throw e;
+}
+// force the first resize now: the worker's 'ready' can beat postRun, and
+// clicks delivered while the canvas still sits at its 800x600 default
+// land 0.8x off in nuklear space
+if (Module.bnDoResize) Module.bnDoResize();
+</script><style>#bnload{position:fixed;inset:0;background:#fff;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font:16px/1.4 arial,sans-serif;color:#555}#bnload .bnspin{width:34px;height:34px;margin-bottom:14px;border:4px solid #d9d9d9;border-top-color:#1f4e79;border-radius:50%;animation:bnrot .9s linear infinite}@keyframes bnrot{to{transform:rotate(360deg)}}</style><div id="bnload"><div class="bnspin"></div><div id="bnloadtext">Automata editor is loading&hellip;</div></div><script>function bnloadfail(){var t=document.getElementById("bnloadtext");if(t)t.textContent="Failed to load — please reload the page.";var s=document.querySelector("#bnload .bnspin");if(s)s.style.display="none";}window.addEventListener("error",bnloadfail);window.addEventListener("unhandledrejection",bnloadfail)</script></body></html>
