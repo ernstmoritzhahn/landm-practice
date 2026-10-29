@@ -5,9 +5,9 @@
 -- (is_operator/name/symbols/default_symbol/arity/precedence/notation/
 -- associativity/associative) so the tables stay interchangeable where a
 -- shared engine is wanted.  `key` names the AST op; `latex` is for
--- rendering.  Word aliases ("and", "forall", ...) are matched with
--- identifier boundaries by the parser, so they never clash with
--- ordinary symbol names.
+-- rendering.  Only LaTeX commands (\forall, \neg, ...) are accepted
+-- as word symbols — bare words like "forall" or "and" stay ordinary
+-- identifiers.
 
 local operators = {}
 
@@ -19,7 +19,7 @@ operators.connectives = {
         name = "not",
         key = "not",
         symbols = {"¬", "~", "!"},
-        word_symbols = {"not", "\\neg", "\\lnot"},
+        word_symbols = {"\\neg", "\\lnot"},
         default_symbol = "¬",
         latex = "\\neg",
         arity = 1,
@@ -31,7 +31,7 @@ operators.connectives = {
         name = "and",
         key = "and",
         symbols = {"∧", "&&", "&", "/\\", "^"},
-        word_symbols = {"and", "\\land", "\\wedge"},
+        word_symbols = {"\\land", "\\wedge"},
         default_symbol = "∧",
         latex = "\\wedge",
         arity = 2,
@@ -45,7 +45,7 @@ operators.connectives = {
         name = "nand",
         key = "nand",
         symbols = {"↑"},
-        word_symbols = {"nand", "\\uparrow", "\\up", "\\nand"},
+        word_symbols = {"\\uparrow", "\\up", "\\nand"},
         default_symbol = "↑",
         latex = "\\uparrow",
         arity = 2,
@@ -58,7 +58,7 @@ operators.connectives = {
         name = "or",
         key = "or",
         symbols = {"∨", "||", "|", "\\/"},
-        word_symbols = {"or", "\\lor", "\\vee"},
+        word_symbols = {"\\lor", "\\vee"},
         default_symbol = "∨",
         latex = "\\vee",
         arity = 2,
@@ -72,7 +72,7 @@ operators.connectives = {
         name = "nor",
         key = "nor",
         symbols = {"↓"},
-        word_symbols = {"nor", "\\downarrow", "\\down", "\\nor"},
+        word_symbols = {"\\downarrow", "\\down", "\\nor"},
         default_symbol = "↓",
         latex = "\\downarrow",
         arity = 2,
@@ -85,7 +85,7 @@ operators.connectives = {
         name = "implication",
         key = "imp",
         symbols = {"→", "->", "=>"},
-        word_symbols = {"implies", "\\to", "\\rightarrow", "\\ra", "\\implies"},
+        word_symbols = {"\\to", "\\rightarrow", "\\ra", "\\implies"},
         default_symbol = "→",
         latex = "\\rightarrow",
         arity = 2,
@@ -111,7 +111,7 @@ operators.connectives = {
         name = "biimplication",
         key = "iff",
         symbols = {"↔", "<->", "<=>", "=="},
-        word_symbols = {"iff", "\\leftrightarrow", "\\Leftrightarrow", "\\lra", "\\iff"},
+        word_symbols = {"\\leftrightarrow", "\\Leftrightarrow", "\\lra", "\\iff"},
         default_symbol = "↔",
         latex = "\\leftrightarrow",
         arity = 2,
@@ -124,7 +124,7 @@ operators.connectives = {
         name = "xor",
         key = "xor",
         symbols = {"⊕", "≢"},
-        word_symbols = {"xor", "\\oplus", "\\xor"},
+        word_symbols = {"\\oplus", "\\xor"},
         default_symbol = "⊕",
         latex = "\\oplus",
         arity = 2,
@@ -138,14 +138,14 @@ operators.quantifiers = {
     {
         name = "forall",
         symbols = {"∀"},
-        word_symbols = {"forall", "all", "\\forall"},
+        word_symbols = {"\\forall"},
         default_symbol = "∀",
         latex = "\\forall",
     },
     {
         name = "exists",
         symbols = {"∃"},
-        word_symbols = {"exists", "some", "\\exists"},
+        word_symbols = {"\\exists"},
         default_symbol = "∃",
         latex = "\\exists",
     },
@@ -155,9 +155,9 @@ operators.quantifiers = {
 -- identifier boundaries.  Bare T/F stay identifiers (they are legit
 -- atom/term names in predicate logic).
 operators.constants = {
-    {name = "true", symbols = {"⊤"}, word_symbols = {"true", "\\top"},
+    {name = "true", symbols = {"⊤"}, word_symbols = {"\\top"},
      default_symbol = "⊤", latex = "\\top"},
-    {name = "false", symbols = {"⊥"}, word_symbols = {"false", "\\bot"},
+    {name = "false", symbols = {"⊥"}, word_symbols = {"\\bot"},
      default_symbol = "⊥", latex = "\\bot"},
 }
 
