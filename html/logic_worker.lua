@@ -29,10 +29,15 @@ return function(data)
     if msg.what == "parse" then
         -- continuations for the text before the caret
         local suggestions = logic.suggest(msg.prefix or "")
+        -- token classes for the highlight layer (echo the input so a
+        -- stale reply is not painted over newer text)
+        local spans = logic.highlight(msg.input or "")
         local ast, err, info = logic.parse(msg.input or "")
         if ast then
             local out = {
                 ok = true,
+                input = msg.input,
+                spans = spans,
                 render = logic.render(ast),
                 kind = classify(ast, info),
                 free = info.free,
@@ -45,6 +50,8 @@ return function(data)
         else
             util.js_post_message(json.encode({
                 ok = false,
+                input = msg.input,
+                spans = spans,
                 message = err.message,
                 pos = err.pos,
                 expected = err.expected,

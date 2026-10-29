@@ -6,8 +6,9 @@
     <title>Formula Workbench</title>
     <link rel="stylesheet" href="site.css">
     <style>
-        #formula { width: 100%; font-size: 1.05rem; padding: 12px 10px;
-                   box-sizing: border-box; }
+        #formula { width: 100%; }
+        .hltoggle { font-size: 0.8rem; color: var(--muted);
+                    margin-left: 0.6rem; }
         #meta { margin-top: 0.4rem; }
         #tree { margin-top: 0.6rem; overflow-x: auto; }
         .help { color: var(--muted); font-size: 0.8rem;
@@ -29,12 +30,17 @@
 
 <main>
     <div class="section-title">Formula input</div>
-    <input type="text" id="formula"
-           placeholder="p -> q /\ r   or   forall x. p(x) -> exists y. q(y,a)"
-           autocomplete="off" spellcheck="false">
+    <div id="fwrap" class="fwrap">
+        <pre class="fhl" id="fhl" aria-hidden="true"></pre>
+        <input type="text" id="formula"
+               placeholder="p -> q /\ r   or   forall x. p(x) -> exists y. q(y,a)"
+               autocomplete="off" spellcheck="false">
+    </div>
     <div id="suggest" class="sugbar"></div>
     <div class="symbar">
         <button class="symbtn">¬</button><button class="symbtn">∧</button><button class="symbtn">∨</button><button class="symbtn">→</button><button class="symbtn">←</button><button class="symbtn">↔</button><button class="symbtn">⊕</button><button class="symbtn">↑</button><button class="symbtn">↓</button><button class="symbtn">∀</button><button class="symbtn">∃</button><button class="symbtn">⊤</button><button class="symbtn">⊥</button>
+        <label class="hltoggle"><input type="checkbox" id="hlchk" checked>
+            syntax highlighting</label>
     </div>
     <div id="status" class="status"></div>
     <div id="errline"></div>

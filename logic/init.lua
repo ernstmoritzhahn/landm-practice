@@ -17,6 +17,7 @@ logic.tree_layout = require "logic.tree_layout"
 logic.parse       = logic.syntax.parse
 logic.parse_term  = logic.syntax.parse_term
 logic.suggest     = logic.syntax.suggest
+logic.highlight   = logic.syntax.highlight
 logic.render      = logic.formula.render
 logic.render_term = logic.formula.render_term
 logic.free_vars   = logic.formula.free_vars

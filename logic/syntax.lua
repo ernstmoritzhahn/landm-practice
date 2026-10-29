@@ -485,6 +485,95 @@ function syntax.parse(input, opts)
     return ast, nil, {free = free, roles = roles}
 end
 
+-- syntax highlighting ------------------------------------------------
+--
+-- highlight(input) returns a span list {f,t,cls} covering the whole
+-- input — the same kind classification BayesL's get_tree exposes per
+-- node ("kind"), at token granularity.  A tolerant lexer assigns the
+-- lexical classes (op/quant/boolconst/punct/ident/err); when the parse
+-- succeeds, identifier spans are refined by the AST scope analysis to
+-- bound var, free var, constant, predicate or function name.
+
+local lex_class = {}
+local sym_list, word_list = {}, {}
+local function lex_add(cls, symbols, words)
+    for _, s in ipairs(symbols or {}) do
+        lex_class[s] = cls
+        sym_list[#sym_list + 1] = s
+    end
+    for _, w in ipairs(words or {}) do
+        lex_class[w] = cls
+        word_list[#word_list + 1] = w
+    end
+end
+for _, op in ipairs(operators.connectives) do
+    lex_add("op", op.symbols, op.word_symbols)
+end
+for _, q in ipairs(operators.quantifiers) do
+    lex_add("quant", q.symbols, q.word_symbols)
+end
+for _, c in ipairs(operators.constants) do
+    lex_add("boolconst", c.symbols, c.word_symbols)
+end
+-- longest-first: '<-' must not eat the front of '<->', '|' not '||'
+table.sort(sym_list,  function(a, b) return #a > #b end)
+table.sort(word_list, function(a, b) return #a > #b end)
+local sym_patt, word_patt = P(false), P(false)
+for _, s in ipairs(sym_list)  do sym_patt  = sym_patt  + P(s) end
+for _, w in ipairs(word_list) do word_patt = word_patt + P(w) end
+
+local lexer = Ct(((Cp() * (
+      C(sym_patt)              / function(m) return lex_class[m] end
+    + C(word_patt) * boundary  / function(m) return lex_class[m] end
+    + C(Ident)                 / function() return "ident" end
+    + C(S("()"))               / function(m)
+          return m == "(" and "lparen" or "rparen" end
+    + C(S(",."))               / function(m)
+          return m == "," and "comma" or "dot" end
+    + C(S(" \t\n")^1)          / function() return "space" end
+    + C(P(1))                  / function() return "err" end
+) * Cp()) / function(f, c, t) return {f = f, t = t, cls = c} end)^0)
+
+-- identifier occurrences -> refined class, from a successful parse
+local function role_map(ast, info)
+    local free = {}
+    for _, n in ipairs(info.free or {}) do free[n] = true end
+    local roles = {}
+    local function term(t)
+        if t.type == "var" then
+            roles[t.pos.from] = free[t.name] and "fvar" or "bvar"
+        elseif t.type == "const" then
+            roles[t.pos.from] = "const"
+        else
+            roles[t.pos.from] = "func"
+            for _, a in ipairs(t.args) do term(a) end
+        end
+    end
+    local function f(n)
+        if n.type == "atom" then
+            roles[n.pos.from] = "pred"
+            for _, a in ipairs(n.args) do term(a) end
+        elseif n.type == "op" then
+            for _, a in ipairs(n.args) do f(a) end
+        elseif n.type == "quant" then
+            for _, v in ipairs(n.vars) do roles[v.pos.from] = "bvar" end
+            f(n.body)
+        end
+    end
+    f(ast)
+    return roles
+end
+
+function syntax.highlight(input)
+    local spans = lpeg.match(lexer, input) or {}
+    local ast, _, info = syntax.parse(input)
+    local roles = ast and role_map(ast, info) or {}
+    for _, s in ipairs(spans) do
+        s.cls = roles[s.f] or s.cls
+    end
+    return spans
+end
+
 -- context-sensitive suggestions -------------------------------------
 --
 -- suggest(prefix) parses the text before the caret and reads the

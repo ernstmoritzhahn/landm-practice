@@ -10,6 +10,9 @@ util.fix_path()
 local window = util.js_get("window")
 local document = window.document
 
+local fwrap      = document:getElementById("fwrap")
+local fhl_el     = document:getElementById("fhl")
+local hlchk      = document:getElementById("hlchk")
 local input      = document:getElementById("formula")
 local status_el  = document:getElementById("status")
 local meta_el    = document:getElementById("meta")
@@ -113,6 +116,13 @@ end)
 -- caret moves change the continuation vocabulary
 input:addEventListener("keyup", send_parse)
 input:addEventListener("click", send_parse)
+-- keep the painted layer aligned with the field's horizontal scroll
+input:addEventListener("scroll", function()
+    fhl_el.scrollLeft = input.scrollLeft
+end)
+hlchk:addEventListener("change", function()
+    fwrap.className = hlchk.checked and "fwrap" or "fwrap nohl"
+end)
 
 -- symbol buttons insert at the caret
 local buttons = document.querySelectorAll(".symbtn")
@@ -205,10 +215,23 @@ local function render_suggestions(list)
     end
 end
 
+local function paint_spans(spans)
+    local parts = {}
+    for _, s in ipairs(spans or {}) do
+        parts[#parts + 1] =
+            '<span class="hl-' .. s.cls .. '">' ..
+            esc(input.value:sub(s.f, s.t - 1)) .. "</span>"
+    end
+    fhl_el.innerHTML = table.concat(parts)
+end
+
 return function(data)
     alive = true
     local msg = json.decode(data)
     render_suggestions(msg.suggestions)
+    -- only paint when the reply describes the current text — a stale
+    -- response would misalign the colored layer with the caret
+    if msg.input == input.value then paint_spans(msg.spans) end
     if msg.ok then
         status_el.textContent = "✓ formula"
         status_el.className = "status ok"

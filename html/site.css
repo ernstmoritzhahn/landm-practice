@@ -176,3 +176,52 @@ button.primary:hover {
     color: var(--link);
 }
 .sugbtn:hover { border-color: var(--link); background: #f6f9fc; }
+
+/* highlighted input field: the <input> keeps the caret and events
+   with transparent text; a <pre> underneath paints the token colours.
+   Both share the same box metrics so glyph positions coincide. */
+.fwrap { position: relative; }
+.fhl {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    margin: 0;
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+    color: var(--ink);
+}
+.fwrap input[type="text"], .fhl {
+    font-family: "Monaco", "Consolas", monospace;
+    font-size: 1.05rem;
+    line-height: normal;
+    padding: 12px 10px;
+    border-width: 1px;
+    box-sizing: border-box;
+}
+.fhl { border-style: solid; border-color: transparent; }
+.fwrap input[type="text"] {
+    position: relative;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--ink);
+}
+.fwrap input[type="text"]::selection {
+    background: rgba(14, 104, 179, 0.25);
+    color: transparent;
+}
+.fwrap input[type="text"]::placeholder { color: var(--muted); }
+.fwrap.nohl input[type="text"] { color: var(--ink); }
+
+/* token classes from logic.syntax.highlight — the logic equivalent of
+   the "kind" classes BayesL's get_tree reports */
+.hl-op        { color: var(--ink); font-weight: 600; }
+.hl-quant     { color: var(--link); font-weight: 600; }
+.hl-boolconst { color: var(--muted); font-weight: 600; }
+.hl-bvar      { color: var(--link); }
+.hl-fvar      { color: var(--warn); }
+.hl-const     { color: var(--muted); }
+.hl-pred      { color: var(--ink); }
+.hl-func      { color: #0f766e; }
+.hl-ident     { color: var(--ink); }
+.hl-lparen, .hl-rparen, .hl-comma, .hl-dot { color: var(--muted); }
+.hl-err       { color: var(--fail); }
