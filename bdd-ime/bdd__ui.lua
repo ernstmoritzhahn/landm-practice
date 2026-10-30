@@ -57,59 +57,24 @@ end
 hist.wire(G)
 hist.reset(G)
 
--- ---- multi-diagram tasks ------------------------------------------
--- A task may ask for several diagrams, one per construction step:
---   {steps = {"composition", "merge leaves", "remove spurious q"},
---    initial = {<model> | {<model>, ...}}}
--- The editor keeps ONE live model plus a parked to_table per step;
--- a tab row (drawn by ui/bdd.lua) switches steps.  Answers serialise
--- as {type="bdd_multi", steps=[{caption, ...model}]}; single-diagram
--- tasks stay {type="bdd", nodes, edges}.
-G.step_captions, G.step_data, G.step_i = nil, nil, 1
-
-local function step_park()
-    if not G.step_captions then return end
-    G.step_data[G.step_i] = model.to_table(G)
-end
-
-function step_switch(k)
-    if not G.step_captions or k == G.step_i
-       or k < 1 or k > #G.step_captions then return end
-    step_park()
-    _suppress_dirty = true
-    model.load(G, G.step_data[k] or {})
-    _suppress_dirty = false
-    G.step_i = k
-    hist.reset(G)     -- undo stays per-diagram
-end
+-- ---- task/answer hooks --------------------------------------------
+-- One <bdd-app> = one diagram; multi-step questions place several
+-- elements in the sub-exercise body with author-typed headers between
+-- them, so the editor itself carries no step titles.  The task JSON
+-- (the exam's @@ block) may still preset a starting model via
+-- {initial = {<model>}}; answers serialise as
+-- {type="bdd", nodes, edges}.
 
 function ui_task(payload)
     local ok, t = pcall(json_mod.decode, payload or "")
     if not ok or type(t) ~= "table" then return end
     -- a task payload means exam context
     G.exam = true
-    G.step_captions, G.step_data, G.step_i = nil, nil, 1
-    if type(t.steps) == "table" and #t.steps > 1 then
-        G.step_captions = {}
-        for i, c in ipairs(t.steps) do
-            G.step_captions[i] = tostring(c)
-        end
-        G.step_data = {}
-    end
-    -- a prefill (task.initial) restores starting answers without
-    -- counting as a student edit; per-step form: {m1, m2, ...}
+    -- a prefill (task.initial) restores the starting answer without
+    -- counting as a student edit
     _suppress_dirty = true
     if type(t.initial) == "table" then
-        if G.step_captions and t.initial[1] ~= nil
-           and type(t.initial[1]) == "table" then
-            for i, m in ipairs(t.initial) do
-                if type(m) == "table" then G.step_data[i] = m end
-            end
-            model.load(G, G.step_data[1] or {})
-        else
-            model.load(G, t.initial)
-            if G.step_captions then G.step_data[1] = t.initial end
-        end
+        model.load(G, t.initial)
     else
         model.load(G, {})
     end
@@ -119,19 +84,6 @@ end
 
 -- Anubis contract: "" means unanswered
 function ui_get_state()
-    if G.step_captions then
-        step_park()
-        local steps, empty = {}, true
-        for i, c in ipairs(G.step_captions) do
-            local m = G.step_data[i] or
-                      {type = "bdd", nodes = {}, edges = {}}
-            steps[#steps + 1] = {caption = c, nodes = m.nodes,
-                                 edges = m.edges}
-            if m.nodes and #m.nodes > 0 then empty = false end
-        end
-        if empty then return "" end
-        return json_mod.encode({type = "bdd_multi", steps = steps})
-    end
     local t = model.to_table(G)
     if not t.nodes or #t.nodes == 0 then return "" end
     return json_mod.encode(t)
@@ -143,22 +95,13 @@ function ui_load_state(payload)
         local ok, dec = pcall(json_mod.decode, payload)
         if ok and type(dec) == "table" then t = dec end
     end
-    _suppress_dirty = true
-    if type(t.steps) == "table" and G.step_captions then
-        G.step_data = {}
-        for i, s in ipairs(t.steps) do
-            G.step_data[i] = {nodes = s.nodes or {},
-                              edges = s.edges or {}}
-            if not G.step_captions[i] then
-                G.step_captions[i] = s.caption or
-                                     ("step " .. i)
-            end
-        end
-        model.load(G, G.step_data[1] or {})
-        G.step_i = 1
-    else
-        model.load(G, t)
+    -- legacy multi-step payload: keep the first diagram
+    if type(t.steps) == "table" and type(t.steps[1]) == "table" then
+        t = {type = "bdd", nodes = t.steps[1].nodes,
+             edges = t.steps[1].edges}
     end
+    _suppress_dirty = true
+    model.load(G, t)
     _suppress_dirty = false
     hist.reset(G)
 end

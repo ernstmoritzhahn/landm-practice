@@ -60,11 +60,6 @@ function bdd.frame(x, y, w, h, s, hint)
         if cw <= 0 then cw = w - 22 end
         if ch <= 0 then ch = h - 40 end
 
-        -- step tabs (multi-diagram tasks): a row of caption buttons
-        local step_h = 0
-        if G.step_captions and #G.step_captions > 1 then
-            step_h = 26 * s + 4
-        end
         local mxx, mxy = -math.huge, -math.huge
         for _, n in ipairs(G.nodes) do
             if n.x > mxx then mxx = n.x end
@@ -80,7 +75,7 @@ function bdd.frame(x, y, w, h, s, hint)
         local HINTS = G.readonly and RO_HINTS or BDD_HINTS
         local hint_n = hint and 1 or #gw.hint_lines(HINTS, s, cw)
         local hint_h = hint_n * (gw.HINT_ROW_H * s + 4)
-        local section_h = math.max(20, ch - hint_h - step_h - 4)
+        local section_h = math.max(20, ch - hint_h - 4)
         local usable = math.max(48, cw - 8 - gw.SPLIT_W)
         G.split_frac = G.split_frac or 0.74
         local cv_px = math.floor(G.split_frac * usable + 0.5)
@@ -89,19 +84,6 @@ function bdd.frame(x, y, w, h, s, hint)
 
         local vflags, est_w, est_h = gw.view_flags(
             ext_w, ext_h, cv_px - 14, section_h - 14, G.cv_scroll)
-
-        -- the captions are the task's step titles (pre-given, not
-        -- part of the answer); the active one is bracketed
-        if G.step_captions and #G.step_captions > 1 then
-            A.row(26 * s, #G.step_captions)
-            for i, c in ipairs(G.step_captions) do
-                local lbl = (i == G.step_i)
-                            and ("[ " .. c .. " ]") or c
-                if A.button(lbl) ~= 0 and step_switch then
-                    step_switch(i)
-                end
-            end
-        end
 
         A.row_begin(NK.STATIC, section_h, 3)
         A.row_push(cv_px)

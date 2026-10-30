@@ -40,16 +40,14 @@ local function node_panel()
         set_str(label_buf, n.label or "")
     end
     A.row(20, 1)
-    A.label(n.note and "Annotation"
-            or (n.terminal and "Terminal node" or "Decision node"),
+    A.label(n.terminal and "Terminal node" or "Decision node",
             NK.TEXT_LEFT)
     if not n.locked then
-        -- kind toggle: decision node (variable), terminal (T/F) or
-        -- free annotation text (for step captions)
-        A.row(24, 3)
+        -- kind toggle: decision node (variable) or terminal (T/F)
+        A.row(24, 2)
         if A.button("nonterminal") ~= 0 and not G.readonly then
-            if n.terminal or n.note then
-                n.terminal, n.note = false, nil
+            if n.terminal then
+                n.terminal = false
                 if n.label == "T" or n.label == "F" then
                     n.label = ""
                     set_str(label_buf, "")
@@ -58,8 +56,8 @@ local function node_panel()
             end
         end
         if A.button("terminal") ~= 0 and not G.readonly then
-            if not n.terminal or n.note then
-                n.terminal, n.note = true, nil
+            if not n.terminal then
+                n.terminal = true
                 if n.label ~= "T" and n.label ~= "F" then
                     n.label = "T"
                     set_str(label_buf, "T")
@@ -67,20 +65,9 @@ local function node_panel()
                 changed()
             end
         end
-        if A.button("note") ~= 0 and not G.readonly then
-            if not n.note then
-                n.note, n.terminal = true, false
-                if n.label == "T" or n.label == "F" then
-                    n.label = ""
-                    set_str(label_buf, "")
-                end
-                changed()
-            end
-        end
     end
     A.row(20, 1)
-    A.label(n.note and "Text"
-            or (n.terminal and "Value" or "Variable"), NK.TEXT_LEFT)
+    A.label(n.terminal and "Value" or "Variable", NK.TEXT_LEFT)
     if n.terminal then
         -- the lecture's vocabulary is T/F: quick buttons plus the
         -- free field (custom values stay possible)
