@@ -17,11 +17,11 @@
 (function () {
     "use strict";
     var BASE = "";
-    /* deploy token — stage_proof_site.py stamps 4e0afd426bfb with a
+    /* deploy token — stage_proof_site.py stamps cf8b6d1e7b48 with a
      * hash over the whole bundle; every asset URL carries it so a
      * redeploy can never serve a stale mix.  Unstaged (literal
      * placeholder) URLs stay clean so local serving keeps working. */
-    var BDD_V = "4e0afd426bfb";
+    var BDD_V = "cf8b6d1e7b48";
     function vurl(u) {
         return (BDD_V.charAt(0) === "_") ? u : u + "?v=" + BDD_V;
     }

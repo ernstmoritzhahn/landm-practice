@@ -425,10 +425,11 @@ local function bdd_draw(canvas, ctx)
         end
         if on_handle then handle = TH.BLUE end
 
-        -- decision node: rounded rect; terminal: plain rect;
+        -- decision node: stadium rounding (half-height arc, matches
+        -- the exam's tikz `rounded rectangle`); terminal: plain rect;
         -- annotation node: bare text (no box)
         if not n.note then
-            local rounding = n.terminal and 0.0 or hh * 0.65
+            local rounding = n.terminal and 0.0 or hh
             A.fill_rect(canvas, nx - hw, ny - hh, hw * 2, hh * 2,
                         rounding, col(fill))
             A.stroke_rect(canvas, nx - hw, ny - hh, hw * 2, hh * 2,
@@ -466,27 +467,31 @@ end
 
 -- -------------------------------------------------------------- grid
 local function snap_pt(x, y)
-    local g = G.GRID or 66.0
+    local g = G.GRID or 33.0
     return math.max(g, math.floor(x / g + 0.5) * g),
            math.max(g, math.floor(y / g + 0.5) * g)
 end
 
-local function occ_cells(except_id)
-    local occ = {}
+-- a snapped cell is free when the candidate box (minimal node size)
+-- does not intersect any existing node's real box
+local function cell_free(cx, cy, except_id)
     for _, n in ipairs(G.nodes) do
         if n.id ~= except_id then
-            local cx, cy = snap_pt(n.x, n.y)
-            occ[cx .. "," .. cy] = true
+            local hw = bdd.node_hw(n)
+            local hh = bdd.node_hh(n)
+            if math.abs(cx - n.x) < hw + G.NODE_HW
+               and math.abs(cy - n.y) < hh + G.NODE_HH then
+                return false
+            end
         end
     end
-    return occ
+    return true
 end
 
 local function snap_free(x, y, except_id)
-    local g = G.GRID or 66.0
+    local g = G.GRID or 33.0
     local sx, sy = snap_pt(x, y)
-    local occ = occ_cells(except_id)
-    if not occ[sx .. "," .. sy] then return sx, sy end
+    if cell_free(sx, sy, except_id) then return sx, sy end
     for r = 1, 8 do
         local fx, fy, fd
         for dy = -r, r do
@@ -494,7 +499,7 @@ local function snap_free(x, y, except_id)
                 if math.max(math.abs(dx), math.abs(dy)) == r then
                     local cx, cy = sx + dx * g, sy + dy * g
                     if cx >= g and cy >= g
-                            and not occ[cx .. "," .. cy] then
+                            and cell_free(cx, cy, except_id) then
                         local d = dx * dx + dy * dy
                         if not fd or d < fd then
                             fx, fy, fd = cx, cy, d
