@@ -18,6 +18,7 @@ local G = {
     DRAG_TH   = 4.0,
     EDGE_HIT  = 9.0,
     HOV_HYST  = 4.0,
+    GRID      = 33.0,   -- node snap quantum
     nodes = {},          -- nodes (kept under the generic name)
     edges = {},          -- branches (ditto)
     nodes_ver = 0,

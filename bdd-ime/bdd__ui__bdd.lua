@@ -48,7 +48,7 @@ function bdd.frame(x, y, w, h, s, hint)
     G.DRAG_TH   = 4.0 * s
     G.EDGE_HIT  = 9.0 * s
     G.HOV_HYST  = 4.0 * s
-    G.GRID      = 33.0 * s
+    G.GRID      = 33.0 * s   -- snap quantum (state.lua seeds it too)
 
     local win_flags = NK.WINDOW_BORDER + NK.WINDOW_BACKGROUND
                       + NK.WINDOW_NO_SCROLLBAR

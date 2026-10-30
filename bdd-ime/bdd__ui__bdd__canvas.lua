@@ -541,7 +541,7 @@ end
 function bdd.destack()
     for _, n in ipairs(G.nodes) do
         local cx, cy = snap_pt(n.x, n.y)
-        if occ_cells(n.id)[cx .. "," .. cy] then
+        if not cell_free(cx, cy, n.id) then
             n.x, n.y = snap_free(n.x, n.y, n.id)
         end
     end
